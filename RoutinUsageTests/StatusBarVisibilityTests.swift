@@ -15,7 +15,7 @@ final class StatusBarVisibilityTests: XCTestCase {
 
         XCTAssertTrue(source.contains("retainedStatusBarController"))
         XCTAssertTrue(controller.contains("statusItem.isVisible = true"))
-        XCTAssertTrue(controller.contains("statusItem.autosaveName = \"ai.routin.myroutin\""))
+        XCTAssertFalse(controller.contains("autosaveName"))
         XCTAssertTrue(controller.contains("statusItem.length = imageWidth + 8"))
     }
 }

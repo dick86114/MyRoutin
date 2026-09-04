@@ -47,7 +47,6 @@ final class StatusBarController: NSObject {
     }
 
     private func configureStatusButton() {
-        statusItem.autosaveName = "ai.routin.myroutin"
         statusItem.isVisible = true
         guard let button = statusItem.button else {
             return
