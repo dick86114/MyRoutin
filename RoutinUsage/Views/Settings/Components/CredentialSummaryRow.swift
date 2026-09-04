@@ -20,6 +20,7 @@ struct CredentialSummaryRow: View {
             Spacer(minLength: 12)
             trailing
         }
+        .opacity(state.configuration.isEnabled ? 1 : 0.58)
     }
 
     private var alias: String {
