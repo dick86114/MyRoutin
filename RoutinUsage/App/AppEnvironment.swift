@@ -106,6 +106,7 @@ final class AppEnvironment {
     ) {
         self.settings = settings
         self.store = store
+        settings.importLegacyDisplayOrder(allIDs: store.orderedKeyIDs)
         self.refreshScheduler = refreshScheduler
         self.loginItemManager = loginItemManager
         self.keyRepository = keyRepository

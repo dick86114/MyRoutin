@@ -14,7 +14,6 @@ final class StatusBarController: NSObject {
     private var refreshMinutes: Int
     private var notificationsEnabled: Bool
     private var thresholds: AlertThresholds
-    private var selectedCredentialIDs: [UUID]
     private var appearanceObservation: NSKeyValueObservation?
     private var popoverWindowResignObserver: NSObjectProtocol?
 
@@ -23,7 +22,6 @@ final class StatusBarController: NSObject {
         refreshMinutes = environment.settings.refreshMinutes
         notificationsEnabled = environment.settings.notificationsEnabled
         thresholds = environment.settings.thresholds
-        selectedCredentialIDs = environment.settings.selectedCredentialIDs
         super.init()
 
         configurePopover()
@@ -77,7 +75,7 @@ final class StatusBarController: NSObject {
             _ = environment.settings.refreshMinutes
             _ = environment.settings.notificationsEnabled
             _ = environment.settings.thresholds
-            _ = environment.settings.selectedCredentialIDs
+            _ = environment.settings.displayOrder
             _ = environment.store.states
             _ = environment.updateStatus
             _ = environment.routinCheckIn.state
@@ -104,9 +102,6 @@ final class StatusBarController: NSObject {
             thresholds = settings.thresholds
             environment.thresholdsDidChange(to: thresholds)
         }
-        if selectedCredentialIDs != settings.selectedCredentialIDs {
-            selectedCredentialIDs = settings.selectedCredentialIDs
-        }
         updateStatusButton()
     }
 
@@ -114,7 +109,9 @@ final class StatusBarController: NSObject {
         guard let button = statusItem.button else {
             return
         }
-        let selectedIndicators = environment.settings.selectedCredentialIDs.compactMap { id -> MenuBarIndicatorModel? in
+        let enabledIDs = Set(environment.store.visibleKeyIDs)
+        let visibility = environment.settings.displayOrder.visible(enabledIDs: enabledIDs)
+        let selectedIndicators = visibility.menuBarIDs.compactMap { id -> MenuBarIndicatorModel? in
             guard let state = environment.store.state(for: id),
                   let descriptor = ProviderRegistry.builtInDescriptors.first(where: { $0.id == state.configuration.providerID })
             else { return nil }

@@ -120,6 +120,22 @@ final class ProjectBootstrapTests: XCTestCase {
         XCTAssertFalse(source.contains("MenuBarExtra"))
     }
 
+    func test真实菜单栏和弹窗读取独立展示顺序() throws {
+        let controller = try TestSourceReader.read([
+            "RoutinUsage", "App", "StatusBarController.swift"
+        ])
+        let popover = try TestSourceReader.read([
+            "RoutinUsage", "Views", "UsagePopoverView.swift"
+        ])
+
+        XCTAssertTrue(controller.contains("displayOrder.visible(enabledIDs:"))
+        XCTAssertTrue(controller.contains("visibility.menuBarIDs"))
+        XCTAssertTrue(popover.contains("displayOrder.visible(enabledIDs:"))
+        XCTAssertTrue(popover.contains("visibility.popoverIDs"))
+        XCTAssertFalse(popover.contains("LegacyCredentialDisplayOrder.popoverIDs"))
+        XCTAssertFalse(popover.contains("settings.availableCredentialIDs"))
+    }
+
     func test设置页展示全部通用用量指标() throws {
         let settings = try sourceText(at: "RoutinUsage/Views/SettingsView.swift")
 

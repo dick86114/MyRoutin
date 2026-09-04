@@ -42,6 +42,12 @@ final class AppSettings {
         }
     }
 
+    var displayOrder: CredentialDisplayOrder {
+        didSet {
+            persistDisplayOrder()
+        }
+    }
+
     var menuBarStyle: MenuBarStyle {
         didSet {
             defaults.set(menuBarStyle.rawValue, forKey: Keys.menuBarStyle)
@@ -119,6 +125,29 @@ final class AppSettings {
         availableCredentialIDs = reordered
     }
 
+    var hasPersistedDisplayOrder: Bool {
+        defaults.data(forKey: Self.displayOrderKey) != nil
+    }
+
+    func importLegacyDisplayOrder(allIDs: [UUID]) {
+        guard !hasPersistedDisplayOrder else { return }
+        displayOrder = CredentialDisplayOrder.migrated(
+            selected: selectedCredentialIDs,
+            available: availableCredentialIDs,
+            allIDs: allIDs
+        )
+    }
+
+    func appendCredential(_ id: UUID) {
+        var order = displayOrder
+        order.popoverCredentialIDs.append(id)
+        displayOrder = order
+    }
+
+    func removeCredential(_ id: UUID) {
+        displayOrder = displayOrder.removingCredential(id)
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
@@ -159,6 +188,13 @@ final class AppSettings {
 
         let storedAvailable = defaults.stringArray(forKey: Keys.availableCredentialIDs) ?? []
         availableCredentialIDs = storedAvailable.compactMap(UUID.init(uuidString:))
+
+        if let data = defaults.data(forKey: Self.displayOrderKey),
+           let decoded = try? JSONDecoder().decode(CredentialDisplayOrder.self, from: data) {
+            displayOrder = decoded
+        } else {
+            displayOrder = CredentialDisplayOrder()
+        }
     }
 }
 
@@ -175,8 +211,16 @@ private extension AppSettings {
         static let availableCredentialIDs = "availableCredentialIDs"
     }
 
+    static let displayOrderKey = "displayOrder.v1"
+
     static func normalizedSelection(_ ids: [UUID]) -> [UUID] {
         Array(ids.uniqued().prefix(5))
+    }
+
+    func persistDisplayOrder() {
+        if let data = try? JSONEncoder().encode(displayOrder) {
+            defaults.set(data, forKey: Self.displayOrderKey)
+        }
     }
 }
 

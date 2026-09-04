@@ -194,6 +194,26 @@ final class AppSettingsTests: XCTestCase {
         )
     }
 
+    func test独立展示顺序可持久化并迁移旧配置() throws {
+        let context = try makeContext()
+        defer { context.cleanUp() }
+        let selected = [UUID(), UUID()]
+        let available = [UUID()]
+        let all = selected + available + [UUID()]
+        context.defaults.set(selected.map(\.uuidString), forKey: "selectedCredentialIDs")
+        context.defaults.set(available.map(\.uuidString), forKey: "availableCredentialIDs")
+
+        let settings = AppSettings(defaults: context.defaults)
+        settings.importLegacyDisplayOrder(allIDs: all)
+
+        XCTAssertEqual(settings.displayOrder.menuBarCredentialIDs, selected)
+        XCTAssertEqual(settings.displayOrder.popoverCredentialIDs, all)
+        XCTAssertEqual(
+            AppSettings(defaults: context.defaults).displayOrder,
+            settings.displayOrder
+        )
+    }
+
     func test卡片拖拽向下放置到目标卡片之后() throws {
         let suiteName = "card-drag-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

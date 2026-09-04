@@ -282,11 +282,9 @@ private extension UsagePopoverView {
     }
 
     var popoverKeyIDs: [UUID] {
-        LegacyCredentialDisplayOrder.popoverIDs(
-            selected: settings.selectedCredentialIDs,
-            available: settings.availableCredentialIDs,
-            visible: store.visibleKeyIDs
-        )
+        let enabledIDs = Set(store.visibleKeyIDs)
+        let visibility = settings.displayOrder.visible(enabledIDs: enabledIDs)
+        return visibility.popoverIDs
     }
 
     var maxPopoverHeight: CGFloat {
