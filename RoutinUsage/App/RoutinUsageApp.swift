@@ -61,33 +61,7 @@ struct RoutinUsageApp: App {
 
     var body: some Scene {
         Window("设置", id: "settings") {
-            SettingsView(
-                store: environment.store,
-                settings: environment.settings,
-                loginItemManager: environment.loginItemManager,
-                updateValidatedKey: { id, name, secret in
-                    try await environment.updateValidatedKey(
-                        id: id,
-                        name: name,
-                        secret: secret
-                    )
-                },
-                addValidatedCredential: environment.addValidatedCredential,
-                updateValidatedCredential: environment.updateValidatedCredential,
-                setKeyEnabled: environment.setKeyEnabled(_:enabled:),
-                updateStatus: environment.updateStatus,
-                checkForUpdates: environment.checkForUpdates,
-                installAvailableUpdate: environment.installAvailableUpdate,
-                submitIssueReport: environment.openIssueReport,
-                readKey: environment.readKey(id:),
-                routinCheckInState: environment.routinCheckIn.state,
-                startRoutinCheckIn: environment.startRoutinCheckIn,
-                beginRoutinLogin: environment.beginRoutinLogin,
-                signOutRoutin: environment.signOutRoutin,
-                deleteKey: environment.deleteKey(_:),
-                codexGroupDetectionRecord: environment.codexGroupDetection.record(for:),
-                clearCodexGroupDetection: environment.clearCodexGroupDetection(for:)
-            )
+            SettingsWindowView(environment: environment)
         }
         .defaultSize(
             width: WindowFramePersistence.defaultSize.width,
