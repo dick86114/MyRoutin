@@ -69,14 +69,14 @@ final class CredentialOrderingController {
         )
     }
 
-    func addToMenuBar(_ id: UUID, toIndex: Int) {
+    func addingToMenuBar(_ id: UUID, toIndex: Int) {
         settings.displayOrder = settings.displayOrder.addingToMenuBar(
             id,
             toIndex: toIndex
         )
     }
 
-    func removeFromMenuBar(_ id: UUID) {
+    func removingFromMenuBar(_ id: UUID) {
         settings.displayOrder = settings.displayOrder.removingFromMenuBar(id)
     }
 }
