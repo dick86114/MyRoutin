@@ -38,16 +38,7 @@ final class UsagePresentationPolicyTests: XCTestCase {
         XCTAssertEqual(UsageMetricGridPolicy.layout(providerID: .newAPI, metrics: metrics).columns, 2)
     }
 
-    func test设置页和弹窗按供应商使用统一栅格并隐藏GLMZCode指标() throws {
-        let source = try String(
-            contentsOf: URL(fileURLWithPath: #filePath)
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .appendingPathComponent("RoutinUsage")
-                .appendingPathComponent("Views")
-                .appendingPathComponent("SettingsView.swift"),
-            encoding: .utf8
-        )
+    func test弹窗按供应商使用统一栅格并隐藏GLMZCode指标() throws {
         let popoverRow = try String(
             contentsOf: URL(fileURLWithPath: #filePath)
                 .deletingLastPathComponent()
@@ -58,11 +49,25 @@ final class UsagePresentationPolicyTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(source.contains("UsageMetricGridPolicy.layout("))
-        XCTAssertTrue(source.contains("NormalizedUsageMetricGrid("))
         XCTAssertTrue(popoverRow.contains("UsageMetricGridPolicy.layout("))
         XCTAssertTrue(popoverRow.contains("NormalizedUsageMetricGrid("))
         XCTAssertFalse(popoverRow.contains("ForEach(snapshot.normalizedMetrics)"))
+    }
+
+    func test凭证管理页保持轻量且不复制完整用量栅格() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("RoutinUsage")
+                .appendingPathComponent("Views")
+                .appendingPathComponent("Settings")
+                .appendingPathComponent("CredentialManagementView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertFalse(source.contains("UsageMetricGridPolicy.layout("))
+        XCTAssertFalse(source.contains("NormalizedUsageMetricGrid("))
     }
 
     func test通用用量卡片使用Routin小字号并完整单独显示重置时间() throws {
@@ -151,12 +156,13 @@ final class UsagePresentationPolicyTests: XCTestCase {
                 .deletingLastPathComponent()
                 .appendingPathComponent("RoutinUsage")
                 .appendingPathComponent("Views")
-                .appendingPathComponent("SettingsView.swift"),
+                .appendingPathComponent("Settings")
+                .appendingPathComponent("SettingsWindowView.swift"),
             encoding: .utf8
         )
 
         XCTAssertTrue(coordinator.contains(".regular : .accessory"))
         XCTAssertTrue(app.contains("SettingsWindowActivationPolicy.refresh()"))
-        XCTAssertTrue(settings.contains("SettingsDockIconAnchor()"))
+        XCTAssertTrue(settings.contains("SettingsWindowDockIconAnchor()"))
     }
 }

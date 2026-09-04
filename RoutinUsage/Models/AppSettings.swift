@@ -1,25 +1,6 @@
 import Foundation
 import Observation
 
-enum LegacyCredentialDisplayOrder {
-    static func popoverIDs(
-        selected: [UUID],
-        available: [UUID],
-        visible: [UUID]
-    ) -> [UUID] {
-        let selectedVisible: [UUID] = selected.reduce(into: []) { result, id in
-            if visible.contains(id) {
-                result.append(id)
-            }
-        }
-        let availableVisible = available.filter {
-            visible.contains($0) && !selectedVisible.contains($0)
-        }
-        let ordered = selectedVisible + availableVisible
-        return ordered + visible.filter { !ordered.contains($0) }
-    }
-}
-
 @Observable
 final class AppSettings {
     static let allowedRefreshMinutes = [1, 5, 15, 30]
@@ -73,67 +54,19 @@ final class AppSettings {
         }
     }
 
-    var selectedCredentialIDs: [UUID] {
-        didSet {
-            let normalized = Self.normalizedSelection(selectedCredentialIDs)
-            if normalized != selectedCredentialIDs {
-                selectedCredentialIDs = normalized
-                return
-            }
-            defaults.set(normalized.map(\.uuidString), forKey: Keys.selectedCredentialIDs)
-        }
-    }
-
-    var availableCredentialIDs: [UUID] {
-        didSet {
-            defaults.set(
-                availableCredentialIDs.uniqued().map(\.uuidString),
-                forKey: Keys.availableCredentialIDs
-            )
-        }
-    }
-
-    func moveSelectedCredential(fromOffsets source: IndexSet, toOffset destination: Int) {
-        let validSource = source.filter { selectedCredentialIDs.indices.contains($0) }
-        guard !validSource.isEmpty, (0...selectedCredentialIDs.count).contains(destination) else {
-            return
-        }
-
-        var reordered = selectedCredentialIDs
-        let moving = validSource.map { reordered[$0] }
-        for index in validSource.reversed() {
-            reordered.remove(at: index)
-        }
-        let removedBeforeDestination = validSource.filter { $0 < destination }.count
-        reordered.insert(contentsOf: moving, at: destination - removedBeforeDestination)
-        selectedCredentialIDs = reordered
-    }
-
-    func moveAvailableCredential(fromOffsets source: IndexSet, toOffset destination: Int) {
-        let validSource = source.filter { availableCredentialIDs.indices.contains($0) }
-        guard !validSource.isEmpty, (0...availableCredentialIDs.count).contains(destination) else {
-            return
-        }
-
-        var reordered = availableCredentialIDs
-        let moving = validSource.map { reordered[$0] }
-        for index in validSource.reversed() {
-            reordered.remove(at: index)
-        }
-        let removedBeforeDestination = validSource.filter { $0 < destination }.count
-        reordered.insert(contentsOf: moving, at: destination - removedBeforeDestination)
-        availableCredentialIDs = reordered
-    }
-
     var hasPersistedDisplayOrder: Bool {
         defaults.data(forKey: Self.displayOrderKey) != nil
     }
 
     func importLegacyDisplayOrder(allIDs: [UUID]) {
         guard !hasPersistedDisplayOrder else { return }
+        let selected = (defaults.stringArray(forKey: Keys.selectedCredentialIDs) ?? [])
+            .compactMap(UUID.init(uuidString:))
+        let available = (defaults.stringArray(forKey: Keys.availableCredentialIDs) ?? [])
+            .compactMap(UUID.init(uuidString:))
         displayOrder = CredentialDisplayOrder.migrated(
-            selected: selectedCredentialIDs,
-            available: availableCredentialIDs,
+            selected: selected,
+            available: available,
             allIDs: allIDs
         )
     }
@@ -183,12 +116,6 @@ final class AppSettings {
 
         launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
 
-        let storedSelection = defaults.stringArray(forKey: Keys.selectedCredentialIDs) ?? []
-        selectedCredentialIDs = Self.normalizedSelection(storedSelection.compactMap(UUID.init(uuidString:)))
-
-        let storedAvailable = defaults.stringArray(forKey: Keys.availableCredentialIDs) ?? []
-        availableCredentialIDs = storedAvailable.compactMap(UUID.init(uuidString:))
-
         if let data = defaults.data(forKey: Self.displayOrderKey),
            let decoded = try? JSONDecoder().decode(CredentialDisplayOrder.self, from: data) {
             displayOrder = decoded
@@ -213,20 +140,9 @@ private extension AppSettings {
 
     static let displayOrderKey = "displayOrder.v1"
 
-    static func normalizedSelection(_ ids: [UUID]) -> [UUID] {
-        Array(ids.uniqued().prefix(5))
-    }
-
     func persistDisplayOrder() {
         if let data = try? JSONEncoder().encode(displayOrder) {
             defaults.set(data, forKey: Self.displayOrderKey)
         }
-    }
-}
-
-private extension Array where Element: Hashable {
-    func uniqued() -> [Element] {
-        var seen = Set<Element>()
-        return filter { seen.insert($0).inserted }
     }
 }

@@ -136,64 +136,6 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertTrue(reloaded.launchAtLogin)
     }
 
-    func test菜单栏指标排序只重排已选择的凭证且可持久化() throws {
-        let context = try makeContext()
-        defer { context.cleanUp() }
-        let settings = AppSettings(defaults: context.defaults)
-        let ids = [UUID(), UUID(), UUID()]
-        settings.selectedCredentialIDs = ids
-
-        settings.moveSelectedCredential(fromOffsets: IndexSet(integer: 2), toOffset: 0)
-
-        XCTAssertEqual(settings.selectedCredentialIDs, [ids[2], ids[0], ids[1]])
-        XCTAssertEqual(
-            AppSettings(defaults: context.defaults).selectedCredentialIDs,
-            [ids[2], ids[0], ids[1]]
-        )
-    }
-
-    func test可添加指标排序可持久化() throws {
-        let context = try makeContext()
-        defer { context.cleanUp() }
-        let settings = AppSettings(defaults: context.defaults)
-        let ids = [UUID(), UUID(), UUID()]
-        settings.availableCredentialIDs = ids
-
-        settings.moveAvailableCredential(
-            fromOffsets: IndexSet(integer: 2),
-            toOffset: 0
-        )
-
-        XCTAssertEqual(settings.availableCredentialIDs, [ids[2], ids[0], ids[1]])
-        XCTAssertEqual(
-            AppSettings(defaults: context.defaults).availableCredentialIDs,
-            [ids[2], ids[0], ids[1]]
-        )
-    }
-
-    func test菜单栏弹窗先按已选顺序再按可添加顺序显示() {
-        let selected = [
-            UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
-            UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
-        ]
-        let available = [
-            UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
-            UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
-            UUID(uuidString: "00000000-0000-0000-0000-000000000005")!
-        ]
-        let leftover = UUID(uuidString: "00000000-0000-0000-0000-000000000006")!
-        let visible = [available[2], leftover, selected[1], selected[0], available[0]]
-
-        XCTAssertEqual(
-            LegacyCredentialDisplayOrder.popoverIDs(
-                selected: selected,
-                available: available,
-                visible: visible
-            ),
-            [selected[0], selected[1], available[0], available[2], leftover]
-        )
-    }
-
     func test独立展示顺序可持久化并迁移旧配置() throws {
         let context = try makeContext()
         defer { context.cleanUp() }
@@ -214,34 +156,6 @@ final class AppSettingsTests: XCTestCase {
         )
     }
 
-    func test卡片拖拽向下放置到目标卡片之后() throws {
-        let suiteName = "card-drag-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let settings = AppSettings(defaults: defaults)
-        let ids = [UUID(), UUID(), UUID(), UUID()]
-        settings.selectedCredentialIDs = ids
-
-        settings.moveSelectedCredential(fromOffsets: IndexSet(integer: 0), toOffset: 4)
-
-        XCTAssertEqual(settings.selectedCredentialIDs, [ids[1], ids[2], ids[3], ids[0]])
-    }
-
-    func test菜单栏弹窗先展示已选择凭证的排序再展示其余凭证() {
-        let first = UUID()
-        let second = UUID()
-        let third = UUID()
-
-        XCTAssertEqual(
-            LegacyCredentialDisplayOrder.popoverIDs(
-                selected: [second, first],
-                available: [],
-                visible: [first, second, third]
-            ),
-            [second, first, third]
-        )
-    }
 }
 
 final class LoginItemManagerTests: XCTestCase {

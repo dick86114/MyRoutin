@@ -34,6 +34,8 @@ targets:
         buildPhase: resources
       - path: project.yml
         buildPhase: resources
+      - path: docs/brand-assets/routin-menu-bar-logo-source.png
+        buildPhase: resources
     preBuildScripts:
       - name: 同步静态源码测试资源
         basedOnDependencyAnalysis: false
@@ -48,11 +50,18 @@ targets:
           cp "$PROJECT_DIR/RoutinUsage/Views/Settings/PopoverOrderingView.swift" "$resource_dir/PopoverOrderingView.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/Settings/GeneralSettingsView.swift" "$resource_dir/GeneralSettingsView.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/Settings/HelpUpdateView.swift" "$resource_dir/HelpUpdateView.swift.txt"
+          cp "$PROJECT_DIR/RoutinUsage/Views/Settings/CredentialManagementView.swift" "$resource_dir/CredentialManagementView.swift.txt"
+          cp "$PROJECT_DIR/RoutinUsage/Views/Settings/CredentialManagementModel.swift" "$resource_dir/CredentialManagementModel.swift.txt"
+          cp "$PROJECT_DIR/RoutinUsage/Views/Settings/Components/CredentialSummaryRow.swift" "$resource_dir/CredentialSummaryRow.swift.txt"
+          cp "$PROJECT_DIR/RoutinUsage/Views/Settings/Components/ProviderFilterChips.swift" "$resource_dir/ProviderFilterChips.swift.txt"
+          cp "$PROJECT_DIR/RoutinUsage/Views/Settings/Components/CredentialDropDelegate.swift" "$resource_dir/CredentialDropDelegate.swift.txt"
+          cp "$PROJECT_DIR/RoutinUsage/Views/Settings/Components/MenuBarIndicatorPreview.swift" "$resource_dir/MenuBarIndicatorPreview.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/Settings/Components/SettingsPageHeader.swift" "$resource_dir/SettingsPageHeader.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/UpdateNotesView.swift" "$resource_dir/UpdateNotesView.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/KeyEditorView.swift" "$resource_dir/KeyEditorView.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/OnboardingView.swift" "$resource_dir/OnboardingView.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/UsageRowView.swift" "$resource_dir/UsageRowView.swift.txt"
+          cp "$PROJECT_DIR/RoutinUsage/Views/NormalizedUsageMetricGrid.swift" "$resource_dir/NormalizedUsageMetricGrid.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Models/MenuBarStyle.swift" "$resource_dir/MenuBarStyle.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/App/StatusBarController.swift" "$resource_dir/StatusBarController.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Updates/GitHubUpdateService.swift" "$resource_dir/GitHubUpdateService.swift.txt"
