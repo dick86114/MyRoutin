@@ -19,21 +19,30 @@ enum UserDefaultsMigration {
         sourceProvider: (String) -> UserDefaults? = { UserDefaults(suiteName: $0) }
     ) {
         let sources = sourceDomains ?? compatibilitySources(for: currentDomain)
-        for sourceDomain in sources where sourceDomain != currentDomain {
+        var currentValues = standard.persistentDomain(forName: currentDomain) ?? [:]
+        var migratedKeys = Set<String>()
+        var changed = false
+        for sourceDomain in sources.reversed() where sourceDomain != currentDomain {
             let markerKey = "didMigratePreferencesFrom.\(sourceDomain)"
-            guard !standard.bool(forKey: markerKey) else {
+            guard currentValues[markerKey] == nil else {
                 continue
             }
 
             let sourceValues = sourceProvider(sourceDomain)?
                 .persistentDomain(forName: sourceDomain) ?? [:]
-            var currentValues = standard.persistentDomain(forName: currentDomain) ?? [:]
-
-            for (key, value) in sourceValues where currentValues[key] == nil {
-                currentValues[key] = value
+            for (key, value) in sourceValues where migratedKeys.insert(key).inserted {
+                if currentValues[key] == nil {
+                    currentValues[key] = value
+                }
             }
             currentValues[markerKey] = true
-            standard.setPersistentDomain(currentValues, forName: currentDomain)
+            changed = true
+        }
+
+        if changed {
+            for (key, value) in currentValues {
+                standard.set(value, forKey: key)
+            }
         }
     }
 

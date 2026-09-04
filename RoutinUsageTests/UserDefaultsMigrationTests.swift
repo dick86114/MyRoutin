@@ -36,7 +36,7 @@ final class UserDefaultsMigrationTests: XCTestCase {
             sourceDomains: sourceSuites
         )
 
-        XCTAssertEqual(current.string(forKey: "keyConfigurations"), "oldest")
+        XCTAssertEqual(current.string(forKey: "keyConfigurations"), "newer")
         XCTAssertEqual(current.string(forKey: "shared"), "already-set")
         XCTAssertEqual(
             current.bool(forKey: "didMigratePreferencesFrom.\(sourceSuites[0])"),
