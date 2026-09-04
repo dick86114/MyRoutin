@@ -14,15 +14,38 @@ struct CredentialDisplayVisibility: Equatable, Sendable {
 struct CredentialDisplayOrder: Codable, Equatable, Sendable {
     static let maximumMenuBarCount = 5
 
-    var menuBarCredentialIDs: [UUID]
-    var popoverCredentialIDs: [UUID]
+    var menuBarCredentialIDs: [UUID] {
+        didSet {
+            menuBarCredentialIDs = Self.normalizedMenuBar(menuBarCredentialIDs)
+        }
+    }
+
+    var popoverCredentialIDs: [UUID] {
+        didSet {
+            popoverCredentialIDs = Self.uniqued(popoverCredentialIDs)
+        }
+    }
 
     init(
         menuBarCredentialIDs: [UUID] = [],
         popoverCredentialIDs: [UUID] = []
     ) {
-        self.menuBarCredentialIDs = Self.uniqued(menuBarCredentialIDs)
+        self.menuBarCredentialIDs = Self.normalizedMenuBar(menuBarCredentialIDs)
         self.popoverCredentialIDs = Self.uniqued(popoverCredentialIDs)
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            menuBarCredentialIDs: try container.decode(
+                [UUID].self,
+                forKey: .menuBarCredentialIDs
+            ),
+            popoverCredentialIDs: try container.decode(
+                [UUID].self,
+                forKey: .popoverCredentialIDs
+            )
+        )
     }
 
     static func migrated(
@@ -112,5 +135,9 @@ struct CredentialDisplayOrder: Codable, Equatable, Sendable {
     private static func uniqued(_ ids: [UUID]) -> [UUID] {
         var seen = Set<UUID>()
         return ids.filter { seen.insert($0).inserted }
+    }
+
+    private static func normalizedMenuBar(_ ids: [UUID]) -> [UUID] {
+        Array(uniqued(ids).prefix(maximumMenuBarCount))
     }
 }

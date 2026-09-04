@@ -70,4 +70,53 @@ final class CredentialDisplayOrderTests: XCTestCase {
         XCTAssertEqual(result.menuBarCredentialIDs, [two, one])
         XCTAssertEqual(result.popoverCredentialIDs, [two, one, three, disabled])
     }
+
+    func test构造时去重并将菜单栏截断到前五项() {
+        let candidate = UUID()
+        let result = CredentialDisplayOrder(
+            menuBarCredentialIDs: [candidate, one, two, three, four, five],
+            popoverCredentialIDs: [three, three, two, one]
+        )
+
+        XCTAssertEqual(result.menuBarCredentialIDs, [candidate, one, two, three, four])
+        XCTAssertEqual(result.popoverCredentialIDs, [three, two, one])
+    }
+
+    func test解码时去重并将菜单栏截断到前五项() throws {
+        let candidate = UUID().uuidString
+        let json = """
+        {
+          "menuBarCredentialIDs": [
+            "\(candidate)", "\(one.uuidString)", "\(two.uuidString)",
+            "\(candidate)", "\(three.uuidString)", "\(four.uuidString)",
+            "\(five.uuidString)", "\(two.uuidString)"
+          ],
+          "popoverCredentialIDs": [
+            "\(three.uuidString)", "\(three.uuidString)", "\(candidate)",
+            "\(one.uuidString)", "\(five.uuidString)"
+          ]
+        }
+        """
+
+        let result = try JSONDecoder().decode(CredentialDisplayOrder.self, from: Data(json.utf8))
+
+        XCTAssertEqual(
+            result.menuBarCredentialIDs,
+            [UUID(uuidString: candidate)!, one, two, three, four]
+        )
+        XCTAssertEqual(result.popoverCredentialIDs, [three, UUID(uuidString: candidate)!, one, five])
+    }
+
+    func test直接修改属性时保持去重和菜单栏上限() {
+        var result = CredentialDisplayOrder(
+            menuBarCredentialIDs: [one],
+            popoverCredentialIDs: [one]
+        )
+
+        result.menuBarCredentialIDs = [one, one, two, three, four, five, two]
+        XCTAssertEqual(result.menuBarCredentialIDs, [one, two, three, four, five])
+
+        result.popoverCredentialIDs = [one, one, five, five, three]
+        XCTAssertEqual(result.popoverCredentialIDs, [one, five, three])
+    }
 }
