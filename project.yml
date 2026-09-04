@@ -46,6 +46,7 @@ targets:
           cp "$PROJECT_DIR/RoutinUsage/Views/Settings/SettingsWindowView.swift" "$resource_dir/SettingsWindowView.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/Settings/MenuBarOrderingView.swift" "$resource_dir/MenuBarOrderingView.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/Settings/PopoverOrderingView.swift" "$resource_dir/PopoverOrderingView.swift.txt"
+          cp "$PROJECT_DIR/RoutinUsage/Views/Settings/GeneralSettingsView.swift" "$resource_dir/GeneralSettingsView.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/Settings/Components/SettingsPageHeader.swift" "$resource_dir/SettingsPageHeader.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/UpdateNotesView.swift" "$resource_dir/UpdateNotesView.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/KeyEditorView.swift" "$resource_dir/KeyEditorView.swift.txt"

@@ -17,7 +17,7 @@ enum UsageDimension: String, Codable, Equatable, Sendable {
     case balance
 }
 
-enum DisplayDimension: String, Codable, Equatable, Sendable {
+enum DisplayDimension: String, Codable, Equatable, Sendable, CaseIterable {
     case fiveHour
     case weekly
 }
