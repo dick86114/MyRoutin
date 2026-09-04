@@ -84,7 +84,7 @@ struct PopoverOrderingView: View {
             return provider
         }
         .onDrop(
-            of: [UTType.credentialID],
+            of: [UTType.text],
                 delegate: CredentialDropDelegate(
                     targetID: state.configuration.id,
                     draggedID: draggedID,

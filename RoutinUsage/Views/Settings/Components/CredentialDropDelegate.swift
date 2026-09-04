@@ -1,10 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-extension UTType {
-    static let credentialID = UTType("ai.routin.mytoken.credential") ?? .plainText
-}
-
 struct CredentialDropDelegate: DropDelegate {
     let targetID: UUID
     let draggedID: UUID?

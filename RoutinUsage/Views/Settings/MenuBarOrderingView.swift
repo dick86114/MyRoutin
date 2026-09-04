@@ -148,7 +148,7 @@ struct MenuBarOrderingView: View {
                 return provider
             }
             .onDrop(
-                of: [UTType.credentialID],
+                of: [UTType.text],
                 delegate: CredentialDropDelegate(
                     targetID: state.configuration.id,
                     draggedID: draggedID,
@@ -173,7 +173,7 @@ struct MenuBarOrderingView: View {
                 return provider
             }
             .onDrop(
-                of: [UTType.credentialID],
+                of: [UTType.text],
                 delegate: CredentialDropDelegate(
                     targetID: state.configuration.id,
                     draggedID: draggedID,
@@ -210,21 +210,7 @@ struct MenuBarOrderingView: View {
 
             Spacer(minLength: 8)
 
-            if isInMenuBar {
-                rowActions(
-                    for: state,
-                    canMoveUp: visibility.menuBarIDs.first != state.configuration.id,
-                    canMoveDown: visibility.menuBarIDs.last != state.configuration.id,
-                    isInMenuBar: true
-                )
-            } else {
-                rowActions(
-                    for: state,
-                    canMoveUp: visibility.menuBarCandidateIDs.first != state.configuration.id,
-                    canMoveDown: visibility.menuBarCandidateIDs.last != state.configuration.id,
-                    isInMenuBar: false
-                )
-            }
+            rowActions(for: state, isInMenuBar: isInMenuBar)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
@@ -236,31 +222,11 @@ struct MenuBarOrderingView: View {
 
     private func rowActions(
         for state: KeyUsageState,
-        canMoveUp: Bool,
-        canMoveDown: Bool,
         isInMenuBar: Bool
     ) -> some View {
         let id = state.configuration.id
 
         return HStack(spacing: 6) {
-            Button {
-                moveUp(id, inMenuBar: isInMenuBar)
-            } label: {
-                Image(systemName: "chevron.up")
-            }
-            .buttonStyle(.borderless)
-            .disabled(!canMoveUp)
-            .help("上移 \(state.configuration.displayName)")
-
-            Button {
-                moveDown(id, inMenuBar: isInMenuBar)
-            } label: {
-                Image(systemName: "chevron.down")
-            }
-            .buttonStyle(.borderless)
-            .disabled(!canMoveDown)
-            .help("下移 \(state.configuration.displayName)")
-
             if isInMenuBar {
                 Button {
                     ordering.removingFromMenuBar(id)
@@ -279,12 +245,6 @@ struct MenuBarOrderingView: View {
                 .disabled(selectedStates.count >= CredentialDisplayOrder.maximumMenuBarCount)
                 .help("添加到菜单栏 \(state.configuration.displayName)")
             }
-        }
-        .accessibilityAction(named: "上移") {
-            if canMoveUp { moveUp(id, inMenuBar: isInMenuBar) }
-        }
-        .accessibilityAction(named: "下移") {
-            if canMoveDown { moveDown(id, inMenuBar: isInMenuBar) }
         }
         .accessibilityAction(named: isInMenuBar ? "从菜单栏移除" : "添加到菜单栏") {
             if isInMenuBar {
@@ -308,30 +268,6 @@ struct MenuBarOrderingView: View {
             let targetID = visibility.menuBarCandidateIDs[candidateIndex]
             let popoverIndex = visibility.popoverIDs.firstIndex(of: targetID) ?? 0
             ordering.moving(.popover, id: dragged, toIndex: popoverIndex)
-        }
-    }
-
-    private func moveUp(_ id: UUID, inMenuBar: Bool) {
-        let ids = inMenuBar ? visibility.menuBarIDs : visibility.menuBarCandidateIDs
-        guard let index = ids.firstIndex(of: id), index > 0 else { return }
-        moveWithinCandidateSequence(id, toIndex: index - 1, inMenuBar: inMenuBar)
-    }
-
-    private func moveDown(_ id: UUID, inMenuBar: Bool) {
-        let ids = inMenuBar ? visibility.menuBarIDs : visibility.menuBarCandidateIDs
-        guard let index = ids.firstIndex(of: id), index < ids.count - 1 else { return }
-        moveWithinCandidateSequence(id, toIndex: index + 1, inMenuBar: inMenuBar)
-    }
-
-    private func moveWithinCandidateSequence(_ id: UUID, toIndex index: Int, inMenuBar: Bool) {
-        withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.82)) {
-            if inMenuBar {
-                ordering.moving(.menuBar, id: id, toIndex: index)
-            } else {
-                let targetID = visibility.menuBarCandidateIDs[index]
-                let popoverIndex = visibility.popoverIDs.firstIndex(of: targetID) ?? index
-                ordering.moving(.popover, id: id, toIndex: popoverIndex)
-            }
         }
     }
 

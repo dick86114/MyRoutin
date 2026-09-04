@@ -11,38 +11,11 @@ struct SettingsWindowDockIconAnchor: NSViewRepresentable {
 }
 
 final class SettingsWindowDockIconView: NSView {
-    private weak var observedWindow: NSWindow?
-    private var closeObserver: NSObjectProtocol?
-
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        closeObserver.map(NotificationCenter.default.removeObserver)
-        closeObserver = nil
-        if let observedWindow {
-            SettingsWindowActivationPolicy.unregister(observedWindow)
-            self.observedWindow = nil
-        }
-
         guard let window else {
-            if let observedWindow {
-                SettingsWindowActivationPolicy.unregister(observedWindow)
-                self.observedWindow = nil
-            }
             return
         }
         SettingsWindowActivationPolicy.register(window)
-        observedWindow = window
-        closeObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.willCloseNotification,
-            object: window,
-            queue: .main
-        ) { notification in
-            guard let window = notification.object as? NSWindow else {
-                return
-            }
-            MainActor.assumeIsolated {
-                SettingsWindowActivationPolicy.unregister(window)
-            }
-        }
     }
 }

@@ -12,8 +12,11 @@ final class MenuBarOrderingViewTests: XCTestCase {
         XCTAssertTrue(source.contains("maximumMenuBarCount"))
         XCTAssertTrue(source.contains("addingToMenuBar"))
         XCTAssertTrue(source.contains("removingFromMenuBar"))
-        XCTAssertTrue(source.contains("UTType.credentialID"))
-        XCTAssertTrue(source.contains("chevron.up"))
-        XCTAssertTrue(source.contains("chevron.down"))
+        XCTAssertTrue(source.contains("UTType.text"))
+        XCTAssertTrue(source.contains(".onDrag"))
+        XCTAssertFalse(source.contains("chevron.up"))
+        XCTAssertFalse(source.contains("chevron.down"))
+        XCTAssertFalse(source.contains("moveUp"))
+        XCTAssertFalse(source.contains("moveDown"))
     }
 }

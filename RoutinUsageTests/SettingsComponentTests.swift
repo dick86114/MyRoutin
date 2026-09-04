@@ -13,12 +13,13 @@ final class SettingsComponentTests: XCTestCase {
         XCTAssertTrue(source.contains("MenuBarMultiUsageIcon.image("))
     }
 
-    func test拖拽使用专属凭证类型() throws {
+    func test拖拽代理按移动语义处理投放() throws {
         let source = try TestSourceReader.read([
             "RoutinUsage", "Views", "Settings", "Components", "CredentialDropDelegate.swift"
         ])
 
-        XCTAssertTrue(source.contains("static let credentialID"))
-        XCTAssertTrue(source.contains("ai.routin.mytoken.credential"))
+        XCTAssertTrue(source.contains("struct CredentialDropDelegate: DropDelegate"))
+        XCTAssertTrue(source.contains("DropProposal(operation: .move)"))
+        XCTAssertTrue(source.contains("move(draggedID)"))
     }
 }

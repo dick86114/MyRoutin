@@ -26,7 +26,7 @@ final class SettingsSortingModeTests: XCTestCase {
         ])
 
         XCTAssertTrue(source.contains("CredentialDropDelegate"))
-        XCTAssertTrue(source.contains("UTType.credentialID"))
+        XCTAssertTrue(source.contains("UTType.text"))
         XCTAssertFalse(source.contains("isReorderingMenuBarIndicators"))
         XCTAssertFalse(source.contains("isReorderingAvailableIndicators"))
     }
