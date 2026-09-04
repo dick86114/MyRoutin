@@ -131,7 +131,7 @@ final class AppEnvironment {
     }
 
     static func live() -> AppEnvironment {
-        UserDefaultsMigration.migrateLegacyBundlePreferences()
+        UserDefaultsMigration.migrateCompatiblePreferences()
         let defaults = UserDefaults.standard
         let logWriter = AppLogStore.shared
         let settings = AppSettings(defaults: defaults)
