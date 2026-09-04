@@ -4,7 +4,6 @@ import SwiftUI
 @MainActor
 struct UsagePopoverView: View {
     typealias InstallAvailableUpdate = @MainActor () async -> Void
-    typealias StartRoutinCheckIn = @MainActor () async -> Void
     typealias StartCodexGroupDetection = @MainActor (UUID) async -> Void
 
     @Bindable var store: UsageStore
@@ -12,8 +11,6 @@ struct UsagePopoverView: View {
     @Bindable var codexGroupDetection: CodexGroupDetectionService
     let updateStatus: AppUpdateStatus
     let installAvailableUpdate: InstallAvailableUpdate
-    let checkInState: RoutinCheckInState
-    let startRoutinCheckIn: StartRoutinCheckIn
     let startCodexGroupDetection: StartCodexGroupDetection
 
     @Environment(\.openWindow) private var openWindow
@@ -29,8 +26,6 @@ struct UsagePopoverView: View {
         codexGroupDetection: CodexGroupDetectionService,
         updateStatus: AppUpdateStatus = .idle,
         installAvailableUpdate: @escaping InstallAvailableUpdate = {},
-        checkInState: RoutinCheckInState = .idle,
-        startRoutinCheckIn: @escaping StartRoutinCheckIn = {},
         startCodexGroupDetection: @escaping StartCodexGroupDetection = { _ in }
     ) {
         self.store = store
@@ -38,8 +33,6 @@ struct UsagePopoverView: View {
         self.codexGroupDetection = codexGroupDetection
         self.updateStatus = updateStatus
         self.installAvailableUpdate = installAvailableUpdate
-        self.checkInState = checkInState
-        self.startRoutinCheckIn = startRoutinCheckIn
         self.startCodexGroupDetection = startCodexGroupDetection
     }
 
@@ -410,19 +403,6 @@ private extension UsagePopoverView {
                     .font(.caption)
                     .foregroundStyle(.green)
                     .accessibilityElement(children: .combine)
-            }
-
-            if checkInState != .idle {
-                HStack(spacing: 6) {
-                    Image(systemName: checkInState.isTerminalResult ? "checkmark.circle" : "checkmark.circle.badge.questionmark")
-                        .accessibilityHidden(true)
-                    Text(checkInState.statusText)
-                        .lineLimit(2)
-                }
-                .font(.caption)
-                .foregroundStyle(checkInState.isTerminalResult ? Color.secondary : Color.orange)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Routin 签到：\(checkInState.statusText)")
             }
 
             codexGroupDetectionStatus

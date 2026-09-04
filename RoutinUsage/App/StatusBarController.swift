@@ -367,8 +367,6 @@ private struct StatusPopoverContent: View {
             codexGroupDetection: environment.codexGroupDetection,
             updateStatus: environment.updateStatus,
             installAvailableUpdate: environment.installAvailableUpdate,
-            checkInState: environment.routinCheckIn.state,
-            startRoutinCheckIn: environment.startRoutinCheckIn,
             startCodexGroupDetection: environment.startCodexGroupDetection(for:)
         )
         .sheet(isPresented: $environment.showsOnboarding) {
