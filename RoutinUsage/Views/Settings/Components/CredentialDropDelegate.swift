@@ -8,6 +8,7 @@ extension UTType {
 struct CredentialDropDelegate: DropDelegate {
     let targetID: UUID
     let draggedID: UUID?
+    let reduceMotion: Bool
     let canAccept: (UUID) -> Bool
     let move: (UUID) -> Void
     let finish: () -> Void
@@ -17,7 +18,7 @@ struct CredentialDropDelegate: DropDelegate {
               draggedID != targetID,
               canAccept(draggedID)
         else { return }
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.82)) {
             move(draggedID)
         }
     }

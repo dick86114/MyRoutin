@@ -5,6 +5,7 @@ struct PopoverOrderingView: View {
     @Bindable var environment: AppEnvironment
     let ordering: CredentialOrderingController
     @State private var draggedID: UUID?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var visiblePopoverIDs: [UUID] {
         environment.settings.displayOrder.visible(enabledIDs: enabledIDs).popoverIDs
@@ -84,10 +85,11 @@ struct PopoverOrderingView: View {
         }
         .onDrop(
             of: [UTType.credentialID],
-            delegate: CredentialDropDelegate(
-                targetID: state.configuration.id,
-                draggedID: draggedID,
-                canAccept: { draggedID in
+                delegate: CredentialDropDelegate(
+                    targetID: state.configuration.id,
+                    draggedID: draggedID,
+                    reduceMotion: reduceMotion,
+                    canAccept: { draggedID in
                     visiblePopoverIDs.contains(draggedID)
                 },
                 move: { dragged in

@@ -5,6 +5,7 @@ struct MenuBarOrderingView: View {
     @Bindable var environment: AppEnvironment
     let ordering: CredentialOrderingController
     @State private var draggedID: UUID?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var visibility: CredentialDisplayVisibility {
         environment.settings.displayOrder.visible(enabledIDs: enabledIDs)
@@ -151,6 +152,7 @@ struct MenuBarOrderingView: View {
                 delegate: CredentialDropDelegate(
                     targetID: state.configuration.id,
                     draggedID: draggedID,
+                    reduceMotion: reduceMotion,
                     canAccept: { draggedID in
                         selectedStates.contains { $0.configuration.id == draggedID }
                             || (candidateStates.contains { $0.configuration.id == draggedID }
@@ -175,6 +177,7 @@ struct MenuBarOrderingView: View {
                 delegate: CredentialDropDelegate(
                     targetID: state.configuration.id,
                     draggedID: draggedID,
+                    reduceMotion: reduceMotion,
                     canAccept: { draggedID in
                         candidateStates.contains { $0.configuration.id == draggedID }
                     },
@@ -321,17 +324,21 @@ struct MenuBarOrderingView: View {
     }
 
     private func moveWithinCandidateSequence(_ id: UUID, toIndex index: Int, inMenuBar: Bool) {
-        if inMenuBar {
-            ordering.moving(.menuBar, id: id, toIndex: index)
-        } else {
-            let targetID = visibility.menuBarCandidateIDs[index]
-            let popoverIndex = visibility.popoverIDs.firstIndex(of: targetID) ?? index
-            ordering.moving(.popover, id: id, toIndex: popoverIndex)
+        withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.82)) {
+            if inMenuBar {
+                ordering.moving(.menuBar, id: id, toIndex: index)
+            } else {
+                let targetID = visibility.menuBarCandidateIDs[index]
+                let popoverIndex = visibility.popoverIDs.firstIndex(of: targetID) ?? index
+                ordering.moving(.popover, id: id, toIndex: popoverIndex)
+            }
         }
     }
 
     private func addingToMenuBar(_ id: UUID) {
-        ordering.addingToMenuBar(id, toIndex: visibility.menuBarIDs.count)
+        withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.82)) {
+            ordering.addingToMenuBar(id, toIndex: visibility.menuBarIDs.count)
+        }
     }
 
     private func descriptor(for state: KeyUsageState) -> ProviderDescriptor? {
