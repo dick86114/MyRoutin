@@ -6,6 +6,11 @@ struct CredentialAddOutcome: Sendable, Equatable {
     let addedCredentialID: UUID?
 }
 
+enum CredentialDeletionOutcome: Sendable, Equatable {
+    case deleted
+    case cacheCleanupFailed
+}
+
 @MainActor
 final class CredentialOrderingController {
     private let settings: AppSettings
@@ -41,9 +46,15 @@ final class CredentialOrderingController {
         try setKeyEnabled(id, enabled)
     }
 
-    func delete(_ id: UUID) throws {
-        try deleteCredential(id)
+    func delete(_ id: UUID) throws -> CredentialDeletionOutcome {
+        do {
+            try deleteCredential(id)
+        } catch UsageStoreError.cacheCleanupFailed {
+            settings.removeCredential(id)
+            return .cacheCleanupFailed
+        }
         settings.removeCredential(id)
+        return .deleted
     }
 
     func move(

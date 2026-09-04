@@ -180,6 +180,8 @@ final class KeyEditorModel {
             return "服务暂时不可用（HTTP \(statusCode)）"
         case .persistence:
             return "保存失败，请稍后重试"
+        case .cacheCleanupFailed:
+            return "凭证已删除，但用量缓存未能清理"
         }
     }
 }

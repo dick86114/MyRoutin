@@ -19,6 +19,7 @@ enum UsageStoreError: Error, Equatable, Sendable {
     case invalidResponse
     case server(statusCode: Int)
     case persistence
+    case cacheCleanupFailed
 }
 
 extension UsageStoreError: LocalizedError {
@@ -40,6 +41,8 @@ extension UsageStoreError: LocalizedError {
             return "服务暂时不可用（HTTP \(statusCode)）"
         case .persistence:
             return "保存失败，请稍后重试"
+        case .cacheCleanupFailed:
+            return "凭证已删除，但用量缓存未能清理"
         }
     }
 }
@@ -282,7 +285,7 @@ final class UsageStore {
         orderedKeyIDs.removeAll { $0 == id }
         isRefreshing = !refreshingKeyIDs.isEmpty
         if cacheDeletionFailed {
-            throw UsageStoreError.persistence
+            throw UsageStoreError.cacheCleanupFailed
         }
     }
 

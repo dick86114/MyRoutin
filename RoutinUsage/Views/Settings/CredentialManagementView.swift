@@ -22,19 +22,21 @@ enum CredentialStatusFilter: String, CaseIterable, Identifiable {
 
 struct CredentialManagementView: View {
     @Bindable var environment: AppEnvironment
-    let ordering: CredentialOrderingController
-    @State private var filter = CredentialFilter()
-    @State private var collapsedProviderIDs: Set<ProviderID> = []
+    @State private var model: CredentialManagementModel
     @State private var editor: EditorPresentation?
-    @State private var pendingDeletion: KeyConfiguration?
-    @State private var operationError: String?
+
+    init(environment: AppEnvironment, ordering: CredentialOrderingController) {
+        self.environment = environment
+        let model = CredentialManagementModel(environment: environment, ordering: ordering)
+        _model = State(initialValue: model)
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 SettingsPageHeader(
                     title: "凭证管理",
-                    subtitle: "\(environment.store.orderedKeyIDs.count) 个凭证",
+                    subtitle: "\(model.storeCount) 个凭证",
                     trailing: AnyView(addButton)
                 )
                 filterBar
@@ -48,26 +50,26 @@ struct CredentialManagementView: View {
         .confirmationDialog(
             "确定删除这个凭证？",
             isPresented: Binding(
-                get: { pendingDeletion != nil },
-                set: { if !$0 { pendingDeletion = nil } }
+                get: { model.pendingDeletion != nil },
+                set: { if !$0 { model.pendingDeletion = nil } }
             ),
             titleVisibility: .visible
         ) {
-            Button("删除", role: .destructive) { deletePending() }
-            Button("取消", role: .cancel) { pendingDeletion = nil }
+            Button("删除", role: .destructive) { model.deletePending() }
+            Button("取消", role: .cancel) { model.pendingDeletion = nil }
         } message: {
             Text("将同时删除本地保存的密钥和用量缓存，此操作无法撤销。")
         }
         .alert(
-            "无法完成操作",
+            model.operationNotice?.title ?? "无法完成操作",
             isPresented: Binding(
-                get: { operationError != nil },
-                set: { if !$0 { operationError = nil } }
+                get: { model.operationNotice != nil },
+                set: { if !$0 { model.clearOperationNotice() } }
             )
         ) {
-            Button("好") { operationError = nil }
+            Button("好") { model.clearOperationNotice() }
         } message: {
-            Text(operationError ?? "发生未知错误")
+            Text(model.operationNotice?.message ?? "发生未知错误")
         }
     }
 
@@ -84,7 +86,7 @@ struct CredentialManagementView: View {
     private var filterBar: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                Picker("状态", selection: $filter.status) {
+                Picker("状态", selection: $model.filter.status) {
                     ForEach(CredentialStatusFilter.allCases) { status in
                         Text(status.title).tag(status)
                     }
@@ -93,16 +95,16 @@ struct CredentialManagementView: View {
                 .frame(width: 190)
                 .accessibilityLabel("凭证状态筛选")
 
-                TextField("搜索别名", text: $filter.searchText)
+                TextField("搜索别名或供应商", text: $model.filter.searchText)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 260)
-                    .accessibilityLabel("搜索凭证别名")
+                    .accessibilityLabel("搜索别名或供应商")
             }
 
             ProviderFilterChips(
-                providers: usedProviderDescriptors,
-                selectedProviderID: filter.provider,
-                select: { filter.provider = $0 }
+                providers: model.usedProviderDescriptors,
+                selectedProviderID: model.filter.provider,
+                select: { model.filter.provider = $0 }
             )
         }
     }
@@ -111,16 +113,16 @@ struct CredentialManagementView: View {
     private var providerGroups: some View {
         if groups.isEmpty {
             ContentUnavailableView(
-                environment.store.orderedKeyIDs.isEmpty ? "尚未添加凭证" : "没有匹配的凭证",
-                systemImage: environment.store.orderedKeyIDs.isEmpty ? "key.slash" : "line.3.horizontal.decrease.circle",
+                model.hasCredentials ? "没有匹配的凭证" : "尚未添加凭证",
+                systemImage: model.hasCredentials ? "line.3.horizontal.decrease.circle" : "key.slash",
                 description: Text(
-                    environment.store.orderedKeyIDs.isEmpty
+                    model.hasCredentials
                         ? "添加供应商凭证后即可管理用量展示"
                         : "调整状态、供应商或搜索条件后再试"
                 )
             )
             .frame(maxWidth: .infinity, minHeight: 260)
-            .accessibilityLabel(environment.store.orderedKeyIDs.isEmpty ? "尚未添加凭证" : "没有匹配的凭证")
+            .accessibilityLabel(model.hasCredentials ? "没有匹配的凭证" : "尚未添加凭证")
         } else {
             VStack(alignment: .leading, spacing: 18) {
                 ForEach(groups, id: \.provider.id) { group in
@@ -135,12 +137,12 @@ struct CredentialManagementView: View {
     ) -> some View {
         DisclosureGroup(
             isExpanded: Binding(
-                get: { !collapsedProviderIDs.contains(group.provider.id) },
+                get: { !model.collapsedProviderIDs.contains(group.provider.id) },
                 set: { isExpanded in
                     if isExpanded {
-                        collapsedProviderIDs.remove(group.provider.id)
+                        model.collapsedProviderIDs.remove(group.provider.id)
                     } else {
-                        collapsedProviderIDs.insert(group.provider.id)
+                        model.collapsedProviderIDs.insert(group.provider.id)
                     }
                 }
             )
@@ -175,14 +177,19 @@ struct CredentialManagementView: View {
         CredentialSummaryRow(
             state: state,
             descriptor: provider,
-            planType: planTitle(for: state.configuration),
+            planType: model.planTitle(for: state.configuration),
             leading: AnyView(providerIcon(provider)),
             trailing: AnyView(rowActions(state))
         )
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .liquidGlassSurface(cornerRadius: 8)
+        .liquidGlassSurface(cornerRadius: 12)
         .accessibilityElement(children: .contain)
+        .accessibilityLabel(model.accessibilitySummary(
+            state,
+            providerName: provider.displayName,
+            planType: model.planTitle(for: state.configuration)
+        ))
     }
 
     private func providerIcon(_ provider: ProviderDescriptor) -> some View {
@@ -196,7 +203,7 @@ struct CredentialManagementView: View {
         HStack(spacing: 8) {
             Toggle(isOn: Binding(
                 get: { state.configuration.isEnabled },
-                set: { setEnabled(state, enabled: $0) }
+                set: { model.setEnabled(state.configuration.id, enabled: $0) }
             )) {
                 Text(state.configuration.isEnabled ? "启用" : "已停用")
             }
@@ -217,7 +224,7 @@ struct CredentialManagementView: View {
             .accessibilityLabel("编辑 \(state.configuration.displayName)")
 
             Button(role: .destructive) {
-                pendingDeletion = state.configuration
+                model.pendingDeletion = state.configuration
             } label: {
                 Image(systemName: "trash")
             }
@@ -227,77 +234,15 @@ struct CredentialManagementView: View {
         }
     }
 
-    private var usedProviderDescriptors: [ProviderDescriptor] {
-        ProviderID.allCases.compactMap { providerID in
-            let hasCredential = allStates.contains {
-                $0.configuration.providerID == providerID
-            }
-            guard hasCredential else { return nil }
-            return ProviderRegistry.builtInDescriptors.first { $0.id == providerID }
-        }
-    }
-
-    private var allStates: [KeyUsageState] {
-        let statesByID = environment.store.states
-        var seenIDs = Set<UUID>()
-        let orderedIDs = environment.settings.displayOrder.popoverCredentialIDs
-            + environment.store.orderedKeyIDs.filter {
-                !environment.settings.displayOrder.popoverCredentialIDs.contains($0)
-            }
-
-        return orderedIDs.compactMap { id in
-            guard let state = statesByID[id], seenIDs.insert(id).inserted else {
-                return nil
-            }
-            return state
-        }
-    }
-
-    private var visibleStates: [KeyUsageState] {
-        allStates.filter { state in
-            let matchesStatus: Bool
-            switch filter.status {
-            case .all:
-                matchesStatus = true
-            case .enabled:
-                matchesStatus = state.configuration.isEnabled
-            case .disabled:
-                matchesStatus = !state.configuration.isEnabled
-            }
-
-            guard matchesStatus,
-                  filter.provider == nil || filter.provider == state.configuration.providerID,
-                  matchesSearch(state)
-            else { return false }
-            return true
-        }
-    }
-
     private var groups: [(provider: ProviderDescriptor, states: [KeyUsageState])] {
-        ProviderID.allCases.compactMap { providerID in
-            let states = visibleStates.filter { $0.configuration.providerID == providerID }
-            guard let descriptor = ProviderRegistry.builtInDescriptors.first(where: { $0.id == providerID }),
-                  !states.isEmpty
-            else { return nil }
-            return (descriptor, states)
-        }
-    }
-
-    private func matchesSearch(_ state: KeyUsageState) -> Bool {
-        let query = filter.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return true }
-        let providerName = ProviderRegistry.builtInDescriptors
-            .first { $0.id == state.configuration.providerID }?
-            .displayName ?? state.configuration.providerID.rawValue
-        return state.configuration.displayName.localizedCaseInsensitiveContains(query)
-            || providerName.localizedCaseInsensitiveContains(query)
+        model.groups
     }
 
     @ViewBuilder
     private func credentialEditor(_ presentation: EditorPresentation) -> some View {
         switch presentation {
         case .add:
-            CredentialEditorView(save: ordering.addValidatedCredential)
+            CredentialEditorView(save: model.addValidatedCredential)
         case let .edit(configuration):
             CredentialEditorView(
                 title: "编辑凭证",
@@ -306,40 +251,8 @@ struct CredentialManagementView: View {
                 initialSecret: environment.readKey(id: configuration.id) ?? "",
                 initialMetadata: configuration.metadata
             ) { input in
-                try await environment.updateValidatedCredential(id: configuration.id, input: input)
+                try await model.updateValidatedCredential(id: configuration.id, input: input)
             }
-        }
-    }
-
-    private func setEnabled(_ state: KeyUsageState, enabled: Bool) {
-        do {
-            try ordering.setEnabled(state.configuration.id, enabled: enabled)
-        } catch {
-            operationError = "无法更新凭证状态，请稍后重试"
-        }
-    }
-
-    private func deletePending() {
-        guard let configuration = pendingDeletion else { return }
-        pendingDeletion = nil
-        do {
-            try ordering.delete(configuration.id)
-        } catch {
-            operationError = "无法删除凭证，请稍后重试"
-        }
-    }
-
-    private func planTitle(for configuration: KeyConfiguration) -> String {
-        if configuration.providerID == .volcengine {
-            return configuration.metadata["planType"] == "coding" ? "Coding Plan" : "Agent Plan"
-        }
-        switch configuration.credentialKind {
-        case .bearerAPIKey:
-            return configuration.providerID == .routin ? "Plan Key" : "Bearer Token"
-        case .apiKey:
-            return "API Key"
-        case .accessKeyPair:
-            return "Access Key Pair"
         }
     }
 

@@ -9,16 +9,21 @@ struct CredentialSummaryRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            leading
-            VStack(alignment: .leading, spacing: 3) {
-                Text(alias)
-                    .font(.body.weight(.medium))
-                Text("\(provider) · \(planType)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            leading?
+                .opacity(state.configuration.isEnabled ? 1 : 0.58)
+            credentialContent
             Spacer(minLength: 12)
             trailing
+        }
+    }
+
+    private var credentialContent: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(alias)
+                .font(.body.weight(.medium))
+            Text("\(provider) · \(planType)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .opacity(state.configuration.isEnabled ? 1 : 0.58)
     }

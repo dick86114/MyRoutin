@@ -484,7 +484,12 @@ final class AppEnvironment {
     }
 
     func deleteKey(_ keyID: UUID) throws {
-        try store.deleteKey(keyID)
+        do {
+            try store.deleteKey(keyID)
+        } catch UsageStoreError.cacheCleanupFailed {
+            codexGroupDetection.clearRecord(for: keyID)
+            throw UsageStoreError.cacheCleanupFailed
+        }
         codexGroupDetection.clearRecord(for: keyID)
     }
 

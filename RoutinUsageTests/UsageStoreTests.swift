@@ -559,7 +559,7 @@ final class UsageStoreTests: XCTestCase {
         await store.refresh(keyID: key.id)
 
         XCTAssertThrowsError(try store.deleteKey(key.id)) { error in
-            XCTAssertEqual(error as? UsageStoreError, .persistence)
+            XCTAssertEqual(error as? UsageStoreError, .cacheCleanupFailed)
         }
 
         XCTAssertTrue(context.repository.list().isEmpty)

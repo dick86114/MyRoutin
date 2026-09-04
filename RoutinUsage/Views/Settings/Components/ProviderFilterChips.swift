@@ -6,23 +6,26 @@ struct ProviderFilterChips: View {
     let select: (ProviderID?) -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            chip(
-                title: "全部",
-                isSelected: selectedProviderID == nil
-            ) {
-                select(nil)
-            }
-
-            ForEach(providers) { provider in
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
                 chip(
-                    title: provider.displayName,
-                    isSelected: selectedProviderID == provider.id
+                    title: "全部",
+                    isSelected: selectedProviderID == nil
                 ) {
-                    select(provider.id)
+                    select(nil)
+                }
+
+                ForEach(providers) { provider in
+                    chip(
+                        title: provider.displayName,
+                        isSelected: selectedProviderID == provider.id
+                    ) {
+                        select(provider.id)
+                    }
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func chip(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
@@ -51,5 +54,6 @@ struct ProviderFilterChips: View {
                 }
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
