@@ -145,13 +145,27 @@ final class ProjectBootstrapTests: XCTestCase {
         XCTAssertTrue(settings.contains("CredentialSummaryRow("))
     }
 
-    func test状态栏控制器在应用启动后延迟创建() throws {
+    func test状态栏控制器在应用场景安装前创建() throws {
         let source = try sourceText(at: "RoutinUsage/App/RoutinUsageApp.swift")
 
         XCTAssertTrue(source.contains("applicationDidFinishLaunching"))
         XCTAssertTrue(source.contains("NSApp.setActivationPolicy(.accessory)"))
-        XCTAssertTrue(source.contains("asyncAfter"))
-        XCTAssertTrue(source.contains("Self.installStatusBarController(environment: environment)"))
+        XCTAssertTrue(source.contains("SettingsWindowActivationPolicy.refresh()"))
+        XCTAssertTrue(source.contains("retainedStatusBarController = StatusBarController(environment: environment)"))
+
+        let installRange = try XCTUnwrap(
+            source.range(of: "Self.didFinishLaunchingHandler?()")
+        )
+        let refreshRange = try XCTUnwrap(
+            source.range(of: "SettingsWindowActivationPolicy.refresh()")
+        )
+        XCTAssertLessThan(installRange.lowerBound, refreshRange.lowerBound)
+    }
+
+    func testDebug使用独立BundleID避免复用系统菜单栏状态() throws {
+        let project = try sourceText(at: "project.yml")
+
+        XCTAssertTrue(project.contains("PRODUCT_BUNDLE_IDENTIFIER: ai.routin.mytoken.debug"))
     }
 
     func test关闭最后一个设置窗口后应用仍驻留菜单栏() throws {
@@ -464,7 +478,7 @@ final class ProjectBootstrapTests: XCTestCase {
         let app = try sourceText(at: "RoutinUsage/App/RoutinUsageApp.swift")
 
         XCTAssertTrue(app.contains("XCTestConfigurationFilePath"))
-        XCTAssertTrue(app.contains("guard !RoutinUsageApp.isRunningUnitTests"))
+        XCTAssertTrue(app.contains("guard !Self.isRunningUnitTests"))
         XCTAssertTrue(app.contains("@State private var statusBarController: StatusBarController?"))
     }
 

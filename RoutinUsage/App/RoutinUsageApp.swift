@@ -10,8 +10,8 @@ final class RoutinUsageAppDelegate: NSObject, NSApplicationDelegate {
             guard !RoutinUsageApp.isRunningUnitTests else {
                 return
             }
-            SettingsWindowActivationPolicy.refresh()
             Self.didFinishLaunchingHandler?()
+            SettingsWindowActivationPolicy.refresh()
         }
     }
 

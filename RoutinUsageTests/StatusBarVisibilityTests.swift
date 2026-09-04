@@ -15,7 +15,19 @@ final class StatusBarVisibilityTests: XCTestCase {
 
         XCTAssertTrue(source.contains("retainedStatusBarController"))
         XCTAssertTrue(controller.contains("statusItem.isVisible = true"))
-        XCTAssertFalse(controller.contains("autosaveName"))
+        XCTAssertFalse(controller.contains("statusItem.autosaveName"))
         XCTAssertTrue(controller.contains("statusItem.length = imageWidth + 8"))
+    }
+
+    func test状态栏不直接移动系统托管的状态项窗口() throws {
+        let controller = try TestSourceReader.read([
+            "RoutinUsage",
+            "App",
+            "StatusBarController.swift"
+        ])
+
+        XCTAssertFalse(controller.contains("startPlacementMonitor"))
+        XCTAssertFalse(controller.contains("synchronizeStatusItemPlacement"))
+        XCTAssertFalse(controller.contains("window.setFrameOrigin(origin)"))
     }
 }
