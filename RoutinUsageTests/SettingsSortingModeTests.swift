@@ -2,6 +2,12 @@ import XCTest
 
 enum TestSourceReader {
     static func read(_ pathComponents: [String]) throws -> String {
+        let fileName = pathComponents.last!
+        if let bundledURL = Bundle(for: SettingsSortingModeTests.self)
+            .url(forResource: fileName, withExtension: "txt") {
+            return try String(contentsOf: bundledURL, encoding: .utf8)
+        }
+
         var url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()

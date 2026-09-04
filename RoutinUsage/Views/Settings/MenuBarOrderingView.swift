@@ -296,7 +296,7 @@ struct MenuBarOrderingView: View {
         if visibility.menuBarIDs.contains(dragged) {
             if visibility.menuBarIDs.contains(target) {
                 let index = visibility.menuBarIDs.firstIndex(of: target) ?? 0
-                ordering.move(.menuBar, id: dragged, toIndex: index)
+                ordering.moving(.menuBar, id: dragged, toIndex: index)
             }
         } else if visibility.menuBarIDs.contains(target) {
             let index = visibility.menuBarIDs.firstIndex(of: target) ?? 0
@@ -304,7 +304,7 @@ struct MenuBarOrderingView: View {
         } else if let candidateIndex = visibility.menuBarCandidateIDs.firstIndex(of: target) {
             let targetID = visibility.menuBarCandidateIDs[candidateIndex]
             let popoverIndex = visibility.popoverIDs.firstIndex(of: targetID) ?? 0
-            ordering.move(.popover, id: dragged, toIndex: popoverIndex)
+            ordering.moving(.popover, id: dragged, toIndex: popoverIndex)
         }
     }
 
@@ -322,11 +322,11 @@ struct MenuBarOrderingView: View {
 
     private func moveWithinCandidateSequence(_ id: UUID, toIndex index: Int, inMenuBar: Bool) {
         if inMenuBar {
-            ordering.move(.menuBar, id: id, toIndex: index)
+            ordering.moving(.menuBar, id: id, toIndex: index)
         } else {
             let targetID = visibility.menuBarCandidateIDs[index]
             let popoverIndex = visibility.popoverIDs.firstIndex(of: targetID) ?? index
-            ordering.move(.popover, id: id, toIndex: popoverIndex)
+            ordering.moving(.popover, id: id, toIndex: popoverIndex)
         }
     }
 

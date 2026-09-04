@@ -57,7 +57,7 @@ final class CredentialOrderingController {
         return .deleted
     }
 
-    func move(
+    func moving(
         _ sequence: CredentialDisplaySequence,
         id: UUID,
         toIndex: Int
