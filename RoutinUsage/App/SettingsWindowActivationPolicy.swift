@@ -21,6 +21,17 @@ enum SettingsWindowActivationPolicy {
     }
 
     static func refresh() {
-        NSApp.setActivationPolicy(hasSettingsWindow ? .regular : .accessory)
+        apply(hasSettingsWindow: hasSettingsWindow)
+    }
+
+    static func apply(
+        hasSettingsWindow: Bool,
+        setActivationPolicy: @MainActor (NSApplication.ActivationPolicy) -> Bool = { NSApp.setActivationPolicy($0) },
+        activate: @MainActor () -> Void = { NSApp.activate(ignoringOtherApps: true) }
+    ) {
+        let policy: NSApplication.ActivationPolicy = hasSettingsWindow ? .regular : .accessory
+        if setActivationPolicy(policy), hasSettingsWindow {
+            activate()
+        }
     }
 }

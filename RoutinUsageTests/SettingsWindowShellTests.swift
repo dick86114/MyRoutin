@@ -1,4 +1,6 @@
+import AppKit
 import XCTest
+@testable import RoutinUsage
 
 final class SettingsWindowShellTests: XCTestCase {
     func test新设置窗口包含五个现代导航分类() throws {
@@ -18,5 +20,41 @@ final class SettingsWindowShellTests: XCTestCase {
         XCTAssertTrue(shell.contains("liquidGlassWindowBackground()"))
         XCTAssertTrue(credentialPage.contains("SettingsPageHeader"))
         XCTAssertFalse(shell.contains("Routin 签到"))
+    }
+
+    @MainActor
+    func test显示设置窗口时切换前台形态并激活应用() {
+        var appliedPolicies: [NSApplication.ActivationPolicy] = []
+        var activationCount = 0
+
+        SettingsWindowActivationPolicy.apply(
+            hasSettingsWindow: true,
+            setActivationPolicy: { policy in
+                appliedPolicies.append(policy)
+                return true
+            },
+            activate: { activationCount += 1 }
+        )
+
+        XCTAssertEqual(appliedPolicies, [.regular])
+        XCTAssertEqual(activationCount, 1)
+    }
+
+    @MainActor
+    func test关闭设置窗口时恢复菜单栏形态且不强制激活() {
+        var appliedPolicies: [NSApplication.ActivationPolicy] = []
+        var activationCount = 0
+
+        SettingsWindowActivationPolicy.apply(
+            hasSettingsWindow: false,
+            setActivationPolicy: { policy in
+                appliedPolicies.append(policy)
+                return true
+            },
+            activate: { activationCount += 1 }
+        )
+
+        XCTAssertEqual(appliedPolicies, [.accessory])
+        XCTAssertEqual(activationCount, 0)
     }
 }
