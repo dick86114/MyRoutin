@@ -3,26 +3,44 @@ import Foundation
 enum UserDefaultsMigration {
     static let legacyBundleIdentifier = "ai.routin.usage-monitor"
     static let currentBundleIdentifier = "ai.routin.myroutin"
-    private static let markerKey = "didMigrateLegacyBundlePreferences"
+    static let debugBundleIdentifier = "ai.routin.mytoken.debug"
+    static let debugV2BundleIdentifier = "ai.routin.mytoken.debug.v2"
+    static let bundleIdentifierChain = [
+        legacyBundleIdentifier,
+        currentBundleIdentifier,
+        debugBundleIdentifier,
+        debugV2BundleIdentifier,
+    ]
 
-    static func migrateLegacyBundlePreferences(
+    static func migrateCompatiblePreferences(
         standard: UserDefaults = .standard,
-        legacy: UserDefaults? = nil,
-        currentDomain: String = currentBundleIdentifier,
-        legacyDomain: String = legacyBundleIdentifier
+        currentDomain: String = Bundle.main.bundleIdentifier ?? currentBundleIdentifier,
+        sourceDomains: [String]? = nil,
+        sourceProvider: (String) -> UserDefaults? = { UserDefaults(suiteName: $0) }
     ) {
-        guard !standard.bool(forKey: markerKey) else {
-            return
-        }
+        let sources = sourceDomains ?? compatibilitySources(for: currentDomain)
+        for sourceDomain in sources where sourceDomain != currentDomain {
+            let markerKey = "didMigratePreferencesFrom.\(sourceDomain)"
+            guard !standard.bool(forKey: markerKey) else {
+                continue
+            }
 
-        let legacyDefaults = legacy ?? UserDefaults(suiteName: legacyBundleIdentifier)
-        let oldValues = legacyDefaults?.persistentDomain(forName: legacyDomain) ?? [:]
-        var currentValues = standard.persistentDomain(forName: currentDomain) ?? [:]
+            let sourceValues = sourceProvider(sourceDomain)?
+                .persistentDomain(forName: sourceDomain) ?? [:]
+            var currentValues = standard.persistentDomain(forName: currentDomain) ?? [:]
 
-        for (key, value) in oldValues where currentValues[key] == nil {
-            currentValues[key] = value
+            for (key, value) in sourceValues where currentValues[key] == nil {
+                currentValues[key] = value
+            }
+            currentValues[markerKey] = true
+            standard.setPersistentDomain(currentValues, forName: currentDomain)
         }
-        currentValues[markerKey] = true
-        standard.setPersistentDomain(currentValues, forName: currentDomain)
+    }
+
+    private static func compatibilitySources(for currentDomain: String) -> [String] {
+        guard let currentIndex = bundleIdentifierChain.firstIndex(of: currentDomain) else {
+            return []
+        }
+        return Array(bundleIdentifierChain[..<currentIndex])
     }
 }

@@ -11,7 +11,7 @@ final class ProjectBootstrapTests: XCTestCase {
         let environment = try sourceText(at: "RoutinUsage/App/AppEnvironment.swift")
 
         XCTAssertTrue(project.contains("PRODUCT_BUNDLE_IDENTIFIER: ai.routin.myroutin"))
-        XCTAssertTrue(environment.contains("UserDefaultsMigration.migrateLegacyBundlePreferences()"))
+        XCTAssertTrue(environment.contains("UserDefaultsMigration.migrateCompatiblePreferences()"))
     }
 
     func test应用提供版本号与官网和GitHub地址() throws {
@@ -164,8 +164,10 @@ final class ProjectBootstrapTests: XCTestCase {
 
     func testDebug使用独立BundleID避免复用系统菜单栏状态() throws {
         let project = try sourceText(at: "project.yml")
+        let testScript = try sourceText(at: "scripts/test.sh")
 
-        XCTAssertTrue(project.contains("PRODUCT_BUNDLE_IDENTIFIER: ai.routin.mytoken.debug"))
+        XCTAssertTrue(project.contains("PRODUCT_BUNDLE_IDENTIFIER: ai.routin.mytoken.debug.v2"))
+        XCTAssertTrue(testScript.contains("PRODUCT_BUNDLE_IDENTIFIER=ai.routin.mytoken.tests"))
     }
 
     func test关闭最后一个设置窗口后应用仍驻留菜单栏() throws {
@@ -680,6 +682,8 @@ final class ProjectBootstrapTests: XCTestCase {
         switch relativePath {
         case "project.yml":
             resource = ("project", "yml")
+        case "scripts/test.sh":
+            resource = ("test", "sh")
         case ".github/workflows/release.yml":
             resource = ("release", "yml")
         case ".github/workflows/ci.yml":
