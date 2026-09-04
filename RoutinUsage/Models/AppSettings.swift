@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-enum CredentialDisplayOrder {
+enum LegacyCredentialDisplayOrder {
     static func popoverIDs(
         selected: [UUID],
         available: [UUID],

@@ -282,7 +282,7 @@ private extension UsagePopoverView {
     }
 
     var popoverKeyIDs: [UUID] {
-        CredentialDisplayOrder.popoverIDs(
+        LegacyCredentialDisplayOrder.popoverIDs(
             selected: settings.selectedCredentialIDs,
             available: settings.availableCredentialIDs,
             visible: store.visibleKeyIDs

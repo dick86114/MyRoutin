@@ -185,7 +185,7 @@ final class AppSettingsTests: XCTestCase {
         let visible = [available[2], leftover, selected[1], selected[0], available[0]]
 
         XCTAssertEqual(
-            CredentialDisplayOrder.popoverIDs(
+            LegacyCredentialDisplayOrder.popoverIDs(
                 selected: selected,
                 available: available,
                 visible: visible
@@ -214,7 +214,7 @@ final class AppSettingsTests: XCTestCase {
         let third = UUID()
 
         XCTAssertEqual(
-            CredentialDisplayOrder.popoverIDs(
+            LegacyCredentialDisplayOrder.popoverIDs(
                 selected: [second, first],
                 available: [],
                 visible: [first, second, third]
