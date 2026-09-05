@@ -4,6 +4,76 @@ import XCTest
 @testable import RoutinUsage
 
 final class AlertManagerTests: XCTestCase {
+    @MainActor
+    func test剩余百分比低于阈值才触发规则通知() throws {
+        let context = makeContext()
+        defer { context.cleanUp() }
+        let metric = NormalizedUsageMetric(
+            id: "remaining",
+            label: "剩余额度",
+            used: 96,
+            limit: 100,
+            remaining: 4,
+            unit: .token,
+            presentation: .progress,
+            semantic: .remainingQuota
+        )
+        let snapshot = UsageSnapshot(
+            planName: "套餐",
+            kind: .periodic,
+            fiveHour: nil,
+            weekly: nil,
+            token: nil,
+            allowedModels: [],
+            fetchedAt: .now,
+            providerID: .glm,
+            metrics: [metric]
+        )
+
+        let alerts = context.evaluator.evaluate(
+            key: makeKey(),
+            snapshot: snapshot,
+            rules: [.remainingPercent(metricID: "remaining", isEnabled: true, low: 20, high: 5)]
+        )
+
+        XCTAssertEqual(alerts.map(\.level), [.high])
+        XCTAssertTrue(alerts.allSatisfy { $0.metricID == "remaining" })
+    }
+
+    @MainActor
+    func test规则关闭时不生成规则提醒() throws {
+        let context = makeContext()
+        defer { context.cleanUp() }
+        let snapshot = UsageSnapshot(
+            planName: "套餐",
+            kind: .periodic,
+            fiveHour: nil,
+            weekly: nil,
+            token: nil,
+            allowedModels: [],
+            fetchedAt: .now,
+            providerID: .glm,
+            metrics: [NormalizedUsageMetric(
+                id: "weekly",
+                label: "周用量",
+                used: 90,
+                limit: 100,
+                remaining: 10,
+                unit: .token,
+                presentation: .progress,
+                semantic: .usedQuota
+            )]
+        )
+
+        let alerts = context.evaluator.evaluate(
+            key: makeKey(),
+            snapshot: snapshot,
+            rules: [.usedPercent(metricID: "weekly", isEnabled: false, low: 80, high: 95)]
+        )
+
+        XCTAssertEqual(alerts, [])
+    }
+
     func test默认阈值为八十和九十五且只允许有效顺序与范围() {
         XCTAssertEqual(AlertThresholds().low, 80)
         XCTAssertEqual(AlertThresholds().high, 95)

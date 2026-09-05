@@ -24,7 +24,12 @@ enum AlertLevel: String, Codable, Equatable, Sendable {
 struct UsageAlert: Equatable, Sendable {
     let keyID: UUID
     let keyName: String
+    let providerName: String
     let dimension: UsageDimension
+    let metricID: String
+    let metricLabel: String
+    let valueSource: MetricAlertValueSource
+    let currentValue: Decimal?
     let level: AlertLevel
     let percent: Double
     let windowEnd: Date?
@@ -33,6 +38,72 @@ struct UsageAlert: Equatable, Sendable {
     fileprivate let reservationID: UUID
     fileprivate let triggeredWindows: Set<AlertWindowKey>
     fileprivate let replacedReservationOwners: [AlertWindowKey: UUID]
+
+    init(
+        keyID: UUID,
+        keyName: String,
+        providerName: String,
+        metricID: String,
+        metricLabel: String,
+        valueSource: MetricAlertValueSource,
+        currentValue: Decimal?,
+        level: AlertLevel,
+        percent: Double,
+        windowEnd: Date?,
+        balanceAmount: Decimal?,
+        currencyCode: String?,
+        reservationID: UUID,
+        triggeredWindows: Set<AlertWindowKey>,
+        replacedReservationOwners: [AlertWindowKey: UUID]
+    ) {
+        self.keyID = keyID
+        self.keyName = keyName
+        self.providerName = providerName
+        self.dimension = .token
+        self.metricID = metricID
+        self.metricLabel = metricLabel
+        self.valueSource = valueSource
+        self.currentValue = currentValue
+        self.level = level
+        self.percent = percent
+        self.windowEnd = windowEnd
+        self.balanceAmount = balanceAmount
+        self.currencyCode = currencyCode
+        self.reservationID = reservationID
+        self.triggeredWindows = triggeredWindows
+        self.replacedReservationOwners = replacedReservationOwners
+    }
+
+    init(
+        keyID: UUID,
+        keyName: String,
+        dimension: UsageDimension,
+        level: AlertLevel,
+        percent: Double,
+        windowEnd: Date?,
+        balanceAmount: Decimal?,
+        currencyCode: String?,
+        reservationID: UUID,
+        triggeredWindows: Set<AlertWindowKey>,
+        replacedReservationOwners: [AlertWindowKey: UUID]
+    ) {
+        self.keyID = keyID
+        self.keyName = keyName
+        self.providerName = "MyToken"
+        self.dimension = dimension
+        self.metricID = dimension.rawValue
+        self.metricLabel = dimension.notificationName
+        self.valueSource = dimension == .balance ? .absoluteValue : .usedPercent
+        self.currentValue = balanceAmount
+        self.level = level
+        self.percent = percent
+        self.windowEnd = windowEnd
+        self.balanceAmount = balanceAmount
+        self.currencyCode = currencyCode
+        self.reservationID = reservationID
+        self.triggeredWindows = triggeredWindows
+        self.replacedReservationOwners = replacedReservationOwners
+    }
 
     var notificationTitle: String {
         "Routin 用量预警"
@@ -87,8 +158,42 @@ private extension UsageDimension {
 struct AlertWindowKey: Codable, Hashable, Sendable {
     let keyID: UUID
     let dimension: UsageDimension
+    let metricID: String
+    let ruleID: String
     let windowIdentifier: String
     let threshold: Int
+
+    init(
+        keyID: UUID,
+        dimension: UsageDimension,
+        windowIdentifier: String,
+        threshold: Int
+    ) {
+        self.init(
+            keyID: keyID,
+            metricID: dimension.rawValue,
+            ruleID: "legacy",
+            dimension: dimension,
+            windowIdentifier: windowIdentifier,
+            threshold: threshold
+        )
+    }
+
+    init(
+        keyID: UUID,
+        metricID: String,
+        ruleID: String,
+        dimension: UsageDimension,
+        windowIdentifier: String,
+        threshold: Int
+    ) {
+        self.keyID = keyID
+        self.metricID = metricID
+        self.ruleID = ruleID
+        self.dimension = dimension
+        self.windowIdentifier = windowIdentifier
+        self.threshold = threshold
+    }
 }
 
 private struct AlertPeriodicWindowWatermark: Codable, Hashable, Sendable {
@@ -122,6 +227,128 @@ final class AlertEvaluator: @unchecked Sendable {
     }
 
     func evaluate(
+        key: KeyConfiguration,
+        snapshot: UsageSnapshot,
+        thresholds: AlertThresholds
+    ) -> [UsageAlert] {
+        evaluateLegacy(key: key, snapshot: snapshot, thresholds: thresholds)
+    }
+
+    func evaluate(
+        key: KeyConfiguration,
+        snapshot: UsageSnapshot,
+        rules: [MetricAlertRule]
+    ) -> [UsageAlert] {
+        deliveryCoordinator.lock.lock()
+        defer { deliveryCoordinator.lock.unlock() }
+
+        let deliveredWindows = Self.loadTriggeredWindows(from: defaults)
+        var triggeredWindows = deliveredWindows.union(deliveryCoordinator.reservationOwners.keys)
+        var alerts: [UsageAlert] = []
+        let metricsByID = Dictionary(uniqueKeysWithValues: snapshot.normalizedMetrics.map { ($0.id, $0) })
+
+        for rule in rules where rule.isEnabled {
+            guard let metric = metricsByID[rule.metricID] else { continue }
+            let triggered: Bool
+            let percent: Double
+
+            switch rule.valueSource {
+            case .usedPercent:
+                guard let used = metric.used, let limit = metric.limit, limit > 0 else { continue }
+                percent = Self.percent(used: used, limit: limit)
+                triggered = Self.matchesUsed(percent: percent, thresholds: rule.thresholds)
+            case .remainingPercent:
+                guard let remaining = metric.remaining, let limit = metric.limit, limit > 0 else { continue }
+                percent = Self.percent(used: remaining, limit: limit)
+                triggered = Self.matchesRemaining(percent: percent, thresholds: rule.thresholds)
+            case .absoluteValue:
+                guard
+                    let value = metric.value,
+                    rule.currencyCode == metric.currencyCode,
+                    let threshold = rule.thresholds.first?.value
+                else { continue }
+                percent = 0
+                triggered = value <= threshold
+            case .healthState:
+                percent = 0
+                triggered = [.warning, .critical, .unavailable].contains(metric.healthState)
+            }
+
+            let ruleWindowKeys = triggeredWindows.filter { $0.keyID == key.id && $0.ruleID == rule.id }
+            guard triggered else {
+                if rule.valueSource != .healthState {
+                    removeState(for: ruleWindowKeys, triggeredWindows: &triggeredWindows)
+                }
+                continue
+            }
+
+            let level = rule.thresholds.last?.level ?? .low
+            let windowKey = AlertWindowKey(
+                keyID: key.id,
+                metricID: rule.metricID,
+                ruleID: rule.id,
+                dimension: dimension(for: rule.valueSource),
+                windowIdentifier: metric.windowEnd.map { String($0.timeIntervalSince1970) } ?? metric.id,
+                threshold: NSDecimalNumber(decimal: rule.thresholds.last?.value ?? 0).intValue
+            )
+            guard !triggeredWindows.contains(windowKey) else { continue }
+
+            let reservationID = UUID()
+            triggeredWindows.insert(windowKey)
+            deliveryCoordinator.reservationOwners[windowKey] = reservationID
+            alerts.append(UsageAlert(
+                keyID: key.id,
+                keyName: key.displayName,
+                providerName: Self.providerName(for: key.providerID),
+                metricID: metric.id,
+                metricLabel: metric.label,
+                valueSource: rule.valueSource,
+                currentValue: rule.valueSource == .absoluteValue ? metric.value : nil,
+                level: level,
+                percent: percent,
+                windowEnd: metric.windowEnd,
+                balanceAmount: rule.valueSource == .absoluteValue ? metric.value : nil,
+                currencyCode: metric.currencyCode,
+                reservationID: reservationID,
+                triggeredWindows: [windowKey],
+                replacedReservationOwners: [:]
+            ))
+        }
+
+        persistTriggeredWindows(deliveredWindows.intersection(triggeredWindows))
+        return alerts
+    }
+
+    private static func percent(used: Decimal, limit: Decimal) -> Double {
+        NSDecimalNumber(decimal: used)
+            .dividing(by: NSDecimalNumber(decimal: limit))
+            .multiplying(by: 100)
+            .doubleValue
+    }
+
+    private static func matchesUsed(percent: Double, thresholds: [MetricAlertThreshold]) -> Bool {
+        thresholds.contains { threshold in
+            guard let value = threshold.value else { return false }
+            return percent >= NSDecimalNumber(decimal: value).doubleValue
+        }
+    }
+
+    private static func matchesRemaining(percent: Double, thresholds: [MetricAlertThreshold]) -> Bool {
+        thresholds.contains { threshold in
+            guard let value = threshold.value else { return false }
+            return percent <= NSDecimalNumber(decimal: value).doubleValue
+        }
+    }
+
+    private static func providerName(for id: ProviderID) -> String {
+        ProviderRegistry.builtInDescriptors.first { $0.id == id }?.displayName ?? id.rawValue
+    }
+
+    private func dimension(for source: MetricAlertValueSource) -> UsageDimension {
+        source == .absoluteValue ? .balance : .token
+    }
+
+    private func evaluateLegacy(
         key: KeyConfiguration,
         snapshot: UsageSnapshot,
         thresholds: AlertThresholds
