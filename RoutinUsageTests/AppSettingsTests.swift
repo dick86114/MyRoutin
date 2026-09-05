@@ -187,6 +187,64 @@ final class AppSettingsTests: XCTestCase {
         )
     }
 
+    func test旧菜单维度只迁移一次且后续不覆盖用户选择() throws {
+        let context = try makeContext()
+        defer { context.cleanUp() }
+        context.defaults.set("weekly", forKey: "displayDimension")
+        let configuration = KeyConfiguration(
+            id: UUID(),
+            name: "主账号",
+            keySuffix: "",
+            sortOrder: 0,
+            providerID: .glm,
+            credentialKind: .apiKey
+        )
+        let metric = NormalizedUsageMetric(
+            id: "weekly",
+            label: "周用量",
+            used: 30,
+            limit: 100,
+            remaining: 70,
+            unit: .token,
+            presentation: .progress,
+            semantic: .usedQuota
+        )
+        let capability = UsageMetricCapability(
+            metricID: "weekly",
+            label: "周用量",
+            presentation: .progress,
+            semantic: .usedQuota,
+            isMenuBarSelectable: true,
+            menuBarPriority: 0,
+            defaultAlertEnabled: true,
+            defaultAbsoluteAlertThreshold: nil
+        )
+        let settings = AppSettings(defaults: context.defaults)
+
+        settings.migrateUsagePreferencesIfNeeded(
+            for: configuration,
+            metrics: [metric],
+            capabilities: [capability]
+        )
+        XCTAssertEqual(settings.usagePreferences(for: configuration.id).menuBarMetricID, "weekly")
+
+        var preferences = settings.usagePreferences(for: configuration.id)
+        preferences.menuBarMetricID = "five-hour"
+        settings.setUsagePreferences(preferences, for: configuration.id)
+
+        let reloaded = AppSettings(defaults: context.defaults)
+        reloaded.migrateUsagePreferencesIfNeeded(
+            for: configuration,
+            metrics: [metric],
+            capabilities: [capability]
+        )
+
+        XCTAssertEqual(
+            AppSettings(defaults: context.defaults).usagePreferences(for: configuration.id).menuBarMetricID,
+            "five-hour"
+        )
+    }
+
 }
 
 final class LoginItemManagerTests: XCTestCase {
