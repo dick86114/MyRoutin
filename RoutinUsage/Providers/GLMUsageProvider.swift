@@ -48,7 +48,7 @@ struct GLMUsageProvider: UsageProvider {
                 metricID: "zcode-mcp",
                 label: "MCP 调用量",
                 presentation: .value,
-                semantic: .value,
+                semantic: .usedQuota,
                 isMenuBarSelectable: false,
                 menuBarPriority: nil,
                 defaultAlertEnabled: false,
@@ -200,7 +200,7 @@ struct GLMUsageProvider: UsageProvider {
                     unit: .request,
                     windowEnd: windowEnd,
                     presentation: .value,
-                    semantic: .value,
+                    semantic: .usedQuota,
                     healthState: Self.healthState(for: percentage)
                 )
             default:
