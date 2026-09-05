@@ -96,24 +96,55 @@ struct CredentialDisplayOrder: Codable, Equatable, Sendable {
     ) -> Self {
         let popoverIDs = popoverCredentialIDs
         guard id != targetID,
-              popoverIDs.contains(id),
-              let targetBeforeIndex = popoverIDs.firstIndex(of: targetID),
-              let sourceIndex = popoverIDs.firstIndex(of: id)
+              let sourceIndex = popoverIDs.firstIndex(of: id),
+              let targetBeforeIndex = popoverIDs.firstIndex(of: targetID)
         else {
             return self
         }
 
-        let targetIndex = targetBeforeIndex > sourceIndex ? targetBeforeIndex - 1 : targetBeforeIndex
-        let moved = moving(.popover, id: id, toIndex: targetIndex)
+        let destinationIndex = targetBeforeIndex > sourceIndex
+            ? targetBeforeIndex - 1
+            : targetBeforeIndex
+        return movingDisplay(
+            id: id,
+            toIndex: destinationIndex,
+            membershipAnchorID: targetID
+        )
+    }
+
+    func movingDisplay(id: UUID, toIndex target: Int) -> Self {
+        movingDisplay(id: id, toIndex: target, membershipAnchorID: nil)
+    }
+
+    private func movingDisplay(
+        id: UUID,
+        toIndex target: Int,
+        membershipAnchorID: UUID?
+    ) -> Self {
+        let popoverIDs = popoverCredentialIDs
+        guard let sourceIndex = popoverIDs.firstIndex(of: id), !popoverIDs.isEmpty else {
+            return self
+        }
+
+        let destinationIndex = max(0, min(target, popoverIDs.count - 1))
+        var reorderedIDs = popoverIDs
+        reorderedIDs.remove(at: sourceIndex)
+        let targetID = membershipAnchorID ?? (
+            destinationIndex < reorderedIDs.count
+                ? reorderedIDs[destinationIndex]
+                : reorderedIDs.last
+        )
         let idIsInMenuBar = menuBarCredentialIDs.contains(id)
-        let targetIsInMenuBar = menuBarCredentialIDs.contains(targetID)
+        let targetIsInMenuBar = targetID.map(menuBarCredentialIDs.contains) ?? idIsInMenuBar
         if targetIsInMenuBar {
             guard idIsInMenuBar || menuBarCredentialIDs.count < Self.maximumMenuBarCount else {
                 return self
             }
         }
 
-        var result = moved
+        reorderedIDs.insert(id, at: min(destinationIndex, reorderedIDs.count))
+        var result = self
+        result.popoverCredentialIDs = reorderedIDs
         if targetIsInMenuBar {
             if !idIsInMenuBar {
                 result.menuBarCredentialIDs.append(id)
@@ -164,8 +195,7 @@ struct CredentialDisplayOrder: Codable, Equatable, Sendable {
 
         var result = ids
         result.remove(at: source)
-        let destination = target > source ? target - 1 : target
-        let boundedIndex = max(0, min(destination, result.count))
+        let boundedIndex = max(0, min(target, result.count))
         result.insert(id, at: boundedIndex)
         return result
     }

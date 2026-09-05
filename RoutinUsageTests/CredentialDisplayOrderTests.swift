@@ -51,6 +51,13 @@ final class CredentialDisplayOrderTests: XCTestCase {
         XCTAssertEqual(result.menuBarCredentialIDs, [two])
     }
 
+    func test弹窗序列第一项移动到第二格会真正换位() {
+        let result = order.moving(.popover, id: two, toIndex: 1)
+
+        XCTAssertEqual(result.popoverCredentialIDs, [three, two, one, four])
+        XCTAssertEqual(result.menuBarCredentialIDs, [two, one])
+    }
+
     func test菜单栏已满时待选卡片不能拖入() {
         let base = CredentialDisplayOrder(
             menuBarCredentialIDs: [one, two, three, four, five],

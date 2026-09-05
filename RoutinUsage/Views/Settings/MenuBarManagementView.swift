@@ -1,9 +1,30 @@
+import AppKit
 import SwiftUI
+
+private struct SystemPopoverArrow: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.midX - 2, y: rect.minY + 2),
+            control: CGPoint(x: rect.midX * 0.62, y: rect.maxY * 0.28)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: rect.midX + 2, y: rect.minY + 2),
+            control: CGPoint(x: rect.midX, y: rect.minY)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.maxY),
+            control: CGPoint(x: rect.midX * 1.38, y: rect.maxY * 0.28)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
 
 struct MenuBarManagementView: View {
     @Bindable var environment: AppEnvironment
     let ordering: CredentialOrderingController
-    @State private var draggedID: UUID?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var displayOrder: CredentialDisplayOrder {
@@ -34,68 +55,223 @@ struct MenuBarManagementView: View {
                     subtitle: "最多显示 \(CredentialDisplayOrder.maximumMenuBarCount) 个菜单栏指标"
                 )
 
-                previews
-                cardList
+                workspace
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    private var previews: some View {
+    private var workspace: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 18) {
-                menuBarPreview
-                popoverPreview
+            HStack(alignment: .top, spacing: 20) {
+                previewColumn
+                    .frame(width: 440)
+
+                cardList
+                    .frame(minWidth: 360, maxWidth: .infinity)
             }
 
-            VStack(alignment: .leading, spacing: 18) {
-                menuBarPreview
-                popoverPreview
+            VStack(alignment: .leading, spacing: 16) {
+                previewColumn
+                cardList
             }
         }
     }
 
-    private var menuBarPreview: some View {
-        previewPanel(title: "菜单栏预览", count: menuBarStates.count) {
-            HStack(spacing: 0) {
-                if menuBarStates.isEmpty {
-                    Text("尚未选择菜单栏指标")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(menuBarStates, id: \.configuration.id) { state in
-                        if let descriptor = descriptor(for: state) {
-                            MenuBarIndicatorPreview(
-                                environment: environment,
-                                state: state,
-                                descriptor: descriptor
-                            )
-                        }
+    private var previewColumn: some View {
+        preview
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private var preview: some View {
+        previewPanel(title: "预览", count: unifiedStates.count) {
+            VStack(alignment: .trailing, spacing: 8) {
+                systemMenuBarStrip(highlightIndicator: true)
+
+                popoverContent
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(.primary.opacity(0.12), lineWidth: 0.5)
+                    }
+                    .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
+            }
+        }
+    }
+
+    private func systemMenuBarStrip(highlightIndicator: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "apple.logo")
+                .font(.caption.weight(.semibold))
+            Text("Finder")
+                .font(.caption.weight(.medium))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+            Text("文件")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+
+            Spacer(minLength: 12)
+
+            menuBarIndicators
+                .padding(.horizontal, highlightIndicator ? 6 : 0)
+                .padding(.vertical, highlightIndicator ? 3 : 0)
+                .background(
+                    highlightIndicator ? Color.accentColor.opacity(0.18) : .clear,
+                    in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+                )
+                .overlay(alignment: .bottom) {
+                    if highlightIndicator {
+                        SystemPopoverArrow()
+                            .fill(Color(nsColor: .windowBackgroundColor))
+                            .frame(width: 24, height: 11)
+                            .overlay {
+                                SystemPopoverArrow()
+                                    .stroke(.primary.opacity(0.12), lineWidth: 0.5)
+                            }
+                            .offset(y: 15)
+                            .zIndex(2)
                     }
                 }
-            }
+
+            Image(systemName: "wifi")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("10:09")
+                .font(.caption.monospacedDigit())
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(.primary.opacity(0.09), lineWidth: 0.5)
         }
     }
 
-    private var popoverPreview: some View {
-        previewPanel(title: "弹窗预览", count: unifiedStates.count) {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(unifiedStates.prefix(3), id: \.configuration.id) { state in
+    private var menuBarIndicators: some View {
+        HStack(spacing: 0) {
+            if menuBarStates.isEmpty {
+                Text("未显示指标")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else {
+                ForEach(menuBarStates, id: \.configuration.id) { state in
                     if let descriptor = descriptor(for: state) {
-                        CredentialSummaryRow(
+                        MenuBarIndicatorPreview(
                             state: state,
                             descriptor: descriptor,
-                            planType: planName(for: state.configuration)
+                            dimension: environment.settings.displayDimension
                         )
+                        .equatable()
                     }
                 }
-                if unifiedStates.count > 3 {
-                    Text("还有 \(unifiedStates.count - 3) 个凭证")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             }
+        }
+    }
+
+    private var popoverContent: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                HStack {
+                    Text("v1.0.0")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.primary.opacity(0.06), in: Capsule())
+
+                    Spacer()
+
+                    Image(systemName: "arrow.clockwise")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 7))
+                }
+
+                Image(nsImage: NSImage(named: "PopoverColorBrandLogo") ?? NSApp.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(width: 34, height: 34)
+                    .shadow(color: .black.opacity(0.16), radius: 4, y: 2)
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 10)
+
+            Divider()
+
+            HStack(alignment: .firstTextBaseline) {
+                Text("账户用量")
+                    .font(.headline)
+                Spacer()
+                Text("\(unifiedStates.count) 个凭证")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+
+            if unifiedStates.isEmpty {
+                Text("尚无可展示凭证")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(unifiedStates, id: \.configuration.id) { state in
+                        previewCredentialRow(state)
+                    }
+                }
+                .padding(.horizontal, 10)
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: "clock")
+                Text("最后刷新 刚刚")
+                Spacer()
+                Image(systemName: "gearshape")
+                Image(systemName: "power")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func previewCredentialRow(_ state: KeyUsageState) -> some View {
+        HStack(spacing: 6) {
+            Text(state.configuration.displayName)
+            Text(providerName(for: state))
+            Text("·")
+                .foregroundStyle(.secondary)
+            Text(planName(for: state.configuration))
+            Spacer(minLength: 0)
+        }
+        .font(.callout.weight(.medium))
+        .lineLimit(1)
+        .minimumScaleFactor(0.85)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            ProviderTheme.background(for: state.configuration.providerID),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(
+                    ProviderTheme.borderColor(for: state.configuration.providerID),
+                    lineWidth: 0.8
+                )
         }
     }
 
@@ -135,14 +311,13 @@ struct MenuBarManagementView: View {
 
             ReorderableCredentialCardList(
                 ids: unifiedStates.map(\.configuration.id),
-                draggedID: draggedID,
                 itemHeight: 72,
                 itemSpacing: 10,
-                move: moveDisplay
-            , card: { (state: UUID) in
-                managementCard(state)
-            }, externalDraggedID: $draggedID
-        )
+                move: moveDisplay,
+                card: { (state: UUID) in
+                    managementCard(state)
+                }
+            )
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -170,10 +345,11 @@ struct MenuBarManagementView: View {
 
             if let descriptor = descriptor(for: state) {
                 MenuBarIndicatorPreview(
-                    environment: environment,
                     state: state,
-                    descriptor: descriptor
+                    descriptor: descriptor,
+                    dimension: environment.settings.displayDimension
                 )
+                .equatable()
                 .frame(width: 42, height: 32)
             }
 
@@ -228,14 +404,12 @@ struct MenuBarManagementView: View {
         }
     }
 
-    private func moveDisplay(_ draggedID: UUID, before targetID: UUID) -> Bool {
-        let updated = displayOrder.movingDisplay(id: draggedID, before: targetID)
+    private func moveDisplay(_ draggedID: UUID, to targetIndex: Int) -> Bool {
+        let updated = displayOrder.movingDisplay(id: draggedID, toIndex: targetIndex)
         guard updated != displayOrder else { return false }
 
         var transaction = Transaction()
-        transaction.animation = reduceMotion
-            ? nil
-            : .interactiveSpring(response: 0.28, dampingFraction: 0.82)
+        transaction.animation = nil
         withTransaction(transaction) {
             environment.settings.displayOrder = updated
         }
@@ -247,7 +421,7 @@ struct MenuBarManagementView: View {
         guard let source = ids.firstIndex(of: id) else { return }
         let target = max(0, min(ids.count - 1, source + offset))
         guard target != source else { return }
-        _ = moveDisplay(id, before: ids[target])
+        _ = moveDisplay(id, to: target)
     }
 
     private func setMenuBarMembership(isInMenuBar: Bool, id: UUID) {
