@@ -166,7 +166,7 @@ final class ProjectBootstrapTests: XCTestCase {
         let project = try sourceText(at: "project.yml")
         let testScript = try sourceText(at: "scripts/test.sh")
 
-        XCTAssertTrue(project.contains("PRODUCT_BUNDLE_IDENTIFIER: ai.routin.mytoken.debug.v2"))
+        XCTAssertTrue(project.contains("PRODUCT_BUNDLE_IDENTIFIER: ai.routin.mytoken.debug.v3"))
         XCTAssertTrue(testScript.contains("PRODUCT_BUNDLE_IDENTIFIER=ai.routin.mytoken.tests"))
     }
 

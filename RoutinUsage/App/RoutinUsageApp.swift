@@ -3,6 +3,7 @@ import SwiftUI
 
 final class RoutinUsageAppDelegate: NSObject, NSApplicationDelegate {
     static var didFinishLaunchingHandler: (() -> Void)?
+    static let statusItemPositionCacheKey = "NSStatusItem Preferred Position Item-0"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -56,6 +57,8 @@ struct RoutinUsageApp: App {
 
     @MainActor
     private static func installStatusBarController(environment: AppEnvironment) {
+        // 无 autosaveName 的状态项仍会留下系统位置缓存；旧坐标可能把它移出可见菜单栏。
+        UserDefaults.standard.removeObject(forKey: RoutinUsageAppDelegate.statusItemPositionCacheKey)
         retainedStatusBarController = StatusBarController(environment: environment)
     }
 

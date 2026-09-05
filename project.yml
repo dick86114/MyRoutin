@@ -23,7 +23,7 @@ targets:
         PRODUCT_MODULE_NAME: RoutinUsage
       configs:
         debug:
-          PRODUCT_BUNDLE_IDENTIFIER: ai.routin.mytoken.debug.v2
+          PRODUCT_BUNDLE_IDENTIFIER: ai.routin.mytoken.debug.v3
   RoutinUsageTests:
     type: bundle.unit-test
     platform: macOS
