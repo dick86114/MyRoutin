@@ -47,22 +47,32 @@ struct NormalizedUsageMetricGrid: View {
             Array(metrics[$0..<min($0 + columns, metrics.count)])
         }
 
-        Grid(horizontalSpacing: 16, verticalSpacing: 14) {
+        VStack(alignment: .leading, spacing: 14) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                GridRow {
-                    ForEach(0..<columns, id: \.self) { columnIndex in
-                        if columnIndex < row.count {
-                            let spansAllColumns = row[columnIndex].id == "monthly"
-                            NormalizedUsageMetricCell(
-                                metric: row[columnIndex],
-                                resetTimeStyle: resetTimeStyle,
-                                now: now,
-                                showsAmountDetails: showsAmountDetails,
-                                spansAllColumns: spansAllColumns
-                            )
-                            .gridCellColumns(spansAllColumns ? columns : 1)
-                        } else if !row.contains(where: { $0.id == "monthly" }) {
-                            Color.clear
+                if row.count == 1, let metric = row.first, metric.id == "monthly" {
+                    NormalizedUsageMetricCell(
+                        metric: metric,
+                        resetTimeStyle: resetTimeStyle,
+                        now: now,
+                        showsAmountDetails: showsAmountDetails,
+                        spansAllColumns: true
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    HStack(alignment: .top, spacing: 16) {
+                        ForEach(0..<columns, id: \.self) { columnIndex in
+                            if columnIndex < row.count {
+                                NormalizedUsageMetricCell(
+                                    metric: row[columnIndex],
+                                    resetTimeStyle: resetTimeStyle,
+                                    now: now,
+                                    showsAmountDetails: showsAmountDetails
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            } else {
+                                Color.clear
+                                    .frame(maxWidth: .infinity)
+                            }
                         }
                     }
                 }
@@ -94,6 +104,7 @@ private struct NormalizedUsageMetricCell: View {
     private var progressCell: some View {
         let percent = metric.displayedPercent ?? 0
         let percentText = "\(Int(percent.rounded()))%"
+        let usesFullWidthDetails = spansAllColumns || metric.id == "monthly"
 
         return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -110,7 +121,7 @@ private struct NormalizedUsageMetricCell: View {
             UsageMetricProgressBar(percent: percent)
 
             if showsAmountDetails, let used = metric.used, let limit = metric.limit {
-                if spansAllColumns {
+                if usesFullWidthDetails {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text("已用 \(decimalText(used)) / \(decimalText(limit))")
                             .font(.caption2)
@@ -153,7 +164,7 @@ private struct NormalizedUsageMetricCell: View {
                         .monospacedDigit()
                         .fixedSize(horizontal: false, vertical: true)
                 case .relativeDuration:
-                    if spansAllColumns {
+                    if usesFullWidthDetails {
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Text("重置 \(UsageFormatter.resetTime(windowEnd, now: now))")
                                 .font(.caption2)

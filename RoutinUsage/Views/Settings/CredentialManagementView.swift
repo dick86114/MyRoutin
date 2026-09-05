@@ -29,6 +29,7 @@ struct CredentialManagementView: View {
     @State private var model: CredentialManagementModel
     @State private var editor: EditorPresentation?
     @State private var alertSettingsState: KeyUsageState?
+    @State private var detailsState: KeyUsageState?
 
     init(environment: AppEnvironment, ordering: CredentialOrderingController) {
         self.environment = environment
@@ -81,6 +82,9 @@ struct CredentialManagementView: View {
             Button("好") { model.clearOperationNotice() }
         } message: {
             Text(model.operationNotice?.message ?? "发生未知错误")
+        }
+        .overlay {
+            detailsOverlay
         }
     }
 
@@ -158,9 +162,13 @@ struct CredentialManagementView: View {
                 }
             )
         ) {
-            VStack(alignment: .leading, spacing: 8) {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 330), spacing: 12)],
+                alignment: .leading,
+                spacing: 12
+            ) {
                 ForEach(group.states, id: \.configuration.id) { state in
-                    credentialRow(state, provider: group.provider)
+                    credentialCard(state, provider: group.provider)
                 }
             }
             .padding(.top, 8)
@@ -181,26 +189,55 @@ struct CredentialManagementView: View {
         .disclosureGroupStyle(.automatic)
     }
 
-    private func credentialRow(
+    private func credentialCard(
         _ state: KeyUsageState,
         provider: ProviderDescriptor
     ) -> some View {
-        CredentialSummaryRow(
-            state: state,
-            descriptor: provider,
-            planType: model.planTitle(for: state.configuration),
-            leading: AnyView(providerIcon(provider)),
-            trailing: AnyView(rowActions(state))
-        )
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .liquidGlassSurface(cornerRadius: 12)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(model.accessibilitySummary(
-            state,
-            providerName: provider.displayName,
-            planType: model.planTitle(for: state.configuration)
-        ))
+        VStack(alignment: .leading, spacing: 4) {
+            rowActions(state)
+                .frame(height: 24)
+
+            UsageRowView(
+                state: state,
+                detectionState: .idle,
+                detectionRecord: nil,
+                isAnotherDetectionActive: false,
+                requestDetection: {},
+                actions: nil
+            )
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(model.accessibilitySummary(
+                state,
+                providerName: provider.displayName,
+                planType: model.planTitle(for: state.configuration)
+            ))
+        }
+    }
+
+    @ViewBuilder
+    private var detailsOverlay: some View {
+        if let state = detailsState {
+            ZStack {
+                Color.black.opacity(0.24)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        closeDetails()
+                    }
+
+                CredentialDetailsView(state: state, onClose: closeDetails)
+                    .frame(width: 560)
+                    .frame(minHeight: 420, maxHeight: 660)
+                    .liquidGlassSurface(cornerRadius: 18)
+                    .padding(36)
+                    .contentShape(Rectangle())
+                    .onTapGesture {}
+            }
+        }
+    }
+
+    private func closeDetails() {
+        detailsState = nil
     }
 
     private func providerIcon(_ provider: ProviderDescriptor) -> some View {
@@ -225,32 +262,45 @@ struct CredentialManagementView: View {
             .help(state.configuration.isEnabled ? "停用 \(state.configuration.displayName)" : "启用 \(state.configuration.displayName)")
             .accessibilityLabel(state.configuration.isEnabled ? "停用 \(state.configuration.displayName)" : "启用 \(state.configuration.displayName)")
 
-            Button {
-                editor = .edit(state.configuration)
-            } label: {
-                Image(systemName: "pencil")
-            }
-            .buttonStyle(.borderless)
-            .help("编辑 \(state.configuration.displayName)")
-            .accessibilityLabel("编辑 \(state.configuration.displayName)")
+            Spacer(minLength: 12)
 
-            Button {
-                alertSettingsState = state
-            } label: {
-                Image(systemName: alertIcon(for: state))
-            }
-            .buttonStyle(.borderless)
-            .help("设置 \(state.configuration.displayName) 的用量提醒")
-            .accessibilityLabel("提醒设置")
+            HStack(spacing: 8) {
+                Button {
+                    editor = .edit(state.configuration)
+                } label: {
+                    Image(systemName: "pencil")
+                }
+                .buttonStyle(.borderless)
+                .help("编辑 \(state.configuration.displayName)")
+                .accessibilityLabel("编辑 \(state.configuration.displayName)")
 
-            Button(role: .destructive) {
-                model.pendingDeletion = state.configuration
-            } label: {
-                Image(systemName: "trash")
+                Button {
+                    alertSettingsState = state
+                } label: {
+                    Image(systemName: alertIcon(for: state))
+                }
+                .buttonStyle(.borderless)
+                .help("设置 \(state.configuration.displayName) 的用量提醒")
+                .accessibilityLabel("提醒设置")
+
+                Button(role: .destructive) {
+                    model.pendingDeletion = state.configuration
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help("删除 \(state.configuration.displayName)")
+                .accessibilityLabel("删除 \(state.configuration.displayName)")
+
+                Button {
+                    detailsState = state
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .buttonStyle(.borderless)
+                .help("查看 \(state.configuration.displayName) 的更多信息")
+                .accessibilityLabel("更多信息")
             }
-            .buttonStyle(.borderless)
-            .help("删除 \(state.configuration.displayName)")
-            .accessibilityLabel("删除 \(state.configuration.displayName)")
         }
     }
 

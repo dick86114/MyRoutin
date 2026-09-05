@@ -200,7 +200,17 @@ struct MenuBarManagementView: View {
                     .resizable()
                     .interpolation(.high)
                     .scaledToFit()
-                    .frame(width: 34, height: 34)
+                    .frame(width: 24, height: 24)
+                    .padding(4)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        Color.primary.opacity(0.05),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.16), lineWidth: 1)
+                    }
                     .shadow(color: .black.opacity(0.16), radius: 4, y: 2)
             }
             .padding(.horizontal, 10)

@@ -213,7 +213,10 @@ final class CredentialManagementViewTests: XCTestCase {
         XCTAssertTrue(source.contains("searchText"))
         XCTAssertTrue(source.contains("confirmationDialog"))
         XCTAssertTrue(source.contains("将同时删除本地保存的密钥和用量缓存"))
-        XCTAssertTrue(source.contains("CredentialSummaryRow"))
+        XCTAssertTrue(source.contains("UsageRowView("))
+        XCTAssertTrue(source.contains("LazyVGrid"))
+        XCTAssertTrue(source.contains("detailsState"))
+        XCTAssertTrue(source.contains("ellipsis.circle"))
     }
 
     func test页面视觉与可访问性约束作为补充() throws {
@@ -226,11 +229,19 @@ final class CredentialManagementViewTests: XCTestCase {
         let chipsSource = try TestSourceReader.read([
             "RoutinUsage", "Views", "Settings", "Components", "ProviderFilterChips.swift"
         ])
+        let usageRowSource = try TestSourceReader.read([
+            "RoutinUsage", "Views", "UsageRowView.swift"
+        ])
 
         XCTAssertTrue(source.contains("TextField(\"搜索别名或供应商\""))
         XCTAssertTrue(source.contains("搜索别名或供应商"))
-        XCTAssertTrue(source.contains("liquidGlassSurface(cornerRadius: 12)"))
+        XCTAssertTrue(source.contains("LazyVGrid"))
+        XCTAssertTrue(source.contains("CredentialDetailsView"))
+        XCTAssertTrue(source.contains("detailsOverlay"))
+        XCTAssertTrue(source.contains("onTapGesture {"))
+        XCTAssertTrue(source.contains("closeDetails()"))
         XCTAssertTrue(source.contains("accessibilitySummary("))
+        XCTAssertTrue(usageRowSource.contains(".saturation(state.configuration.isEnabled ? 1 : 0)"))
         XCTAssertTrue(rowSource.contains("credentialContent"))
         XCTAssertFalse(rowSource.contains(".opacity(state.configuration.isEnabled ? 1 : 0.58)\n        }\n    }"))
         XCTAssertTrue(chipsSource.contains("ScrollView(.horizontal"))

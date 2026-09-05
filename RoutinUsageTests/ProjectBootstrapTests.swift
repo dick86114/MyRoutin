@@ -137,29 +137,31 @@ final class ProjectBootstrapTests: XCTestCase {
         XCTAssertFalse(popover.contains("settings.availableCredentialIDs"))
     }
 
-    func test凭证管理页保持轻量且不复制完整用量详情() throws {
+    func test凭证管理页复用弹窗卡片并支持详情() throws {
         let settings = try sourceText(at: "RoutinUsage/Views/Settings/CredentialManagementView.swift")
 
-        XCTAssertFalse(settings.contains("NormalizedUsageMetricGrid("))
-        XCTAssertFalse(settings.contains("UsageMetricGridPolicy.layout("))
-        XCTAssertTrue(settings.contains("CredentialSummaryRow("))
+        XCTAssertTrue(settings.contains("UsageRowView("))
+        XCTAssertTrue(settings.contains("LazyVGrid"))
+        XCTAssertTrue(settings.contains("CredentialDetailsView"))
     }
 
-    func test状态栏控制器在应用场景安装前创建() throws {
+    func test状态栏控制器在应用启动完成后异步安装() throws {
         let source = try sourceText(at: "RoutinUsage/App/RoutinUsageApp.swift")
 
         XCTAssertTrue(source.contains("applicationDidFinishLaunching"))
         XCTAssertTrue(source.contains("NSApp.setActivationPolicy(.accessory)"))
         XCTAssertTrue(source.contains("SettingsWindowActivationPolicy.refresh()"))
-        XCTAssertTrue(source.contains("retainedStatusBarController = StatusBarController(environment: environment)"))
+        XCTAssertTrue(source.contains("let controller = StatusBarController(environment: environment)"))
+        XCTAssertTrue(source.contains("retainedStatusBarController = controller"))
+        XCTAssertTrue(source.contains("controller.start()"))
 
         let installRange = try XCTUnwrap(
-            source.range(of: "Self.didFinishLaunchingHandler?()")
+            source.range(of: "controller.start()")
         )
         let refreshRange = try XCTUnwrap(
             source.range(of: "SettingsWindowActivationPolicy.refresh()")
         )
-        XCTAssertLessThan(installRange.lowerBound, refreshRange.lowerBound)
+        XCTAssertLessThan(refreshRange.lowerBound, installRange.lowerBound)
     }
 
     func testDebug使用独立BundleID避免复用系统菜单栏状态() throws {
@@ -347,7 +349,8 @@ final class ProjectBootstrapTests: XCTestCase {
         XCTAssertTrue(settings.contains(".liquidGlassWindowBackground()"))
         XCTAssertTrue(settings.contains("List(SettingsSection.allCases"))
         XCTAssertFalse(settings.contains(".liquidGlassSurface(cornerRadius:"))
-        XCTAssertTrue(credentials.contains(".liquidGlassSurface(cornerRadius: 12)"))
+        XCTAssertTrue(credentials.contains("UsageRowView("))
+        XCTAssertTrue(credentials.contains("LazyVGrid"))
     }
 
     func test弹窗简化为单层窗口玻璃并保留固定底栏() throws {

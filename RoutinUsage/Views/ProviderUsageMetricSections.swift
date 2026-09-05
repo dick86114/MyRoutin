@@ -1,5 +1,157 @@
 import SwiftUI
 
+struct VolcengineCodingPlanMetricsView: View {
+    let metrics: [NormalizedUsageMetric]
+    let now: Date
+
+    private var session: NormalizedUsageMetric? { metric("fiveHour") }
+    private var weekly: NormalizedUsageMetric? { metric("weekly") }
+    private var monthly: NormalizedUsageMetric? { metric("monthly") }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 16) {
+                codingQuotaCell(session, fallbackTitle: "session")
+                codingQuotaCell(weekly, fallbackTitle: "weekly")
+            }
+            if let monthly {
+                codingMonthlyCell(monthly)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func codingQuotaCell(
+        _ metric: NormalizedUsageMetric?,
+        fallbackTitle: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(metric?.label ?? fallbackTitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                Text(percentText(metric))
+                    .font(.system(.headline, design: .rounded, weight: .semibold))
+                    .foregroundStyle(color(metric))
+                    .monospacedDigit()
+            }
+            UsageMetricProgressBar(percent: metric?.displayedPercent ?? 0)
+            detailLines(metric)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func codingMonthlyCell(_ metric: NormalizedUsageMetric) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(metric.label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                Text(percentText(metric))
+                    .font(.system(.headline, design: .rounded, weight: .semibold))
+                    .foregroundStyle(color(metric))
+                    .monospacedDigit()
+            }
+            UsageMetricProgressBar(percent: metric.displayedPercent ?? 0)
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 5) {
+                    amountText("已用", metric.used, metric.limit)
+                    resetText(metric)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 5) {
+                    amountText("剩余", metric.remaining, nil)
+                    remainingText(metric)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func detailLines(_ metric: NormalizedUsageMetric?) -> some View {
+        if let metric {
+            amountText("已用", metric.used, metric.limit)
+            amountText("剩余", metric.remaining, nil)
+            resetText(metric)
+            remainingText(metric)
+        } else {
+            Text("暂无数据")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func amountText(_ title: String, _ value: Decimal?, _ limit: Decimal?) -> some View {
+        Text("\(title) \(decimalText(value))\(limit.map { " / \(decimalText($0))" } ?? "")")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func resetText(_ metric: NormalizedUsageMetric) -> some View {
+        Text("重置 \(metric.windowEnd.map { UsageFormatter.resetTime($0, now: now) } ?? "—")")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func remainingText(_ metric: NormalizedUsageMetric) -> some View {
+        Text("剩余 \(metric.windowEnd.map { UsageFormatter.remainingDurationText(until: $0, now: now) } ?? "—")")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func metric(_ id: String) -> NormalizedUsageMetric? {
+        metrics.first { $0.id == id }
+    }
+
+    private func percentText(_ metric: NormalizedUsageMetric?) -> String {
+        guard let percent = metric?.displayedPercent else { return "—" }
+        return "\(Int(percent.rounded()))%"
+    }
+
+    private func decimalText(_ value: Decimal?) -> String {
+        guard let value else { return "—" }
+        return NSDecimalNumber(decimal: value).stringValue
+    }
+
+    private func color(_ metric: NormalizedUsageMetric?) -> Color {
+        guard let metric else { return .secondary }
+        switch metric.healthState {
+        case .normal: return .green
+        case .warning: return .orange
+        case .critical, .unavailable: return .red
+        case .stale, .unknown: return .secondary
+        }
+    }
+}
+
+/// 火山两个计划共用周期额度卡片；月度额度横跨整行，避免 Coding Plan 的第三项挤压前两项。
+struct VolcenginePlanUsageMetricsView: View {
+    let metrics: [NormalizedUsageMetric]
+    let now: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            NormalizedUsageMetricGrid(
+                metrics: metrics.filter { $0.presentation == .progress },
+                columns: 2,
+                resetTimeStyle: .relativeDuration,
+                now: now
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 /// New API 的指标语义与订阅型供应商不同：额度有上限，消费和请求是活动统计。
 struct NewAPIUsageMetricsView: View {
     let metrics: [NormalizedUsageMetric]

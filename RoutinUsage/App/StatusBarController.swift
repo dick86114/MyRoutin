@@ -9,7 +9,7 @@ extension Notification.Name {
 @MainActor
 final class StatusBarController: NSObject {
     private let environment: AppEnvironment
-    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private var statusItem: NSStatusItem?
     private let popover = NSPopover()
     private var refreshMinutes: Int
     private var notificationsEnabled: Bool
@@ -22,19 +22,23 @@ final class StatusBarController: NSObject {
         notificationsEnabled = environment.settings.notificationsEnabled
         super.init()
 
+    }
+
+    func start() {
+        guard statusItem == nil else { return }
+        // 等应用完成启动并进入主运行循环后再向 SystemUIServer 注册状态项。
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         configurePopover()
         configureStatusButton()
         updateStatusButton()
         observeStatusBarAppearance()
         observeEnvironment()
 
-        // 先完成常驻应用的启动流程，再显示更新完成提示，避免同步模态弹窗阻塞首次更新检查。
         Task { @MainActor [weak self] in
             guard let self else { return }
             await self.environment.start()
             self.environment.presentUpdateCompletionNoticeIfNeeded()
         }
-
     }
 
     private func configurePopover() {
@@ -45,10 +49,10 @@ final class StatusBarController: NSObject {
     }
 
     private func configureStatusButton() {
-        statusItem.isVisible = true
-        guard let button = statusItem.button else {
+        guard let statusItem, let button = statusItem.button else {
             return
         }
+        statusItem.isVisible = true
         button.target = self
         button.action = #selector(handleStatusButtonClick(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -100,7 +104,7 @@ final class StatusBarController: NSObject {
     }
 
     private func updateStatusButton() {
-        guard let button = statusItem.button else {
+        guard let statusItem, let button = statusItem.button else {
             return
         }
         let enabledIDs = Set(environment.store.visibleKeyIDs)
@@ -236,6 +240,7 @@ final class StatusBarController: NSObject {
     }
 
     private func showContextMenu(from button: NSStatusBarButton) {
+        guard let statusItem else { return }
         popover.performClose(nil)
         let menu = NSMenu()
         menu.autoenablesItems = false

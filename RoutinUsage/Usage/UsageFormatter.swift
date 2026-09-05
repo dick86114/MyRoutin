@@ -227,7 +227,7 @@ enum UsageFormatter {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.timeZone = timeZone
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.dateFormat = "yyyy年MM月dd日 HH:mm:ss"
         return formatter.string(from: date)
     }
 

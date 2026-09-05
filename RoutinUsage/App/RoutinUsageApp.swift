@@ -51,15 +51,17 @@ struct RoutinUsageApp: App {
             return
         }
         RoutinUsageAppDelegate.didFinishLaunchingHandler = { [environment] in
-            Self.installStatusBarController(environment: environment)
+            DispatchQueue.main.async {
+                Self.installStatusBarController(environment: environment)
+            }
         }
     }
 
     @MainActor
     private static func installStatusBarController(environment: AppEnvironment) {
-        // 无 autosaveName 的状态项仍会留下系统位置缓存；旧坐标可能把它移出可见菜单栏。
-        UserDefaults.standard.removeObject(forKey: RoutinUsageAppDelegate.statusItemPositionCacheKey)
-        retainedStatusBarController = StatusBarController(environment: environment)
+        let controller = StatusBarController(environment: environment)
+        retainedStatusBarController = controller
+        controller.start()
     }
 
     var body: some Scene {

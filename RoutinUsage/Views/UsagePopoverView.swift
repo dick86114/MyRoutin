@@ -265,7 +265,8 @@ private extension UsagePopoverView {
                             detectionRecord: codexGroupDetection.record(for: id),
                             isAnotherDetectionActive: codexGroupDetection.activeKeyID != nil
                                 && codexGroupDetection.activeKeyID != id,
-                            requestDetection: { pendingDetectionKeyID = id }
+                            requestDetection: { pendingDetectionKeyID = id },
+                            actions: nil
                         )
                     }
                 }

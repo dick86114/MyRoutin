@@ -7,6 +7,7 @@ struct UsageRowView: View {
     let detectionRecord: CodexGroupDetectionRecord?
     let isAnotherDetectionActive: Bool
     let requestDetection: () -> Void
+    var actions: AnyView?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { timeline in
@@ -15,6 +16,10 @@ struct UsageRowView: View {
                         headerView(now: timeline.date)
                         content(now: timeline.date)
                     }
+                if let actions {
+                    actions
+                        .padding(.top, 2)
+                }
             }
             .padding(.vertical, 10)
             .padding(.horizontal, 8)
@@ -26,6 +31,7 @@ struct UsageRowView: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(ProviderTheme.borderColor(for: state.configuration.providerID))
             }
+            .saturation(state.configuration.isEnabled ? 1 : 0)
             .opacity(isSubscriptionExpired(now: timeline.date) ? 0.45 : 1)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityLabel(now: timeline.date))
@@ -370,6 +376,23 @@ private extension UsageRowView {
         if state.configuration.providerID == .newAPI {
             return AnyView(
                 NewAPIUsageMetricsView(metrics: snapshot.normalizedMetrics, now: now)
+            )
+        }
+
+        if state.configuration.providerID == .volcengine {
+            if state.configuration.metadata["planType"] == "coding" {
+                return AnyView(
+                    VolcengineCodingPlanMetricsView(
+                        metrics: snapshot.normalizedMetrics,
+                        now: now
+                    )
+                )
+            }
+            return AnyView(
+                VolcenginePlanUsageMetricsView(
+                    metrics: snapshot.normalizedMetrics,
+                    now: now
+                )
             )
         }
 

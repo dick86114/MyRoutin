@@ -648,7 +648,7 @@ final class UsageFormatterTests: XCTestCase {
                 Date(timeIntervalSince1970: 1_786_341_600),
                 timeZone: 时区
             ),
-            "2026-08-10 14:00:00"
+            "2026年08月10日 14:00:00"
         )
         XCTAssertEqual(UsageFormatter.fullDateTime(nil), "—")
     }

@@ -18,6 +18,8 @@ final class MenuBarManagementViewTests: XCTestCase {
         XCTAssertTrue(source.contains(".frame(minWidth: 360, maxWidth: .infinity)"))
         XCTAssertTrue(source.contains("SystemPopoverArrow"))
         XCTAssertTrue(source.contains("PopoverColorBrandLogo"))
+        XCTAssertTrue(source.contains("RoundedRectangle(cornerRadius: 10, style: .continuous)"))
+        XCTAssertTrue(source.contains("strokeBorder(Color.primary.opacity(0.16), lineWidth: 1)"))
         XCTAssertFalse(source.contains("arrowtriangle.up.fill"))
         XCTAssertFalse(source.contains(".padding(.trailing, 62)"))
         XCTAssertTrue(source.contains(".lineLimit(1)"))
