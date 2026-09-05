@@ -20,13 +20,13 @@ enum TestSourceReader {
 }
 
 final class SettingsSortingModeTests: XCTestCase {
-    func test菜单栏排序页使用共享凭证拖拽协议() throws {
+    func test菜单栏管理页使用手势整卡排序() throws {
         let source = try TestSourceReader.read([
-            "RoutinUsage", "Views", "Settings", "MenuBarOrderingView.swift"
+            "RoutinUsage", "Views", "Settings", "MenuBarManagementView.swift"
         ])
 
-        XCTAssertTrue(source.contains("CredentialDropDelegate"))
-        XCTAssertTrue(source.contains("UTType.text"))
+        XCTAssertTrue(source.contains("ReorderableCredentialCardList"))
+        XCTAssertTrue(source.contains("movingDisplay"))
         XCTAssertFalse(source.contains("isReorderingMenuBarIndicators"))
         XCTAssertFalse(source.contains("isReorderingAvailableIndicators"))
     }

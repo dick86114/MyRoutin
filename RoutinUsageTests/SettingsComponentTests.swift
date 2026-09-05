@@ -1,5 +1,4 @@
 import AppKit
-import UniformTypeIdentifiers
 import XCTest
 @testable import RoutinUsage
 
@@ -13,13 +12,13 @@ final class SettingsComponentTests: XCTestCase {
         XCTAssertTrue(source.contains("MenuBarMultiUsageIcon.image("))
     }
 
-    func test拖拽代理按移动语义处理投放() throws {
+    func test排序控件使用本地拖拽手势() throws {
         let source = try TestSourceReader.read([
-            "RoutinUsage", "Views", "Settings", "Components", "CredentialDropDelegate.swift"
+            "RoutinUsage", "Views", "Settings", "Components", "ReorderableCredentialCardList.swift"
         ])
 
-        XCTAssertTrue(source.contains("struct CredentialDropDelegate: DropDelegate"))
-        XCTAssertTrue(source.contains("DropProposal(operation: .move)"))
-        XCTAssertTrue(source.contains("move(draggedID)"))
+        XCTAssertTrue(source.contains("struct ReorderableCredentialCardList"))
+        XCTAssertTrue(source.contains("DragGesture(minimumDistance: 5"))
+        XCTAssertTrue(source.contains("interactiveSpring"))
     }
 }

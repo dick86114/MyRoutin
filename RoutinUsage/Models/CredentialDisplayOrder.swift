@@ -90,6 +90,44 @@ struct CredentialDisplayOrder: Codable, Equatable, Sendable {
         return result
     }
 
+    func movingDisplay(
+        id: UUID,
+        before targetID: UUID
+    ) -> Self {
+        let popoverIDs = popoverCredentialIDs
+        guard id != targetID,
+              popoverIDs.contains(id),
+              let targetBeforeIndex = popoverIDs.firstIndex(of: targetID),
+              let sourceIndex = popoverIDs.firstIndex(of: id)
+        else {
+            return self
+        }
+
+        let targetIndex = targetBeforeIndex > sourceIndex ? targetBeforeIndex - 1 : targetBeforeIndex
+        let moved = moving(.popover, id: id, toIndex: targetIndex)
+        let idIsInMenuBar = menuBarCredentialIDs.contains(id)
+        let targetIsInMenuBar = menuBarCredentialIDs.contains(targetID)
+        if targetIsInMenuBar {
+            guard idIsInMenuBar || menuBarCredentialIDs.count < Self.maximumMenuBarCount else {
+                return self
+            }
+        }
+
+        var result = moved
+        if targetIsInMenuBar {
+            if !idIsInMenuBar {
+                result.menuBarCredentialIDs.append(id)
+            }
+        } else if idIsInMenuBar {
+            result.menuBarCredentialIDs.removeAll { $0 == id }
+        }
+
+        result.menuBarCredentialIDs = result.popoverCredentialIDs.filter {
+            result.menuBarCredentialIDs.contains($0)
+        }
+        return result
+    }
+
     func addingToMenuBar(_ id: UUID, toIndex target: Int) -> Self {
         guard menuBarCredentialIDs.contains(id) else {
             guard menuBarCredentialIDs.count < Self.maximumMenuBarCount else {

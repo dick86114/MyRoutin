@@ -526,14 +526,13 @@ final class ProjectBootstrapTests: XCTestCase {
         XCTAssertTrue(popover.contains("displayOrder.visible(enabledIDs:"))
     }
 
-    func test菜单栏排序页提供常驻拖拽和无障碍动作() throws {
-        let settings = try sourceText(at: "RoutinUsage/Views/Settings/MenuBarOrderingView.swift")
+    func test菜单栏管理页提供常驻拖拽和无障碍动作() throws {
+        let settings = try sourceText(at: "RoutinUsage/Views/Settings/MenuBarManagementView.swift")
 
         XCTAssertFalse(settings.contains("isReorderingMenuBarIndicators"))
         XCTAssertFalse(settings.contains("private struct CredentialSortInteraction"))
-        XCTAssertTrue(settings.contains("CredentialDropDelegate"))
-        XCTAssertTrue(settings.contains(".onDrag"))
-        XCTAssertTrue(settings.contains(".onDrop"))
+        XCTAssertTrue(settings.contains("ReorderableCredentialCardList"))
+        XCTAssertTrue(settings.contains("movingDisplay"))
         XCTAssertTrue(settings.contains("accessibilityAction"))
     }
 
@@ -700,10 +699,8 @@ final class ProjectBootstrapTests: XCTestCase {
             resource = ("SettingsWindowView.swift", "txt")
         case "RoutinUsage/Views/Settings/CredentialManagementView.swift":
             resource = ("CredentialManagementView.swift", "txt")
-        case "RoutinUsage/Views/Settings/MenuBarOrderingView.swift":
-            resource = ("MenuBarOrderingView.swift", "txt")
-        case "RoutinUsage/Views/Settings/PopoverOrderingView.swift":
-            resource = ("PopoverOrderingView.swift", "txt")
+        case "RoutinUsage/Views/Settings/MenuBarManagementView.swift":
+            resource = ("MenuBarManagementView.swift", "txt")
         case "RoutinUsage/Views/Settings/GeneralSettingsView.swift":
             resource = ("GeneralSettingsView.swift", "txt")
         case "RoutinUsage/Views/Settings/HelpUpdateView.swift":

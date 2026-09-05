@@ -37,6 +37,34 @@ final class CredentialDisplayOrderTests: XCTestCase {
         XCTAssertEqual(result.popoverCredentialIDs, [four, two, three, one])
     }
 
+    func test统一列表拖拽到菜单栏卡片会加入并按统一顺序重排() {
+        let result = order.movingDisplay(id: four, before: two)
+
+        XCTAssertEqual(result.popoverCredentialIDs, [four, two, three, one])
+        XCTAssertEqual(result.menuBarCredentialIDs, [four, two, one])
+    }
+
+    func test统一列表拖拽到待选卡片会移出菜单栏() {
+        let result = order.movingDisplay(id: one, before: four)
+
+        XCTAssertEqual(result.popoverCredentialIDs, [two, three, one, four])
+        XCTAssertEqual(result.menuBarCredentialIDs, [two])
+    }
+
+    func test菜单栏已满时待选卡片不能拖入() {
+        let base = CredentialDisplayOrder(
+            menuBarCredentialIDs: [one, two, three, four, five],
+            popoverCredentialIDs: [one, two, three, four, five]
+        )
+        let candidate = UUID()
+        var full = base
+        full.popoverCredentialIDs = base.popoverCredentialIDs + [candidate]
+
+        let rejected = full.movingDisplay(id: candidate, before: three)
+
+        XCTAssertEqual(rejected, full)
+    }
+
     func test待选凭证加入菜单栏且上限为五() {
         let base = CredentialDisplayOrder(
             menuBarCredentialIDs: [one, two, three, four, five],

@@ -3,7 +3,6 @@ import SwiftUI
 enum SettingsSection: String, CaseIterable, Identifiable {
     case credentials
     case menuBar
-    case popover
     case general
     case help
 
@@ -12,8 +11,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .credentials: "凭证管理"
-        case .menuBar: "菜单栏显示"
-        case .popover: "弹窗显示"
+        case .menuBar: "菜单栏管理"
         case .general: "通用"
         case .help: "帮助与更新"
         }
@@ -23,7 +21,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .credentials: "key.horizontal"
         case .menuBar: "menubar.rectangle"
-        case .popover: "rectangle.bottomthird.inset.filled"
         case .general: "switch.2"
         case .help: "questionmark.circle"
         }
@@ -75,9 +72,7 @@ struct SettingsWindowView: View {
         case .credentials:
             CredentialManagementView(environment: environment, ordering: ordering)
         case .menuBar:
-            MenuBarOrderingView(environment: environment, ordering: ordering)
-        case .popover:
-            PopoverOrderingView(environment: environment, ordering: ordering)
+            MenuBarManagementView(environment: environment, ordering: ordering)
         case .general:
             GeneralSettingsView(environment: environment)
         case .help:

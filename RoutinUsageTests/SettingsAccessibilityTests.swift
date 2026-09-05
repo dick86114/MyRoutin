@@ -5,8 +5,7 @@ final class SettingsAccessibilityTests: XCTestCase {
         let files = [
             "SettingsWindowView",
             "CredentialManagementView",
-            "MenuBarOrderingView",
-            "PopoverOrderingView",
+            "MenuBarManagementView",
             "GeneralSettingsView",
             "HelpUpdateView"
         ]
@@ -22,15 +21,10 @@ final class SettingsAccessibilityTests: XCTestCase {
         }
 
         let ordering = try TestSourceReader.read([
-            "RoutinUsage", "Views", "Settings", "MenuBarOrderingView.swift"
+            "RoutinUsage", "Views", "Settings", "MenuBarManagementView.swift"
         ])
         XCTAssertTrue(ordering.contains("accessibilityAction"))
         XCTAssertTrue(ordering.contains("accessibilityLabel"))
         XCTAssertTrue(ordering.contains("reduceMotion"))
-
-        let dropDelegate = try TestSourceReader.read([
-            "RoutinUsage", "Views", "Settings", "Components", "CredentialDropDelegate.swift"
-        ])
-        XCTAssertTrue(dropDelegate.contains("reduceMotion"))
     }
 }
