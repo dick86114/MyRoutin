@@ -3,6 +3,16 @@ import XCTest
 
 @MainActor
 final class CredentialManagementViewTests: XCTestCase {
+    func test凭证卡片提供独立提醒设置入口() throws {
+        let source = try TestSourceReader.read([
+            "RoutinUsage", "Views", "Settings", "CredentialManagementView.swift"
+        ])
+
+        XCTAssertTrue(source.contains("bell.badge"))
+        XCTAssertTrue(source.contains("提醒设置"))
+        XCTAssertTrue(source.contains("CredentialAlertSettingsView"))
+    }
+
     func test过滤状态供应商和搜索组合只保留匹配凭证() throws {
         let context = CredentialManagementTestContext()
         defer { context.cleanUp() }
