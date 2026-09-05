@@ -71,6 +71,9 @@ final class StatusBarController: NSObject {
             _ = environment.settings.refreshMinutes
             _ = environment.settings.notificationsEnabled
             _ = environment.settings.displayOrder
+            for id in environment.store.orderedKeyIDs {
+                _ = environment.settings.usagePreferences(for: id)
+            }
             _ = environment.store.states
             _ = environment.updateStatus
             _ = environment.routinCheckIn.state

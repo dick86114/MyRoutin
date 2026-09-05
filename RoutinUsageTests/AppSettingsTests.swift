@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import XCTest
 @testable import RoutinUsage
 
@@ -67,6 +68,27 @@ final class AppSettingsTests: XCTestCase {
 
         settings.removeUsagePreferences(for: id)
         XCTAssertNil(AppSettings(defaults: context.defaults).storedUsagePreferences(for: id))
+    }
+
+    @MainActor
+    func test凭证用量偏好变更会触发观察者() throws {
+        let context = try makeContext()
+        defer { context.cleanUp() }
+        let id = UUID()
+        let settings = AppSettings(defaults: context.defaults)
+        var didChange = false
+
+        withObservationTracking {
+            _ = settings.usagePreferences(for: id)
+        } onChange: {
+            didChange = true
+        }
+
+        var preferences = settings.usagePreferences(for: id)
+        preferences.menuBarMetricID = "weekly"
+        settings.setUsagePreferences(preferences, for: id)
+
+        XCTAssertTrue(didChange)
     }
 
     func test菜单栏样式可持久化并重新载入() throws {

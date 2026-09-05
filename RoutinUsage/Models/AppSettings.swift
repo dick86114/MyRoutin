@@ -21,7 +21,7 @@ final class AppSettings {
     static let allowedRefreshMinutes = [1, 5, 15, 30]
 
     @ObservationIgnored private let defaults: UserDefaults
-    @ObservationIgnored private var credentialUsagePreferences: [String: CredentialUsagePreferences]
+    private var credentialUsagePreferences: [String: CredentialUsagePreferences]
     @ObservationIgnored private var migratedUsagePreferenceIDs: Set<String>
 
     var refreshMinutes: Int {
