@@ -13,7 +13,6 @@ final class StatusBarController: NSObject {
     private let popover = NSPopover()
     private var refreshMinutes: Int
     private var notificationsEnabled: Bool
-    private var thresholds: AlertThresholds
     private var appearanceObservation: NSKeyValueObservation?
     private var popoverWindowResignObserver: NSObjectProtocol?
 
@@ -21,7 +20,6 @@ final class StatusBarController: NSObject {
         self.environment = environment
         refreshMinutes = environment.settings.refreshMinutes
         notificationsEnabled = environment.settings.notificationsEnabled
-        thresholds = environment.settings.thresholds
         super.init()
 
         configurePopover()
@@ -72,7 +70,6 @@ final class StatusBarController: NSObject {
             _ = environment.settings.menuBarStyle
             _ = environment.settings.refreshMinutes
             _ = environment.settings.notificationsEnabled
-            _ = environment.settings.thresholds
             _ = environment.settings.displayOrder
             _ = environment.store.states
             _ = environment.updateStatus
@@ -95,10 +92,6 @@ final class StatusBarController: NSObject {
         if notificationsEnabled != settings.notificationsEnabled {
             notificationsEnabled = settings.notificationsEnabled
             Task { await environment.notificationsDidChange(enabled: notificationsEnabled) }
-        }
-        if thresholds != settings.thresholds {
-            thresholds = settings.thresholds
-            environment.thresholdsDidChange(to: thresholds)
         }
         updateStatusButton()
     }

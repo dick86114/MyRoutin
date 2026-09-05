@@ -256,13 +256,12 @@ final class ProjectBootstrapTests: XCTestCase {
         XCTAssertTrue(source.contains(".windowResizability(.contentMinSize)"))
     }
 
-    func test设置与引导统一使用五小时产品文案() throws {
+    func test引导页统一使用五小时产品文案且设置页不再硬编码维度() throws {
         let settings = try sourceText(at: "RoutinUsage/Views/Settings/GeneralSettingsView.swift")
         let onboarding = try sourceText(at: "RoutinUsage/Views/OnboardingView.swift")
 
         XCTAssertFalse(settings.contains("五小时"))
         XCTAssertFalse(onboarding.contains("五小时"))
-        XCTAssertTrue(settings.contains("5 小时"))
         XCTAssertTrue(onboarding.contains("5 小时"))
     }
 

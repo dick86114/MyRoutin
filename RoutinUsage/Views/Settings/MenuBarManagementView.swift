@@ -376,6 +376,8 @@ struct MenuBarManagementView: View {
 
             Spacer(minLength: 10)
 
+            metricMenu(for: state)
+
             Button {
                 setMenuBarMembership(isInMenuBar: !isInMenuBar, id: id)
             } label: {
@@ -446,6 +448,10 @@ struct MenuBarManagementView: View {
     }
 
     private func menuBarMetric(for state: KeyUsageState) -> NormalizedUsageMetric? {
+        menuBarResolution(for: state).metric
+    }
+
+    private func menuBarResolution(for state: KeyUsageState) -> MenuBarMetricResolution {
         let id = state.configuration.id
         let preferences = environment.settings.usagePreferences(for: id)
         let capabilities = environment.providerRegistry?.metricCapabilities(for: state.configuration) ?? []
@@ -453,7 +459,61 @@ struct MenuBarManagementView: View {
             selectedMetricID: preferences.menuBarMetricID,
             metrics: state.snapshot?.normalizedMetrics ?? [],
             capabilities: capabilities
-        ).metric
+        )
+    }
+
+    private func metricMenu(for state: KeyUsageState) -> some View {
+        let resolution = menuBarResolution(for: state)
+
+        return Menu {
+            Button("自动") {
+                setMenuBarMetric(nil, for: state.configuration.id)
+            }
+
+            ForEach(metricOptions(for: state)) { option in
+                Button(option.label) {
+                    setMenuBarMetric(option.metricID, for: state.configuration.id)
+                }
+            }
+        } label: {
+            Label(selectedMetricTitle(for: state, resolution: resolution), systemImage: "gauge.with.dots.needle.33percent")
+                .font(.caption.weight(.medium))
+                .lineLimit(1)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("设置 \(state.configuration.displayName) 的菜单栏指标")
+    }
+
+    private func metricOptions(for state: KeyUsageState) -> [UsageMetricCapability] {
+        MenuBarMetricResolver.options(
+            metrics: state.snapshot?.normalizedMetrics ?? [],
+            capabilities: environment.providerRegistry?.metricCapabilities(for: state.configuration) ?? []
+        )
+    }
+
+    private func selectedMetricTitle(
+        for state: KeyUsageState,
+        resolution: MenuBarMetricResolution
+    ) -> String {
+        if resolution.isFallback {
+            return "自动（原指标当前不可用）"
+        }
+        guard let selectedMetricID = resolution.selectedMetricID else {
+            return "自动"
+        }
+        let metricTitle = state.snapshot?.normalizedMetrics.first { $0.id == selectedMetricID }?.label
+        let capabilityTitle = environment.providerRegistry?
+            .metricCapabilities(for: state.configuration)
+            .first { $0.metricID == selectedMetricID }?
+            .label
+        return metricTitle ?? capabilityTitle ?? selectedMetricID
+    }
+
+    private func setMenuBarMetric(_ metricID: String?, for id: UUID) {
+        var preferences = environment.settings.usagePreferences(for: id)
+        preferences.menuBarMetricID = metricID
+        environment.settings.setUsagePreferences(preferences, for: id)
     }
 
     private func providerName(for state: KeyUsageState) -> String {

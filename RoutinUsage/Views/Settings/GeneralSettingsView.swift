@@ -37,29 +37,9 @@ struct GeneralSettingsView: View {
                         .accessibilityLabel("登录时启动")
                 }
 
-                Section("显示") {
-                    Picker("用量维度", selection: $settings.displayDimension) {
-                        ForEach(DisplayDimension.allCases, id: \.self) { dimension in
-                            Text(dimension.title)
-                                .tag(dimension)
-                        }
-                    }
-                    .accessibilityLabel("用量显示维度")
-                }
-
                 Section("通知") {
                     Toggle("启用通知", isOn: $settings.notificationsEnabled)
                         .accessibilityLabel("启用通知")
-
-                    Stepper(value: lowThresholdBinding, in: 1...(settings.thresholds.high - 1)) {
-                        Text("低阈值 \(environment.settings.thresholds.low)%")
-                    }
-                    .accessibilityLabel("低用量提醒阈值")
-
-                    Stepper(value: highThresholdBinding, in: (settings.thresholds.low + 1)...100) {
-                        Text("高阈值 \(environment.settings.thresholds.high)%")
-                    }
-                    .accessibilityLabel("高用量提醒阈值")
                 }
             }
             .formStyle(.grouped)
@@ -94,36 +74,4 @@ struct GeneralSettingsView: View {
     )
     }
 
-    private var lowThresholdBinding: Binding<Int> {
-        Binding(
-            get: { settings.thresholds.low },
-            set: { low in
-                settings.thresholds = AlertThresholds(
-                    low: low,
-                    high: settings.thresholds.high
-                )
-            }
-        )
-    }
-
-    private var highThresholdBinding: Binding<Int> {
-        Binding(
-            get: { settings.thresholds.high },
-            set: { high in
-                settings.thresholds = AlertThresholds(
-                    low: settings.thresholds.low,
-                    high: high
-                )
-            }
-        )
-    }
-}
-
-extension DisplayDimension {
-    var title: String {
-        switch self {
-        case .fiveHour: "5 小时"
-        case .weekly: "周"
-        }
-    }
 }
