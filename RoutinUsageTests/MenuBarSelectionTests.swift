@@ -8,7 +8,7 @@ final class MenuBarSelectionTests: XCTestCase {
             snapshot: UsageSnapshot(
                 planName: "Coding Plan", kind: .periodic, fiveHour: nil, weekly: nil, token: nil,
                 allowedModels: [], fetchedAt: .now,
-                metrics: [NormalizedUsageMetric(id: "quota", label: "配额", used: 68, limit: 100, remaining: 32, unit: .token, presentation: .progress, healthState: .warning)]
+                metrics: [NormalizedUsageMetric(id: "quota", label: "配额", used: 68, limit: 100, remaining: 32, unit: .token, presentation: .progress, semantic: .usedQuota, healthState: .warning)]
             ),
             lastSuccessAt: .now, isRefreshing: false, isStale: false, error: nil
         )
@@ -27,7 +27,7 @@ final class MenuBarSelectionTests: XCTestCase {
             snapshot: UsageSnapshot(
                 planName: "API 余额", kind: .periodic, fiveHour: nil, weekly: nil, token: nil,
                 allowedModels: [], fetchedAt: .now,
-                metrics: [NormalizedUsageMetric(id: "balance", label: "余额", value: 12.36, unit: .currency, presentation: .balance, currencyCode: "CNY", healthState: .normal)]
+                metrics: [NormalizedUsageMetric(id: "balance", label: "余额", value: 12.36, unit: .currency, presentation: .balance, semantic: .balance, currencyCode: "CNY", healthState: .normal)]
             ),
             lastSuccessAt: .now, isRefreshing: false, isStale: false, error: nil
         )

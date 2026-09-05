@@ -8,7 +8,8 @@ final class UsagePresentationPolicyTests: XCTestCase {
                 id: id,
                 label: id,
                 unit: .request,
-                presentation: .value
+                presentation: .value,
+                semantic: .value
             )
         }
 

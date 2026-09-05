@@ -90,6 +90,7 @@ struct DeepSeekUsageProvider: UsageProvider {
                         value: total,
                         unit: .currency,
                         presentation: .balance,
+                        semantic: .balance,
                         currencyCode: currency,
                         healthState: health
                     ),
@@ -99,6 +100,7 @@ struct DeepSeekUsageProvider: UsageProvider {
                         value: granted,
                         unit: .currency,
                         presentation: .value,
+                        semantic: .value,
                         currencyCode: currency,
                         healthState: health
                     ),
@@ -108,6 +110,7 @@ struct DeepSeekUsageProvider: UsageProvider {
                         value: toppedUp,
                         unit: .currency,
                         presentation: .value,
+                        semantic: .value,
                         currencyCode: currency,
                         healthState: health
                     ),
@@ -117,6 +120,7 @@ struct DeepSeekUsageProvider: UsageProvider {
                         value: payload.isAvailable ? 1 : 0,
                         unit: .boolean,
                         presentation: .status,
+                        semantic: .status,
                         healthState: payload.isAvailable ? health : .unavailable
                     )
                 ]

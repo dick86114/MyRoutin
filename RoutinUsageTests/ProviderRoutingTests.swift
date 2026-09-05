@@ -28,7 +28,7 @@ final class ProviderRoutingTests: XCTestCase {
             fetchedAt: Date(timeIntervalSince1970: 100),
             providerID: .deepseek,
             credentialID: configuration.id,
-            metrics: [NormalizedUsageMetric(id: "balance", label: "余额", value: 8, unit: .currency, presentation: .balance)]
+            metrics: [NormalizedUsageMetric(id: "balance", label: "余额", value: 8, unit: .currency, presentation: .balance, semantic: .balance)]
         )
         let provider = RecordingProvider(id: .deepseek, snapshot: snapshot)
         let store = UsageStore(

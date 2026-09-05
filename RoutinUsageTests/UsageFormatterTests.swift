@@ -521,6 +521,7 @@ final class UsageFormatterTests: XCTestCase {
                 unit: .request,
                 windowEnd: now.addingTimeInterval(remainingInterval),
                 presentation: .progress,
+                semantic: .usedQuota,
                 healthState: .normal
             )
         }

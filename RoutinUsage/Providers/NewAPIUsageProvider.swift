@@ -128,6 +128,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     remaining: convertedRemaining,
                     unit: .currency,
                     presentation: .progress,
+                    semantic: .usedQuota,
                     currencyCode: displayUnit.symbol,
                     healthState: health
                 ),
@@ -137,6 +138,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Decimal(todaySummary.tokenUsed ?? 0),
                     unit: .token,
                     presentation: .value,
+                    semantic: .value,
                     healthState: .normal
                 ),
                 NormalizedUsageMetric(
@@ -145,6 +147,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Decimal(oneDaySummary.tokenUsed ?? 0),
                     unit: .token,
                     presentation: .value,
+                    semantic: .value,
                     healthState: .normal
                 ),
                 NormalizedUsageMetric(
@@ -153,6 +156,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Decimal(sevenDaySummary.tokenUsed ?? 0),
                     unit: .token,
                     presentation: .value,
+                    semantic: .value,
                     healthState: .normal
                 ),
                 NormalizedUsageMetric(
@@ -161,6 +165,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Decimal(thirtyDaySummary.tokenUsed ?? 0),
                     unit: .token,
                     presentation: .value,
+                    semantic: .value,
                     healthState: .normal
                 ),
                 NormalizedUsageMetric(
@@ -169,6 +174,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Self.convert(Decimal(todaySummary.quota ?? 0), using: displayUnit),
                     unit: .currency,
                     presentation: .value,
+                    semantic: .value,
                     currencyCode: displayUnit.symbol,
                     healthState: .normal
                 ),
@@ -178,6 +184,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Self.convert(Decimal(oneDaySummary.quota ?? 0), using: displayUnit),
                     unit: .currency,
                     presentation: .value,
+                    semantic: .value,
                     currencyCode: displayUnit.symbol,
                     healthState: .normal
                 ),
@@ -187,6 +194,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Self.convert(Decimal(sevenDaySummary.quota ?? 0), using: displayUnit),
                     unit: .currency,
                     presentation: .value,
+                    semantic: .value,
                     currencyCode: displayUnit.symbol,
                     healthState: .normal
                 ),
@@ -196,6 +204,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Self.convert(Decimal(thirtyDaySummary.quota ?? 0), using: displayUnit),
                     unit: .currency,
                     presentation: .value,
+                    semantic: .value,
                     currencyCode: displayUnit.symbol,
                     healthState: .normal
                 ),
@@ -205,6 +214,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Decimal(currentMinute.rpm),
                     unit: .request,
                     presentation: .value,
+                    semantic: .value,
                     healthState: .normal
                 ),
                 NormalizedUsageMetric(
@@ -213,6 +223,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Decimal(currentMinute.tpm),
                     unit: .token,
                     presentation: .value,
+                    semantic: .value,
                     healthState: .normal
                 ),
                 NormalizedUsageMetric(
@@ -221,6 +232,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Decimal(user.requestCount),
                     unit: .request,
                     presentation: .value,
+                    semantic: .value,
                     healthState: .normal
                 )
             ]
@@ -339,6 +351,7 @@ struct NewAPIUsageProvider: UsageProvider {
             value: value,
             unit: .currency,
             presentation: .value,
+            semantic: .value,
             currencyCode: displayUnit.symbol,
             healthState: health
         )

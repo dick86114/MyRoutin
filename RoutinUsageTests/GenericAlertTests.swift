@@ -35,6 +35,7 @@ final class GenericAlertTests: XCTestCase {
                 value: 5,
                 unit: .currency,
                 presentation: .balance,
+                semantic: .balance,
                 currencyCode: "CNY",
                 healthState: .warning
             )]

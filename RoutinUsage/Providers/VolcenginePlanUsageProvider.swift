@@ -96,6 +96,7 @@ struct VolcenginePlanUsageProvider: UsageProvider {
                     unit: .request,
                     windowEnd: window.resetTime,
                     presentation: .progress,
+                    semantic: .usedQuota,
                     healthState: percent >= 80 ? .critical : (percent >= 50 ? .warning : .normal)
                 )
             }
@@ -111,6 +112,7 @@ struct VolcenginePlanUsageProvider: UsageProvider {
                         unit: .request,
                         windowEnd: item.resetTimestamp.map { Date(timeIntervalSince1970: TimeInterval($0)) },
                         presentation: .progress,
+                        semantic: .usedQuota,
                         healthState: percent >= 80 ? .critical : (percent >= 50 ? .warning : .normal)
                     )
                 }

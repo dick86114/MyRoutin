@@ -154,6 +154,7 @@ struct GLMUsageProvider: UsageProvider {
                     unit: .request,
                     windowEnd: windowEnd,
                     presentation: .value,
+                    semantic: .value,
                     healthState: Self.healthState(for: percentage)
                 )
             default:
@@ -178,6 +179,7 @@ struct GLMUsageProvider: UsageProvider {
             value: count,
             unit: .request,
             presentation: .value,
+            semantic: .value,
             healthState: .normal
         )
     }
@@ -197,6 +199,7 @@ struct GLMUsageProvider: UsageProvider {
             unit: .token,
             windowEnd: windowEnd,
             presentation: .progress,
+            semantic: .usedQuota,
             healthState: healthState(for: percentage)
         )
     }
