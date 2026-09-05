@@ -188,7 +188,6 @@ final class AppEnvironment {
             notificationSender: notificationSender,
             defaults: defaults,
             refreshMinutes: settings.refreshMinutes,
-            thresholds: settings.thresholds,
             notificationsEnabled: settings.notificationsEnabled,
             usagePreferencesProvider: { id in
                 settings.usagePreferences(for: id)
@@ -201,6 +200,14 @@ final class AppEnvironment {
             },
             providerRegistry: providerRegistry
         )
+
+        for configuration in keyRepository.list() {
+            settings.migrateUsagePreferencesIfNeeded(
+                for: configuration,
+                metrics: store.state(for: configuration.id)?.snapshot?.normalizedMetrics ?? [],
+                capabilities: providerRegistry.metricCapabilities(for: configuration)
+            )
+        }
 
         return AppEnvironment(
             settings: settings,
@@ -287,10 +294,6 @@ final class AppEnvironment {
             _ = try? await notificationSender.requestAuthorization()
         }
         await notificationTaskYield()
-    }
-
-    func thresholdsDidChange(to _: AlertThresholds) {
-        synchronizeStoreSettings()
     }
 
     func dismissOnboarding() {
@@ -684,7 +687,6 @@ private extension AppEnvironment {
     func synchronizeStoreSettings() {
         store.updateSettings(
             refreshMinutes: settings.refreshMinutes,
-            thresholds: settings.thresholds,
             notificationsEnabled: settings.notificationsEnabled
         )
     }

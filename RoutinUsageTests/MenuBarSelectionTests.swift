@@ -106,6 +106,17 @@ final class MenuBarSelectionTests: XCTestCase {
         XCTAssertEqual(options.map(\.metricID), ["monthly", "weekly"])
     }
 
+    func test无供应商优先级的运行时指标排序不溢出() {
+        let resolution = MenuBarMetricResolver.resolve(
+            selectedMetricID: nil,
+            metrics: [menuMetric(id: "balance", label: "余额")],
+            capabilities: []
+        )
+
+        XCTAssertEqual(resolution.metric?.id, "balance")
+        XCTAssertFalse(resolution.isFallback)
+    }
+
     func test进度型凭证生成真实百分比指标() {
         let state = KeyUsageState(
             configuration: KeyConfiguration(id: UUID(), name: "GLM", keySuffix: "", sortOrder: 0, providerID: .glm, credentialKind: .apiKey),

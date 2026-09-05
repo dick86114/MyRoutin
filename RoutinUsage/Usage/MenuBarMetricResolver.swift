@@ -119,7 +119,7 @@ enum MenuBarMetricResolver {
     }
 
     private static func menuOrder(_ capability: UsageMetricCapability) -> Int {
-        let priority = capability.menuBarPriority ?? Int.max
+        let priority = capability.menuBarPriority ?? 1_000_000
         let presentationOrder: Int = switch capability.presentation {
         case .progress: 0
         case .balance: 1

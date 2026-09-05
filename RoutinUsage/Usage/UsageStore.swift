@@ -76,11 +76,11 @@ final class UsageStore {
     @ObservationIgnored private let notificationSender: any NotificationSending
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var refreshMinutes: Int
-    @ObservationIgnored private var thresholds: AlertThresholds
     @ObservationIgnored private var notificationsEnabled: Bool
     @ObservationIgnored private let usagePreferencesProvider: @MainActor @Sendable (UUID) -> CredentialUsagePreferences
     @ObservationIgnored private let setUsagePreferencesHandler: @MainActor @Sendable (CredentialUsagePreferences, UUID) -> Void
     @ObservationIgnored private let metricCapabilitiesProvider: @MainActor @Sendable (KeyConfiguration) -> [UsageMetricCapability]
+    @ObservationIgnored private let legacyReconcileThresholds: AlertThresholds
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private var refreshingKeyIDs: Set<UUID> = []
     @ObservationIgnored private var refreshGenerationByKeyID: [UUID: UUID] = [:]
@@ -112,7 +112,7 @@ final class UsageStore {
         self.notificationSender = notificationSender
         self.defaults = defaults
         self.refreshMinutes = refreshMinutes
-        self.thresholds = thresholds
+        self.legacyReconcileThresholds = thresholds
         self.notificationsEnabled = notificationsEnabled
         self.usagePreferencesProvider = usagePreferencesProvider
         self.setUsagePreferencesHandler = setUsagePreferencesHandler
@@ -150,8 +150,17 @@ final class UsageStore {
         thresholds: AlertThresholds,
         notificationsEnabled: Bool
     ) {
+        updateSettings(
+            refreshMinutes: refreshMinutes,
+            notificationsEnabled: notificationsEnabled
+        )
+    }
+
+    func updateSettings(
+        refreshMinutes: Int,
+        notificationsEnabled: Bool
+    ) {
         self.refreshMinutes = refreshMinutes
-        self.thresholds = thresholds
         self.notificationsEnabled = notificationsEnabled
         let currentTime = now()
         for keyID in states.keys {
@@ -198,7 +207,7 @@ final class UsageStore {
                 existing: preferences,
                 metrics: snapshot.normalizedMetrics,
                 capabilities: metricCapabilitiesProvider(state.configuration),
-                legacyThresholds: thresholds
+                legacyThresholds: legacyReconcileThresholds
             )
             setUsagePreferencesHandler(preferences, keyID)
             scheduleNotification(NotificationWork(
@@ -276,7 +285,7 @@ final class UsageStore {
                 existing: preferences,
                 metrics: result.normalizedMetrics,
                 capabilities: metricCapabilitiesProvider(configuration),
-                legacyThresholds: thresholds
+                legacyThresholds: legacyReconcileThresholds
             )
             setUsagePreferencesHandler(preferences, configuration.id)
             scheduleNotification(NotificationWork(
@@ -546,7 +555,7 @@ final class UsageStore {
                     existing: preferences,
                     metrics: snapshot.normalizedMetrics,
                     capabilities: metricCapabilitiesProvider(state.configuration),
-                    legacyThresholds: thresholds
+                    legacyThresholds: .init()
                 )
                 setUsagePreferencesHandler(preferences, outcome.keyID)
                 return NotificationWork(
