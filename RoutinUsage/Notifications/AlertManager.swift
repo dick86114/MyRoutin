@@ -175,15 +175,26 @@ final class AlertEvaluator: @unchecked Sendable {
         }
 
         for metric in snapshot.metrics where metric.presentation == .progress {
-            guard let used = metric.used, let limit = metric.limit, limit > 0 else { continue }
+            guard let limit = metric.limit, limit > 0 else { continue }
+            let used: Decimal
+            switch metric.semantic {
+            case .usedQuota:
+                guard let amount = metric.used else { continue }
+                used = amount
+            case .remainingQuota:
+                guard let remaining = metric.remaining else { continue }
+                used = limit - remaining
+            case .balance, .status, .value:
+                continue
+            }
             let percent = NSDecimalNumber(decimal: used)
                 .dividing(by: NSDecimalNumber(decimal: limit))
                 .multiplying(by: 100)
                 .doubleValue
             let dimension: UsageDimension
-            if metric.id == "fiveHour" || metric.label.contains("5 小时") {
+            if metric.id == "fiveHour" || metric.id == "five-hour" {
                 dimension = .fiveHour
-            } else if metric.id == "weekly" || metric.label.contains("周") {
+            } else if metric.id == "weekly" {
                 dimension = .weekly
             } else {
                 dimension = .token
@@ -210,12 +221,13 @@ final class AlertEvaluator: @unchecked Sendable {
 
         if let thresholdText = key.metadata["balanceWarningThreshold"],
            let threshold = Decimal(string: thresholdText),
-           let balance = snapshot.metrics.first(where: { $0.presentation == .balance })?.value {
+           let balanceMetric = snapshot.metrics.first(where: { $0.semantic == .balance }),
+           let balance = balanceMetric.value {
             alerts += evaluateBalance(
                 key: key,
                 balance: balance,
                 threshold: threshold,
-                currencyCode: snapshot.metrics.first(where: { $0.presentation == .balance })?.currencyCode,
+                currencyCode: balanceMetric.currencyCode,
                 triggeredWindows: &triggeredWindows
             )
         }

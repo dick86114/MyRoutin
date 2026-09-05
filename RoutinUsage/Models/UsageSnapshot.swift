@@ -86,7 +86,17 @@ struct NormalizedUsageMetric: Codable, Equatable, Sendable, Identifiable {
 
     var displayedPercent: Double? {
         guard let limit, limit > 0 else { return nil }
-        let amount = label.contains("剩余") ? (remaining ?? 0) : (used ?? 0)
+        let amount: Decimal
+        switch semantic {
+        case .usedQuota:
+            guard let used else { return nil }
+            amount = used
+        case .remainingQuota:
+            guard let remaining else { return nil }
+            amount = remaining
+        case .balance, .status, .value:
+            return nil
+        }
         return NSDecimalNumber(decimal: amount)
             .dividing(by: NSDecimalNumber(decimal: limit))
             .multiplying(by: 100)
@@ -94,7 +104,7 @@ struct NormalizedUsageMetric: Codable, Equatable, Sendable, Identifiable {
     }
 
     var displaysRemainingPercent: Bool {
-        label.contains("剩余")
+        semantic == .remainingQuota
     }
 
     init(

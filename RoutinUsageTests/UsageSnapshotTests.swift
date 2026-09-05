@@ -84,4 +84,36 @@ final class UsageSnapshotTests: XCTestCase {
 
         XCTAssertEqual(decoded.semantic, .remainingQuota)
     }
+
+    func test剩余额度语义优先于不含剩余的标签展示百分比() {
+        let metric = NormalizedUsageMetric(
+            id: "quota",
+            label: "本期用量",
+            used: 20,
+            limit: 100,
+            remaining: 80,
+            unit: .token,
+            presentation: .progress,
+            semantic: .remainingQuota
+        )
+
+        XCTAssertEqual(metric.displayedPercent, 80)
+        XCTAssertTrue(metric.displaysRemainingPercent)
+    }
+
+    func test已用额度语义优先于包含剩余的标签展示百分比() {
+        let metric = NormalizedUsageMetric(
+            id: "quota",
+            label: "剩余额度",
+            used: 20,
+            limit: 100,
+            remaining: 80,
+            unit: .token,
+            presentation: .progress,
+            semantic: .usedQuota
+        )
+
+        XCTAssertEqual(metric.displayedPercent, 20)
+        XCTAssertFalse(metric.displaysRemainingPercent)
+    }
 }

@@ -15,7 +15,10 @@ struct MenuBarIndicatorModel: Equatable, Sendable {
         descriptor: ProviderDescriptor,
         dimension: DisplayDimension
     ) -> Self {
-        if let metric = state.snapshot?.metrics.first(where: { $0.presentation == .progress }),
+        if let metric = state.snapshot?.metrics.first(where: {
+            $0.presentation == .progress
+                && ($0.semantic == .usedQuota || $0.semantic == .remainingQuota)
+        }),
            let percent = metric.displayedPercent {
             return Self(
                 shortCode: descriptor.shortCode,
@@ -27,7 +30,7 @@ struct MenuBarIndicatorModel: Equatable, Sendable {
             )
         }
 
-        if let metric = state.snapshot?.metrics.first(where: { $0.presentation == .balance }) {
+        if let metric = state.snapshot?.metrics.first(where: { $0.semantic == .balance }) {
             let value = metric.value.map { NSDecimalNumber(decimal: $0).stringValue } ?? "未知"
             return Self(
                 shortCode: descriptor.shortCode,
@@ -37,7 +40,7 @@ struct MenuBarIndicatorModel: Equatable, Sendable {
             )
         }
 
-        if let metric = state.snapshot?.metrics.first(where: { $0.presentation == .status }) {
+        if let metric = state.snapshot?.metrics.first(where: { $0.semantic == .status }) {
             return Self(
                 shortCode: descriptor.shortCode,
                 percent: nil,
