@@ -6,6 +6,8 @@ final class AppSettings {
     static let allowedRefreshMinutes = [1, 5, 15, 30]
 
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private var credentialUsagePreferences: [String: CredentialUsagePreferences]
+    @ObservationIgnored private var migratedUsagePreferenceIDs: Set<String>
 
     var refreshMinutes: Int {
         didSet {
@@ -81,6 +83,52 @@ final class AppSettings {
         displayOrder = displayOrder.removingCredential(id)
     }
 
+    func usagePreferences(for id: UUID) -> CredentialUsagePreferences {
+        credentialUsagePreferences[id.uuidString] ?? .defaultValue
+    }
+
+    func storedUsagePreferences(for id: UUID) -> CredentialUsagePreferences? {
+        credentialUsagePreferences[id.uuidString]
+    }
+
+    func setUsagePreferences(_ preferences: CredentialUsagePreferences, for id: UUID) {
+        credentialUsagePreferences[id.uuidString] = preferences
+        persistCredentialUsagePreferences()
+    }
+
+    func removeUsagePreferences(for id: UUID) {
+        credentialUsagePreferences.removeValue(forKey: id.uuidString)
+        persistCredentialUsagePreferences()
+    }
+
+    func migrateUsagePreferencesIfNeeded(
+        for configuration: KeyConfiguration,
+        metrics: [NormalizedUsageMetric],
+        capabilities: [UsageMetricCapability]
+    ) {
+        let id = configuration.id
+        guard storedUsagePreferences(for: id) == nil,
+              !migratedUsagePreferenceIDs.contains(id.uuidString)
+        else { return }
+
+        var preferences = CredentialUsagePreferences.defaultValue
+        preferences.menuBarMetricID = legacyMenuBarMetricID(
+            for: displayDimension,
+            metrics: metrics,
+            capabilities: capabilities
+        )
+        preferences = MetricAlertRuleResolver.reconcile(
+            existing: preferences,
+            metrics: metrics,
+            capabilities: capabilities,
+            legacyThresholds: thresholds
+        )
+        setUsagePreferences(preferences, for: id)
+
+        migratedUsagePreferenceIDs.insert(id.uuidString)
+        persistMigratedUsagePreferenceIDs()
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
@@ -122,6 +170,19 @@ final class AppSettings {
         } else {
             displayOrder = CredentialDisplayOrder()
         }
+
+        if let data = defaults.data(forKey: Self.credentialUsagePreferencesKey),
+           let decoded = try? JSONDecoder().decode(
+               [String: CredentialUsagePreferences].self,
+               from: data
+           ) {
+            credentialUsagePreferences = decoded
+        } else {
+            credentialUsagePreferences = [:]
+        }
+
+        let storedMigratedIDs = defaults.stringArray(forKey: Self.migratedUsagePreferenceIDsKey) ?? []
+        migratedUsagePreferenceIDs = Set(storedMigratedIDs)
     }
 }
 
@@ -139,10 +200,37 @@ private extension AppSettings {
     }
 
     static let displayOrderKey = "displayOrder.v1"
+    static let credentialUsagePreferencesKey = "credentialUsagePreferences.v1"
+    static let migratedUsagePreferenceIDsKey = "credentialUsagePreferencesMigratedCredentialIDs.v1"
 
     func persistDisplayOrder() {
         if let data = try? JSONEncoder().encode(displayOrder) {
             defaults.set(data, forKey: Self.displayOrderKey)
         }
+    }
+
+    func persistCredentialUsagePreferences() {
+        if let data = try? JSONEncoder().encode(credentialUsagePreferences) {
+            defaults.set(data, forKey: Self.credentialUsagePreferencesKey)
+        }
+    }
+
+    private func legacyMenuBarMetricID(
+        for dimension: DisplayDimension,
+        metrics: [NormalizedUsageMetric],
+        capabilities: [UsageMetricCapability]
+    ) -> String? {
+        let acceptedIDs = Set(metrics.map(\.id) + capabilities.map(\.metricID))
+        let primaryID = dimension == .fiveHour ? "fiveHour" : "weekly"
+        if acceptedIDs.contains(primaryID) {
+            return primaryID
+        }
+
+        let alternateID = dimension == .fiveHour ? "five-hour" : "weekly"
+        return acceptedIDs.contains(alternateID) ? alternateID : nil
+    }
+
+    private func persistMigratedUsagePreferenceIDs() {
+        defaults.set(Array(migratedUsagePreferenceIDs), forKey: Self.migratedUsagePreferenceIDsKey)
     }
 }

@@ -3,6 +3,16 @@ import XCTest
 
 @MainActor
 final class CredentialManagementViewTests: XCTestCase {
+    func test凭证卡片提供独立提醒设置入口() throws {
+        let source = try TestSourceReader.read([
+            "RoutinUsage", "Views", "Settings", "CredentialManagementView.swift"
+        ])
+
+        XCTAssertTrue(source.contains("bell.badge"))
+        XCTAssertTrue(source.contains("提醒设置"))
+        XCTAssertTrue(source.contains("CredentialAlertSettingsView"))
+    }
+
     func test过滤状态供应商和搜索组合只保留匹配凭证() throws {
         let context = CredentialManagementTestContext()
         defer { context.cleanUp() }
@@ -89,6 +99,14 @@ final class CredentialManagementViewTests: XCTestCase {
         let key = try context.addCredential(name: "待删除", providerID: .routin)
         context.settings.displayOrder.menuBarCredentialIDs = [key.id]
         context.settings.displayOrder.popoverCredentialIDs = [key.id]
+        context.settings.setUsagePreferences(
+            CredentialUsagePreferences(
+                menuBarMetricID: "weekly",
+                notificationsEnabled: true,
+                alertRules: []
+            ),
+            for: key.id
+        )
         let model = context.makeModel()
         model.pendingDeletion = key
 
@@ -98,6 +116,7 @@ final class CredentialManagementViewTests: XCTestCase {
         XCTAssertEqual(context.store.orderedKeyIDs, [])
         XCTAssertEqual(context.settings.displayOrder.menuBarCredentialIDs, [])
         XCTAssertEqual(context.settings.displayOrder.popoverCredentialIDs, [])
+        XCTAssertNil(context.settings.storedUsagePreferences(for: key.id))
         XCTAssertNil(model.operationNotice)
     }
 
@@ -107,6 +126,14 @@ final class CredentialManagementViewTests: XCTestCase {
         let key = try context.addCredential(name: "缓存失败", providerID: .routin)
         context.settings.displayOrder.menuBarCredentialIDs = [key.id]
         context.settings.displayOrder.popoverCredentialIDs = [key.id]
+        context.settings.setUsagePreferences(
+            CredentialUsagePreferences(
+                menuBarMetricID: "balance",
+                notificationsEnabled: false,
+                alertRules: []
+            ),
+            for: key.id
+        )
         let model = context.makeModel()
         model.pendingDeletion = key
 
@@ -116,6 +143,7 @@ final class CredentialManagementViewTests: XCTestCase {
         XCTAssertEqual(context.store.orderedKeyIDs, [])
         XCTAssertEqual(context.settings.displayOrder.menuBarCredentialIDs, [])
         XCTAssertEqual(context.settings.displayOrder.popoverCredentialIDs, [])
+        XCTAssertNil(context.settings.storedUsagePreferences(for: key.id))
         XCTAssertEqual(
             model.operationNotice,
             CredentialOperationNotice(

@@ -256,13 +256,12 @@ final class ProjectBootstrapTests: XCTestCase {
         XCTAssertTrue(source.contains(".windowResizability(.contentMinSize)"))
     }
 
-    func test设置与引导统一使用五小时产品文案() throws {
+    func test引导页统一使用五小时产品文案且设置页不再硬编码维度() throws {
         let settings = try sourceText(at: "RoutinUsage/Views/Settings/GeneralSettingsView.swift")
         let onboarding = try sourceText(at: "RoutinUsage/Views/OnboardingView.swift")
 
         XCTAssertFalse(settings.contains("五小时"))
         XCTAssertFalse(onboarding.contains("五小时"))
-        XCTAssertTrue(settings.contains("5 小时"))
         XCTAssertTrue(onboarding.contains("5 小时"))
     }
 
@@ -294,13 +293,13 @@ final class ProjectBootstrapTests: XCTestCase {
         XCTAssertTrue(onboarding.contains("添加第一个 Key"))
     }
 
-    func test设置页与菜单栏视图真实接入四种显示样式() throws {
+    func test菜单栏视图真实接入每凭证指标解析() throws {
         let statusBarController = try sourceText(at: "RoutinUsage/App/StatusBarController.swift")
 
-        XCTAssertTrue(statusBarController.contains("style: environment.settings.menuBarStyle"))
-        XCTAssertTrue(statusBarController.contains("MenuBarVerticalUsage.metric"))
-        XCTAssertTrue(statusBarController.contains("button.imagePosition = .imageRight"))
-        XCTAssertTrue(statusBarController.contains(".aliasLogoProgress, .logoProgress"))
+        XCTAssertTrue(statusBarController.contains("usagePreferences(for: id)"))
+        XCTAssertTrue(statusBarController.contains("MenuBarMetricResolver.resolve"))
+        XCTAssertTrue(statusBarController.contains("metric: resolution.metric"))
+        XCTAssertFalse(statusBarController.contains("settings.displayDimension"))
     }
 
     func test弹窗详情保留两个周期并显示完整重置时间() throws {
@@ -376,16 +375,11 @@ final class ProjectBootstrapTests: XCTestCase {
         XCTAssertTrue(onboarding.contains(".liquidGlassWindowBackground()"))
     }
 
-    func test菜单栏Logo进度样式提供辅助功能描述() throws {
+    func test菜单栏真实图标保留辅助功能描述() throws {
         let statusBarController = try sourceText(at: "RoutinUsage/App/StatusBarController.swift")
-        let menuBarStyle = try sourceText(at: "RoutinUsage/Models/MenuBarStyle.swift")
 
-        XCTAssertTrue(statusBarController.contains("MenuBarVerticalUsageIcon.image(percent: metric.percent)"))
-        XCTAssertTrue(statusBarController.contains("MenuBarLogoUsageIcon.image("))
+        XCTAssertTrue(statusBarController.contains("MenuBarMultiUsageIcon.image("))
         XCTAssertTrue(statusBarController.contains("appearance: button.effectiveAppearance"))
-        XCTAssertTrue(menuBarStyle.contains("case logoProgress"))
-        XCTAssertTrue(menuBarStyle.contains("case aliasLogoProgress"))
-        XCTAssertTrue(statusBarController.contains("let accessibilityText"))
         XCTAssertTrue(statusBarController.contains("button.setAccessibilityLabel"))
     }
 

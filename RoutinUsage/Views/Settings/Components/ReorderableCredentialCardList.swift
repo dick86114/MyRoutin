@@ -2,65 +2,55 @@ import SwiftUI
 
 private let reorderableCardCoordinateSpace = "ReorderableCredentialCardList"
 
-private struct CardFramePreferenceKey<ID: Hashable>: PreferenceKey {
-    typealias Value = [ID: CGRect]
-
-    static var defaultValue: [ID: CGRect] { [:] }
-
-    static func reduce(value: inout [ID: CGRect], nextValue: () -> [ID: CGRect]) {
-        value.merge(nextValue()) { current, _ in current }
-    }
-}
-
 struct ReorderableCredentialCardList<ID: Hashable, Card: View>: View {
     let ids: [ID]
-    let draggedID: ID?
     let itemHeight: CGFloat
     let itemSpacing: CGFloat
-    let move: (ID, ID) -> Bool
+    let move: (ID, Int) -> Bool
     @ViewBuilder let card: (ID) -> Card
 
-    @Binding var externalDraggedID: ID?
     @State private var activeID: ID?
-    @State private var startFrame: CGRect?
     @State private var startIndex: Int?
     @State private var currentIndex: Int?
     @State private var dragTranslation: CGFloat = .zero
-    @State private var frames: [ID: CGRect] = [:]
+    @State private var workingIDs: [ID] = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var step: CGFloat { itemHeight + itemSpacing }
 
+    private var displayedIDs: [ID] {
+        workingIDs.isEmpty ? ids : workingIDs
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: itemSpacing) {
-            ForEach(ids, id: \.self) { id in
+            ForEach(displayedIDs, id: \.self) { id in
                 card(id)
                     .frame(height: itemHeight)
-                    .background(
-                        GeometryReader { geometry in
-                            Color.clear.preference(
-                                key: CardFramePreferenceKey<ID>.self,
-                                value: [
-                                    id: geometry.frame(in: .named(reorderableCardCoordinateSpace)),
-                                ]
-                            )
-                        }
-                    )
                     .offset(y: dragOffset(for: id))
-                    .scaleEffect(activeID == id ? 1.02 : 1)
+                    .transaction { transaction in
+                        if activeID == id {
+                            transaction.animation = nil
+                        }
+                    }
+                    .scaleEffect(activeID == id ? 1.015 : 1)
                     .shadow(
-                        color: .black.opacity(activeID == id ? 0.18 : 0),
-                        radius: activeID == id ? 14 : 0,
-                        y: activeID == id ? 6 : 0
+                        color: .black.opacity(activeID == id ? 0.14 : 0),
+                        radius: activeID == id ? 10 : 0,
+                        y: activeID == id ? 4 : 0
                     )
                     .zIndex(activeID == id ? 10 : 0)
                     .contentShape(Rectangle())
-                    .gesture(dragGesture(for: id))
+                    .highPriorityGesture(dragGesture(for: id))
             }
         }
         .coordinateSpace(name: reorderableCardCoordinateSpace)
-        .onPreferenceChange(CardFramePreferenceKey<ID>.self) { value in
-            frames = value
+        .onAppear {
+            workingIDs = ids
+        }
+        .onChange(of: ids) { _, updatedIDs in
+            guard activeID == nil else { return }
+            workingIDs = updatedIDs
         }
     }
 
@@ -68,12 +58,14 @@ struct ReorderableCredentialCardList<ID: Hashable, Card: View>: View {
         DragGesture(minimumDistance: 5, coordinateSpace: .named(reorderableCardCoordinateSpace))
             .onChanged { value in
                 if activeID != id {
-                    guard activeID == nil else { return }
+                    guard activeID == nil,
+                          let index = displayedIDs.firstIndex(of: id)
+                    else { return }
+
+                    workingIDs = ids
                     activeID = id
-                    externalDraggedID = id
-                    startFrame = frames[id]
-                    startIndex = ids.firstIndex(of: id)
-                    currentIndex = startIndex
+                    startIndex = index
+                    currentIndex = index
                 }
 
                 guard activeID == id else { return }
@@ -81,36 +73,61 @@ struct ReorderableCredentialCardList<ID: Hashable, Card: View>: View {
                 updateTarget(for: id)
             }
             .onEnded { _ in
-                withAnimation(
-                    reduceMotion
-                        ? nil
-                        : .interactiveSpring(response: 0.28, dampingFraction: 0.84)
-                ) {
-                    activeID = nil
-                    externalDraggedID = nil
-                    startFrame = nil
-                    startIndex = nil
-                    currentIndex = nil
-                    dragTranslation = .zero
-                }
+                commitMove(for: id)
             }
     }
 
     private func updateTarget(for id: ID) {
-        guard let startFrame,
+        guard activeID == id,
               let startIndex,
               let currentIndex,
-              let firstFrame = ids.first.flatMap({ frames[$0] })
+              !workingIDs.isEmpty
         else { return }
 
-        let draggedCenter = startFrame.midY + dragTranslation
-        let relativePosition = draggedCenter - firstFrame.minY - itemHeight / 2
-        let targetIndex = max(0, min(ids.count - 1, Int(round(relativePosition / step))))
-        guard targetIndex != currentIndex, ids.indices.contains(targetIndex) else { return }
+        let targetIndex = max(
+            0,
+            min(workingIDs.count - 1, startIndex + Int(round(dragTranslation / step)))
+        )
+        guard targetIndex != currentIndex,
+              let sourceIndex = workingIDs.firstIndex(of: id)
+        else { return }
 
-        let targetID = ids[targetIndex]
-        if move(id, targetID) {
+        var updatedIDs = workingIDs
+        updatedIDs.remove(at: sourceIndex)
+        updatedIDs.insert(id, at: targetIndex)
+
+        withAnimation(
+            reduceMotion
+                ? nil
+                : .interactiveSpring(response: 0.18, dampingFraction: 0.9)
+        ) {
+            workingIDs = updatedIDs
             self.currentIndex = targetIndex
+        }
+    }
+
+    private func commitMove(for id: ID) {
+        let destinationIndex = currentIndex
+        let didMove = if let startIndex,
+                         let destinationIndex,
+                         destinationIndex != startIndex {
+            move(id, destinationIndex)
+        } else {
+            true
+        }
+
+        withAnimation(
+            reduceMotion
+                ? nil
+                : .interactiveSpring(response: 0.2, dampingFraction: 0.92)
+        ) {
+            if !didMove {
+                workingIDs = ids
+            }
+            activeID = nil
+            startIndex = nil
+            currentIndex = nil
+            dragTranslation = .zero
         }
     }
 
@@ -120,6 +137,6 @@ struct ReorderableCredentialCardList<ID: Hashable, Card: View>: View {
               let currentIndex
         else { return 0 }
 
-        return dragTranslation - CGFloat((currentIndex - startIndex) * Int(step))
+        return dragTranslation - CGFloat(currentIndex - startIndex) * step
     }
 }

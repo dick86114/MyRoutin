@@ -11,6 +11,34 @@ struct DeepSeekUsageProvider: UsageProvider {
         self.descriptor = ProviderRegistry.builtInDescriptors.first(where: { $0.id == .deepseek })!
     }
 
+    func metricCapabilities(for configuration: KeyConfiguration) -> [UsageMetricCapability] {
+        guard configuration.credentialKind == .apiKey else { return [] }
+        let warningThreshold = configuration.metadata["balanceWarningThreshold"]
+            .flatMap { Decimal(string: $0) }
+        return [
+            UsageMetricCapability(
+                metricID: "balance",
+                label: "余额",
+                presentation: .balance,
+                semantic: .balance,
+                isMenuBarSelectable: true,
+                menuBarPriority: 0,
+                defaultAlertEnabled: true,
+                defaultAbsoluteAlertThreshold: warningThreshold
+            ),
+            UsageMetricCapability(
+                metricID: "availability",
+                label: "账户状态",
+                presentation: .status,
+                semantic: .status,
+                isMenuBarSelectable: false,
+                menuBarPriority: nil,
+                defaultAlertEnabled: false,
+                defaultAbsoluteAlertThreshold: nil
+            )
+        ]
+    }
+
     func validate(_ credential: ProviderCredential, now: Date) async throws -> UsageSnapshot? {
         try await fetchUsage(credential, now: now)
     }
@@ -90,6 +118,7 @@ struct DeepSeekUsageProvider: UsageProvider {
                         value: total,
                         unit: .currency,
                         presentation: .balance,
+                        semantic: .balance,
                         currencyCode: currency,
                         healthState: health
                     ),
@@ -99,6 +128,7 @@ struct DeepSeekUsageProvider: UsageProvider {
                         value: granted,
                         unit: .currency,
                         presentation: .value,
+                        semantic: .value,
                         currencyCode: currency,
                         healthState: health
                     ),
@@ -108,6 +138,7 @@ struct DeepSeekUsageProvider: UsageProvider {
                         value: toppedUp,
                         unit: .currency,
                         presentation: .value,
+                        semantic: .value,
                         currencyCode: currency,
                         healthState: health
                     ),
@@ -117,6 +148,7 @@ struct DeepSeekUsageProvider: UsageProvider {
                         value: payload.isAvailable ? 1 : 0,
                         unit: .boolean,
                         presentation: .status,
+                        semantic: .status,
                         healthState: payload.isAvailable ? health : .unavailable
                     )
                 ]

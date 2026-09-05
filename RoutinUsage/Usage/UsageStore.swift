@@ -76,8 +76,11 @@ final class UsageStore {
     @ObservationIgnored private let notificationSender: any NotificationSending
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var refreshMinutes: Int
-    @ObservationIgnored private var thresholds: AlertThresholds
     @ObservationIgnored private var notificationsEnabled: Bool
+    @ObservationIgnored private let usagePreferencesProvider: @MainActor @Sendable (UUID) -> CredentialUsagePreferences
+    @ObservationIgnored private let setUsagePreferencesHandler: @MainActor @Sendable (CredentialUsagePreferences, UUID) -> Void
+    @ObservationIgnored private let metricCapabilitiesProvider: @MainActor @Sendable (KeyConfiguration) -> [UsageMetricCapability]
+    @ObservationIgnored private let legacyReconcileThresholds: AlertThresholds
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private var refreshingKeyIDs: Set<UUID> = []
     @ObservationIgnored private var refreshGenerationByKeyID: [UUID: UUID] = [:]
@@ -94,6 +97,9 @@ final class UsageStore {
         refreshMinutes: Int = 5,
         thresholds: AlertThresholds = AlertThresholds(),
         notificationsEnabled: Bool = true,
+        usagePreferencesProvider: @escaping @MainActor @Sendable (UUID) -> CredentialUsagePreferences = { _ in .defaultValue },
+        setUsagePreferencesHandler: @escaping @MainActor @Sendable (CredentialUsagePreferences, UUID) -> Void = { _, _ in },
+        metricCapabilitiesProvider: @escaping @MainActor @Sendable (KeyConfiguration) -> [UsageMetricCapability] = { _ in [] },
         providerRegistry: ProviderRegistry? = nil,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
@@ -106,8 +112,11 @@ final class UsageStore {
         self.notificationSender = notificationSender
         self.defaults = defaults
         self.refreshMinutes = refreshMinutes
-        self.thresholds = thresholds
+        self.legacyReconcileThresholds = thresholds
         self.notificationsEnabled = notificationsEnabled
+        self.usagePreferencesProvider = usagePreferencesProvider
+        self.setUsagePreferencesHandler = setUsagePreferencesHandler
+        self.metricCapabilitiesProvider = metricCapabilitiesProvider
         self.now = now
 
         restoreState()
@@ -141,8 +150,17 @@ final class UsageStore {
         thresholds: AlertThresholds,
         notificationsEnabled: Bool
     ) {
+        updateSettings(
+            refreshMinutes: refreshMinutes,
+            notificationsEnabled: notificationsEnabled
+        )
+    }
+
+    func updateSettings(
+        refreshMinutes: Int,
+        notificationsEnabled: Bool
+    ) {
         self.refreshMinutes = refreshMinutes
-        self.thresholds = thresholds
         self.notificationsEnabled = notificationsEnabled
         let currentTime = now()
         for keyID in states.keys {
@@ -184,11 +202,20 @@ final class UsageStore {
 
         if let snapshot {
             try? cache.save(snapshot, for: keyID)
+            var preferences = usagePreferencesProvider(keyID)
+            preferences = MetricAlertRuleResolver.reconcile(
+                existing: preferences,
+                metrics: snapshot.normalizedMetrics,
+                capabilities: metricCapabilitiesProvider(state.configuration),
+                legacyThresholds: legacyReconcileThresholds
+            )
+            setUsagePreferencesHandler(preferences, keyID)
             scheduleNotification(NotificationWork(
                 keyID: keyID,
                 refreshGeneration: refreshGenerationByKeyID[keyID]!,
                 configuration: state.configuration,
-                snapshot: snapshot
+                snapshot: snapshot,
+                usagePreferences: preferences
             ))
         } else {
             try? cache.delete(for: keyID)
@@ -253,11 +280,20 @@ final class UsageStore {
             try? cache.save(result, for: configuration.id)
             let refreshGeneration = UUID()
             refreshGenerationByKeyID[configuration.id] = refreshGeneration
+            var preferences = usagePreferencesProvider(configuration.id)
+            preferences = MetricAlertRuleResolver.reconcile(
+                existing: preferences,
+                metrics: result.normalizedMetrics,
+                capabilities: metricCapabilitiesProvider(configuration),
+                legacyThresholds: legacyReconcileThresholds
+            )
+            setUsagePreferencesHandler(preferences, configuration.id)
             scheduleNotification(NotificationWork(
                 keyID: configuration.id,
                 refreshGeneration: refreshGeneration,
                 configuration: configuration,
-                snapshot: result
+                snapshot: result,
+                usagePreferences: preferences
             ))
         } else {
             try? cache.delete(for: configuration.id)
@@ -514,11 +550,20 @@ final class UsageStore {
             states[outcome.keyID] = state
             if let snapshot {
                 try? cache.save(snapshot, for: outcome.keyID)
+                var preferences = usagePreferencesProvider(outcome.keyID)
+                preferences = MetricAlertRuleResolver.reconcile(
+                    existing: preferences,
+                    metrics: snapshot.normalizedMetrics,
+                    capabilities: metricCapabilitiesProvider(state.configuration),
+                    legacyThresholds: .init()
+                )
+                setUsagePreferencesHandler(preferences, outcome.keyID)
                 return NotificationWork(
                     keyID: outcome.keyID,
                     refreshGeneration: outcome.refreshGeneration,
                     configuration: state.configuration,
-                    snapshot: snapshot
+                    snapshot: snapshot,
+                    usagePreferences: preferences
                 )
             } else {
                 try? cache.delete(for: outcome.keyID)
@@ -575,7 +620,6 @@ final class UsageStore {
 
     private func scheduleNotification(_ work: NotificationWork) {
         let manager = AlertManager(evaluator: alertEvaluator, sender: notificationSender)
-        let thresholds = thresholds
         let notificationsEnabled = notificationsEnabled
         Task { [weak self] in
             guard let self, self.isNotificationWorkCurrent(work) else {
@@ -584,8 +628,8 @@ final class UsageStore {
             _ = try? await manager.evaluateAndNotify(
                 key: work.configuration,
                 snapshot: work.snapshot,
-                thresholds: thresholds,
-                notificationsEnabled: notificationsEnabled,
+                preferences: work.usagePreferences,
+                applicationNotificationsEnabled: notificationsEnabled,
                 shouldDeliver: { [weak self] in
                     guard let self else {
                         return false
@@ -688,6 +732,7 @@ private struct NotificationWork: Sendable {
     let refreshGeneration: UUID
     let configuration: KeyConfiguration
     let snapshot: UsageSnapshot
+    let usagePreferences: CredentialUsagePreferences
 }
 
 private struct CredentialFingerprint: Equatable, Sendable {

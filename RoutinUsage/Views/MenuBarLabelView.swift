@@ -13,9 +13,9 @@ struct MenuBarIndicatorModel: Equatable, Sendable {
     static func make(
         state: KeyUsageState,
         descriptor: ProviderDescriptor,
-        dimension: DisplayDimension
+        metric: NormalizedUsageMetric?
     ) -> Self {
-        if let metric = state.snapshot?.metrics.first(where: { $0.presentation == .progress }),
+        if let metric, metric.semantic == .usedQuota || metric.semantic == .remainingQuota,
            let percent = metric.displayedPercent {
             return Self(
                 shortCode: descriptor.shortCode,
@@ -27,7 +27,7 @@ struct MenuBarIndicatorModel: Equatable, Sendable {
             )
         }
 
-        if let metric = state.snapshot?.metrics.first(where: { $0.presentation == .balance }) {
+        if let metric, metric.semantic == .balance {
             let value = metric.value.map { NSDecimalNumber(decimal: $0).stringValue } ?? "未知"
             return Self(
                 shortCode: descriptor.shortCode,
@@ -37,22 +37,12 @@ struct MenuBarIndicatorModel: Equatable, Sendable {
             )
         }
 
-        if let metric = state.snapshot?.metrics.first(where: { $0.presentation == .status }) {
+        if let metric, metric.semantic == .status {
             return Self(
                 shortCode: descriptor.shortCode,
                 percent: nil,
                 healthState: metric.healthState,
                 accessibilityLabel: "\(descriptor.displayName)，\(state.configuration.displayName)，账户状态"
-            )
-        }
-
-        if let snapshot = state.snapshot,
-           let metric = UsageFormatter.metric(in: snapshot, dimension: dimension) {
-            return Self(
-                shortCode: descriptor.shortCode,
-                percent: metric.percent,
-                healthState: MenuBarUsageRisk.healthState(for: metric.percent),
-                accessibilityLabel: "\(descriptor.displayName)，\(state.configuration.displayName)，已使用 \(Int(metric.percent.rounded()))%"
             )
         }
 

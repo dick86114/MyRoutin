@@ -2,8 +2,13 @@ import Foundation
 
 protocol UsageProvider: Sendable {
     var descriptor: ProviderDescriptor { get }
+    func metricCapabilities(for configuration: KeyConfiguration) -> [UsageMetricCapability]
     func validate(_ credential: ProviderCredential, now: Date) async throws -> UsageSnapshot?
     func fetchUsage(_ credential: ProviderCredential, now: Date) async throws -> UsageSnapshot?
+}
+
+extension UsageProvider {
+    func metricCapabilities(for configuration: KeyConfiguration) -> [UsageMetricCapability] { [] }
 }
 
 enum UsageProviderError: LocalizedError, Equatable, Sendable {
@@ -47,6 +52,10 @@ struct ProviderRegistry: Sendable {
 
     func provider(for id: ProviderID) -> (any UsageProvider)? {
         providers[id]
+    }
+
+    func metricCapabilities(for configuration: KeyConfiguration) -> [UsageMetricCapability] {
+        provider(for: configuration.providerID)?.metricCapabilities(for: configuration) ?? []
     }
 
     static let builtInDescriptors: [ProviderDescriptor] = [

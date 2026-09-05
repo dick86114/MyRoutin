@@ -29,6 +29,14 @@ enum NormalizedUsageMetricPresentation: String, Codable, Equatable, Sendable {
     case value
 }
 
+enum NormalizedUsageMetricSemantic: String, Codable, Equatable, Sendable {
+    case usedQuota
+    case remainingQuota
+    case balance
+    case status
+    case value
+}
+
 enum UsageMetricUnit: String, Codable, Equatable, Sendable {
     case token
     case currency
@@ -72,12 +80,23 @@ struct NormalizedUsageMetric: Codable, Equatable, Sendable, Identifiable {
     let windowStart: Date?
     let windowEnd: Date?
     let presentation: NormalizedUsageMetricPresentation
+    let semantic: NormalizedUsageMetricSemantic
     let currencyCode: String?
     let healthState: UsageMetricHealthState
 
     var displayedPercent: Double? {
         guard let limit, limit > 0 else { return nil }
-        let amount = label.contains("剩余") ? (remaining ?? 0) : (used ?? 0)
+        let amount: Decimal
+        switch semantic {
+        case .usedQuota:
+            guard let used else { return nil }
+            amount = used
+        case .remainingQuota:
+            guard let remaining else { return nil }
+            amount = remaining
+        case .balance, .status, .value:
+            return nil
+        }
         return NSDecimalNumber(decimal: amount)
             .dividing(by: NSDecimalNumber(decimal: limit))
             .multiplying(by: 100)
@@ -85,7 +104,7 @@ struct NormalizedUsageMetric: Codable, Equatable, Sendable, Identifiable {
     }
 
     var displaysRemainingPercent: Bool {
-        label.contains("剩余")
+        semantic == .remainingQuota
     }
 
     init(
@@ -99,6 +118,7 @@ struct NormalizedUsageMetric: Codable, Equatable, Sendable, Identifiable {
         windowStart: Date? = nil,
         windowEnd: Date? = nil,
         presentation: NormalizedUsageMetricPresentation,
+        semantic: NormalizedUsageMetricSemantic,
         currencyCode: String? = nil,
         healthState: UsageMetricHealthState = .unknown
     ) {
@@ -112,6 +132,7 @@ struct NormalizedUsageMetric: Codable, Equatable, Sendable, Identifiable {
         self.windowStart = windowStart
         self.windowEnd = windowEnd
         self.presentation = presentation
+        self.semantic = semantic
         self.currencyCode = currencyCode
         self.healthState = healthState
     }
@@ -128,9 +149,64 @@ struct NormalizedUsageMetric: Codable, Equatable, Sendable, Identifiable {
             windowStart: windowStart,
             windowEnd: windowEnd,
             presentation: presentation,
+            semantic: semantic,
             currencyCode: currencyCode,
             healthState: healthState
         )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case label
+        case used
+        case limit
+        case remaining
+        case value
+        case unit
+        case windowStart
+        case windowEnd
+        case presentation
+        case semantic
+        case currencyCode
+        case healthState
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let id = try container.decode(String.self, forKey: .id)
+        let label = try container.decode(String.self, forKey: .label)
+        let presentation = try container.decode(NormalizedUsageMetricPresentation.self, forKey: .presentation)
+
+        self.id = id
+        self.label = label
+        used = try container.decodeIfPresent(Decimal.self, forKey: .used)
+        limit = try container.decodeIfPresent(Decimal.self, forKey: .limit)
+        remaining = try container.decodeIfPresent(Decimal.self, forKey: .remaining)
+        value = try container.decodeIfPresent(Decimal.self, forKey: .value)
+        unit = try container.decode(UsageMetricUnit.self, forKey: .unit)
+        windowStart = try container.decodeIfPresent(Date.self, forKey: .windowStart)
+        windowEnd = try container.decodeIfPresent(Date.self, forKey: .windowEnd)
+        self.presentation = presentation
+        semantic = try container.decodeIfPresent(NormalizedUsageMetricSemantic.self, forKey: .semantic)
+            ?? Self.legacySemantic(id: id, label: label, presentation: presentation)
+        currencyCode = try container.decodeIfPresent(String.self, forKey: .currencyCode)
+        healthState = try container.decodeIfPresent(UsageMetricHealthState.self, forKey: .healthState) ?? .unknown
+    }
+
+    private static func legacySemantic(
+        id: String,
+        label: String,
+        presentation: NormalizedUsageMetricPresentation
+    ) -> NormalizedUsageMetricSemantic {
+        switch presentation {
+        case .balance: return .balance
+        case .status: return .status
+        case .value: return .value
+        case .progress:
+            return id.localizedCaseInsensitiveContains("remaining") || label.contains("剩余")
+                ? .remainingQuota
+                : .usedQuota
+        }
     }
 }
 
@@ -185,6 +261,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
                 unit: fiveHour.unit == .token ? .token : .currency,
                 windowEnd: fiveHour.windowEnd,
                 presentation: .progress,
+                semantic: .usedQuota,
                 currencyCode: fiveHour.unit == .usd ? "USD" : nil
             ))
         }
@@ -198,6 +275,7 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
                 unit: weekly.unit == .token ? .token : .currency,
                 windowEnd: weekly.windowEnd,
                 presentation: .progress,
+                semantic: .usedQuota,
                 currencyCode: weekly.unit == .usd ? "USD" : nil
             ))
         }
@@ -209,7 +287,8 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
                 limit: token.limit,
                 remaining: token.remaining,
                 unit: .token,
-                presentation: .progress
+                presentation: .progress,
+                semantic: .usedQuota
             ))
         }
         return result

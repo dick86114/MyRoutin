@@ -373,6 +373,38 @@ final class UsageStoreTests: XCTestCase {
         await refresh.value
     }
 
+    func test刷新成功时生成默认规则并按规则发送通知() async throws {
+        let context = try makeContext()
+        defer { context.cleanUp() }
+        let key = try context.addKey(name: "主账号", secret: "plan-rules-0001")
+        let snapshot = makeSnapshot(planName: "高用量", percent: 96, fetchedAt: context.now)
+        let fetcher = ScriptedUsageFetcher(responses: [
+            "plan-rules-0001": .success(snapshot)
+        ])
+        let storedPreferences = UsagePreferenceStore()
+        let store = context.makeStore(
+            fetcher: fetcher,
+            notificationsEnabled: true,
+            usagePreferences: { _ in .defaultValue },
+            setUsagePreferences: { preferences, keyID in
+                storedPreferences.preferences[keyID] = preferences
+            },
+            metricCapabilities: { _ in [] }
+        )
+
+        await store.refreshAll()
+
+        _ = await waitUntilAsync {
+            await !(context.sender.sentAlerts().isEmpty)
+        }
+        let alerts = await context.sender.sentAlerts()
+        XCTAssertEqual(alerts.first?.metricID, "token")
+        XCTAssertEqual(alerts.first?.level, .high)
+        let preferences = try XCTUnwrap(storedPreferences.preferences[key.id])
+        XCTAssertTrue(preferences.notificationsEnabled)
+        XCTAssertTrue(preferences.alertRules.contains { $0.metricID == "token" })
+    }
+
     func test刷新全部提交状态后不等待通知授权完成() async throws {
         let context = try makeContext()
         defer { context.cleanUp() }
@@ -528,7 +560,7 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertTrue(context.evaluator.evaluate(
             key: key,
             snapshot: snapshot,
-            thresholds: .init()
+            rules: context.evaluationRules
         ).isEmpty)
 
         try store.deleteKey(key.id)
@@ -538,7 +570,7 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertNil(try context.cache.load(for: key.id))
         XCTAssertNil(store.state(for: key.id))
         XCTAssertEqual(
-            context.evaluator.evaluate(key: key, snapshot: snapshot, thresholds: .init()).map(\.level),
+            context.evaluator.evaluate(key: key, snapshot: snapshot, rules: context.evaluationRules).map(\.level),
             [.high]
         )
     }
@@ -754,6 +786,14 @@ private struct UsageStoreTestContext {
     let evaluator: AlertEvaluator
     let sender: NotificationSenderFake
     let now: Date
+    let evaluationRules = [
+        MetricAlertRule.usedPercent(
+            metricID: "token",
+            isEnabled: true,
+            low: 80,
+            high: 95
+        )
+    ]
 
     func addKey(name: String, secret: String) throws -> KeyConfiguration {
         try repository.add(name: name, secret: secret)
@@ -765,7 +805,10 @@ private struct UsageStoreTestContext {
         cache customCache: (any UsageCaching)? = nil,
         notificationSender: (any NotificationSending)? = nil,
         refreshMinutes: Int = 5,
-        notificationsEnabled: Bool = false
+        notificationsEnabled: Bool = false,
+        usagePreferences: @escaping @MainActor @Sendable (UUID) -> CredentialUsagePreferences = { _ in .defaultValue },
+        setUsagePreferences: @escaping @MainActor @Sendable (CredentialUsagePreferences, UUID) -> Void = { _, _ in },
+        metricCapabilities: @escaping @MainActor @Sendable (KeyConfiguration) -> [UsageMetricCapability] = { _ in [] }
     ) -> UsageStore {
         let currentTime = now
         return UsageStore(
@@ -778,6 +821,9 @@ private struct UsageStoreTestContext {
             defaults: defaults,
             refreshMinutes: refreshMinutes,
             notificationsEnabled: notificationsEnabled,
+            usagePreferencesProvider: usagePreferences,
+            setUsagePreferencesHandler: setUsagePreferences,
+            metricCapabilitiesProvider: metricCapabilities,
             now: { currentTime }
         )
     }
@@ -785,6 +831,10 @@ private struct UsageStoreTestContext {
     func cleanUp() {
         defaults.removePersistentDomain(forName: suiteName)
     }
+}
+
+final class UsagePreferenceStore {
+    var preferences: [UUID: CredentialUsagePreferences] = [:]
 }
 
 private final class StoreKeychainFake: LocalKeyStoring, @unchecked Sendable {

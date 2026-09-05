@@ -71,6 +71,7 @@ final class UsageMapperTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(result.fiveHour).percent, 68, accuracy: 0.001)
         XCTAssertEqual(try XCTUnwrap(result.weekly).percent, 42, accuracy: 0.001)
         XCTAssertEqual(result.fiveHour?.windowEnd, Date(timeIntervalSince1970: 1_786_370_400))
+        XCTAssertEqual(result.metrics.map(\.semantic), [.usedQuota, .usedQuota])
     }
 
     func test资源包映射总Token使用率() throws {

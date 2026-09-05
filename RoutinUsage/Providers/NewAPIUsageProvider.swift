@@ -9,6 +9,35 @@ struct NewAPIUsageProvider: UsageProvider {
         self.descriptor = ProviderRegistry.builtInDescriptors.first(where: { $0.id == .newAPI })!
     }
 
+    func metricCapabilities(for configuration: KeyConfiguration) -> [UsageMetricCapability] {
+        guard configuration.credentialKind == .bearerAPIKey else { return [] }
+        let warningThreshold = configuration.metadata["balanceWarningThreshold"]
+            .flatMap { Decimal(string: $0) }
+        return [
+            UsageMetricCapability(
+                metricID: "quota-progress",
+                label: "账户额度",
+                presentation: .progress,
+                semantic: .usedQuota,
+                isMenuBarSelectable: true,
+                menuBarPriority: 0,
+                defaultAlertEnabled: true,
+                defaultAbsoluteAlertThreshold: warningThreshold
+            ),
+            Self.valueCapability(metricID: "today-token", label: "今日 Token"),
+            Self.valueCapability(metricID: "one-day-token", label: "近 24 小时 Token"),
+            Self.valueCapability(metricID: "seven-day-token", label: "近 7 天 Token"),
+            Self.valueCapability(metricID: "thirty-day-token", label: "近 30 天 Token"),
+            Self.valueCapability(metricID: "today-token-cost", label: "今日消费"),
+            Self.valueCapability(metricID: "one-day-token-cost", label: "近 24 小时消费"),
+            Self.valueCapability(metricID: "seven-day-token-cost", label: "近 7 天消费"),
+            Self.valueCapability(metricID: "thirty-day-token-cost", label: "近 30 天消费"),
+            Self.valueCapability(metricID: "rpm", label: "近 60 秒 RPM"),
+            Self.valueCapability(metricID: "tpm", label: "近 60 秒 TPM"),
+            Self.valueCapability(metricID: "request-count", label: "账户累计请求")
+        ]
+    }
+
     func validate(_ credential: ProviderCredential, now: Date) async throws -> UsageSnapshot? {
         try await fetchUsage(credential, now: now)
     }
@@ -128,6 +157,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     remaining: convertedRemaining,
                     unit: .currency,
                     presentation: .progress,
+                    semantic: .usedQuota,
                     currencyCode: displayUnit.symbol,
                     healthState: health
                 ),
@@ -137,6 +167,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Decimal(todaySummary.tokenUsed ?? 0),
                     unit: .token,
                     presentation: .value,
+                    semantic: .value,
                     healthState: .normal
                 ),
                 NormalizedUsageMetric(
@@ -145,6 +176,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Decimal(oneDaySummary.tokenUsed ?? 0),
                     unit: .token,
                     presentation: .value,
+                    semantic: .value,
                     healthState: .normal
                 ),
                 NormalizedUsageMetric(
@@ -153,6 +185,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Decimal(sevenDaySummary.tokenUsed ?? 0),
                     unit: .token,
                     presentation: .value,
+                    semantic: .value,
                     healthState: .normal
                 ),
                 NormalizedUsageMetric(
@@ -161,6 +194,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Decimal(thirtyDaySummary.tokenUsed ?? 0),
                     unit: .token,
                     presentation: .value,
+                    semantic: .value,
                     healthState: .normal
                 ),
                 NormalizedUsageMetric(
@@ -169,6 +203,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Self.convert(Decimal(todaySummary.quota ?? 0), using: displayUnit),
                     unit: .currency,
                     presentation: .value,
+                    semantic: .value,
                     currencyCode: displayUnit.symbol,
                     healthState: .normal
                 ),
@@ -178,6 +213,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Self.convert(Decimal(oneDaySummary.quota ?? 0), using: displayUnit),
                     unit: .currency,
                     presentation: .value,
+                    semantic: .value,
                     currencyCode: displayUnit.symbol,
                     healthState: .normal
                 ),
@@ -187,6 +223,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Self.convert(Decimal(sevenDaySummary.quota ?? 0), using: displayUnit),
                     unit: .currency,
                     presentation: .value,
+                    semantic: .value,
                     currencyCode: displayUnit.symbol,
                     healthState: .normal
                 ),
@@ -196,6 +233,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Self.convert(Decimal(thirtyDaySummary.quota ?? 0), using: displayUnit),
                     unit: .currency,
                     presentation: .value,
+                    semantic: .value,
                     currencyCode: displayUnit.symbol,
                     healthState: .normal
                 ),
@@ -205,6 +243,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Decimal(currentMinute.rpm),
                     unit: .request,
                     presentation: .value,
+                    semantic: .value,
                     healthState: .normal
                 ),
                 NormalizedUsageMetric(
@@ -213,6 +252,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Decimal(currentMinute.tpm),
                     unit: .token,
                     presentation: .value,
+                    semantic: .value,
                     healthState: .normal
                 ),
                 NormalizedUsageMetric(
@@ -221,6 +261,7 @@ struct NewAPIUsageProvider: UsageProvider {
                     value: Decimal(user.requestCount),
                     unit: .request,
                     presentation: .value,
+                    semantic: .value,
                     healthState: .normal
                 )
             ]
@@ -274,6 +315,19 @@ struct NewAPIUsageProvider: UsageProvider {
 
     private static func restrictedStart(_ start: Date, now: Date) -> Date {
         max(start, now.addingTimeInterval(-2592000))
+    }
+
+    private static func valueCapability(metricID: String, label: String) -> UsageMetricCapability {
+        UsageMetricCapability(
+            metricID: metricID,
+            label: label,
+            presentation: .value,
+            semantic: .value,
+            isMenuBarSelectable: false,
+            menuBarPriority: nil,
+            defaultAlertEnabled: false,
+            defaultAbsoluteAlertThreshold: nil
+        )
     }
 
     private func request<T: Decodable>(
@@ -339,6 +393,7 @@ struct NewAPIUsageProvider: UsageProvider {
             value: value,
             unit: .currency,
             presentation: .value,
+            semantic: .value,
             currencyCode: displayUnit.symbol,
             healthState: health
         )

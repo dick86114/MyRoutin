@@ -20,25 +20,27 @@ struct UsageMapper: Sendable {
 
         switch kind {
         case .periodic:
+            let fiveHour = try metric(
+                limit: dto.dailyLimitUsd,
+                used: dto.dailyUsedUsd,
+                remaining: dto.dailyRemainingUsd,
+                unit: .usd,
+                windowEnd: date(from: dto.dayWindowEndAt)
+            )
+            let weekly = try metric(
+                limit: dto.weeklyLimitUsd,
+                used: dto.weeklyUsedUsd,
+                remaining: dto.weeklyRemainingUsd,
+                unit: .usd,
+                windowEnd: date(from: dto.weekWindowEndAt)
+            )
             return UsageSnapshot(
                 planName: dto.planName ?? "",
                 subscriptionId: dto.subscriptionId,
                 planId: dto.planId,
                 kind: .periodic,
-                fiveHour: try metric(
-                    limit: dto.dailyLimitUsd,
-                    used: dto.dailyUsedUsd,
-                    remaining: dto.dailyRemainingUsd,
-                    unit: .usd,
-                    windowEnd: date(from: dto.dayWindowEndAt)
-                ),
-                weekly: try metric(
-                    limit: dto.weeklyLimitUsd,
-                    used: dto.weeklyUsedUsd,
-                    remaining: dto.weeklyRemainingUsd,
-                    unit: .usd,
-                    windowEnd: date(from: dto.weekWindowEndAt)
-                ),
+                fiveHour: fiveHour,
+                weekly: weekly,
                 token: nil,
                 allowedModels: dto.allowedModels ?? [],
                 fetchedAt: fetchedAt,
@@ -46,9 +48,20 @@ struct UsageMapper: Sendable {
                 groupMultipliers: groupMultipliers,
                 status: dto.status,
                 subscriptionStartAt: date(from: dto.startAt),
-                subscriptionEndAt: date(from: dto.endAt)
+                subscriptionEndAt: date(from: dto.endAt),
+                metrics: [
+                    normalizedMetric(id: "fiveHour", label: "5 小时", metric: fiveHour),
+                    normalizedMetric(id: "weekly", label: "周", metric: weekly)
+                ].compactMap { $0 }
             )
         case .tokenPack:
+            let token = try metric(
+                limit: dto.totalTokens,
+                used: dto.consumedTokens,
+                remaining: dto.remainingTokens,
+                unit: .token,
+                windowEnd: nil
+            )
             return UsageSnapshot(
                 planName: dto.planName ?? "",
                 subscriptionId: dto.subscriptionId,
@@ -56,20 +69,17 @@ struct UsageMapper: Sendable {
                 kind: .tokenPack,
                 fiveHour: nil,
                 weekly: nil,
-                token: try metric(
-                    limit: dto.totalTokens,
-                    used: dto.consumedTokens,
-                    remaining: dto.remainingTokens,
-                    unit: .token,
-                    windowEnd: nil
-                ),
+                token: token,
                 allowedModels: dto.allowedModels ?? [],
                 fetchedAt: fetchedAt,
                 groupMultiplier: groupMultipliers.first?.multiplier,
                 groupMultipliers: groupMultipliers,
                 status: dto.status,
                 subscriptionStartAt: date(from: dto.startAt),
-                subscriptionEndAt: date(from: dto.endAt)
+                subscriptionEndAt: date(from: dto.endAt),
+                metrics: [
+                    normalizedMetric(id: "token", label: "Token", metric: token)
+                ].compactMap { $0 }
             )
         }
     }
@@ -130,6 +140,26 @@ struct UsageMapper: Sendable {
             return false
         }
         return value > 0
+    }
+
+    private func normalizedMetric(
+        id: String,
+        label: String,
+        metric: UsageMetric?
+    ) -> NormalizedUsageMetric? {
+        guard let metric else { return nil }
+        return NormalizedUsageMetric(
+            id: id,
+            label: label,
+            used: metric.used,
+            limit: metric.limit,
+            remaining: metric.remaining,
+            unit: metric.unit == .token ? .token : .currency,
+            windowEnd: metric.windowEnd,
+            presentation: .progress,
+            semantic: .usedQuota,
+            currencyCode: metric.unit == .usd ? "USD" : nil
+        )
     }
 
     private func pairedGroupMultipliers(

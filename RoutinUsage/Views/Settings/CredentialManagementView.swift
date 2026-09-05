@@ -20,10 +20,15 @@ enum CredentialStatusFilter: String, CaseIterable, Identifiable {
     }
 }
 
+extension KeyUsageState: Identifiable {
+    var id: UUID { configuration.id }
+}
+
 struct CredentialManagementView: View {
     @Bindable var environment: AppEnvironment
     @State private var model: CredentialManagementModel
     @State private var editor: EditorPresentation?
+    @State private var alertSettingsState: KeyUsageState?
 
     init(environment: AppEnvironment, ordering: CredentialOrderingController) {
         self.environment = environment
@@ -46,6 +51,12 @@ struct CredentialManagementView: View {
         }
         .sheet(item: $editor) { presentation in
             credentialEditor(presentation)
+        }
+        .sheet(item: $alertSettingsState) { state in
+            CredentialAlertSettingsView(
+                title: "\(state.configuration.displayName) 提醒设置",
+                model: alertSettingsModel(for: state)
+            )
         }
         .confirmationDialog(
             "确定删除这个凭证？",
@@ -223,6 +234,15 @@ struct CredentialManagementView: View {
             .help("编辑 \(state.configuration.displayName)")
             .accessibilityLabel("编辑 \(state.configuration.displayName)")
 
+            Button {
+                alertSettingsState = state
+            } label: {
+                Image(systemName: alertIcon(for: state))
+            }
+            .buttonStyle(.borderless)
+            .help("设置 \(state.configuration.displayName) 的用量提醒")
+            .accessibilityLabel("提醒设置")
+
             Button(role: .destructive) {
                 model.pendingDeletion = state.configuration
             } label: {
@@ -268,5 +288,24 @@ struct CredentialManagementView: View {
                 configuration.id.uuidString
             }
         }
+    }
+}
+
+private extension CredentialManagementView {
+    func alertSettingsModel(for state: KeyUsageState) -> CredentialAlertSettingsModel {
+        CredentialAlertSettingsModel(
+            credentialID: state.configuration.id,
+            preferences: environment.settings.usagePreferences(for: state.configuration.id),
+            metrics: state.snapshot?.normalizedMetrics ?? [],
+            capabilities: environment.providerRegistry?.metricCapabilities(for: state.configuration) ?? []
+        ) { preferences in
+            environment.settings.setUsagePreferences(preferences, for: state.configuration.id)
+        }
+    }
+
+    func alertIcon(for state: KeyUsageState) -> String {
+        environment.settings.usagePreferences(for: state.configuration.id).notificationsEnabled
+            ? "bell.badge"
+            : "bell.slash"
     }
 }
