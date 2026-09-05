@@ -9,6 +9,35 @@ struct NewAPIUsageProvider: UsageProvider {
         self.descriptor = ProviderRegistry.builtInDescriptors.first(where: { $0.id == .newAPI })!
     }
 
+    func metricCapabilities(for configuration: KeyConfiguration) -> [UsageMetricCapability] {
+        guard configuration.credentialKind == .bearerAPIKey else { return [] }
+        let warningThreshold = configuration.metadata["balanceWarningThreshold"]
+            .flatMap { Decimal(string: $0) }
+        return [
+            UsageMetricCapability(
+                metricID: "quota-progress",
+                label: "账户额度",
+                presentation: .progress,
+                semantic: .usedQuota,
+                isMenuBarSelectable: true,
+                menuBarPriority: 0,
+                defaultAlertEnabled: true,
+                defaultAbsoluteAlertThreshold: warningThreshold
+            ),
+            Self.valueCapability(metricID: "today-token", label: "今日 Token"),
+            Self.valueCapability(metricID: "one-day-token", label: "近 24 小时 Token"),
+            Self.valueCapability(metricID: "seven-day-token", label: "近 7 天 Token"),
+            Self.valueCapability(metricID: "thirty-day-token", label: "近 30 天 Token"),
+            Self.valueCapability(metricID: "today-token-cost", label: "今日消费"),
+            Self.valueCapability(metricID: "one-day-token-cost", label: "近 24 小时消费"),
+            Self.valueCapability(metricID: "seven-day-token-cost", label: "近 7 天消费"),
+            Self.valueCapability(metricID: "thirty-day-token-cost", label: "近 30 天消费"),
+            Self.valueCapability(metricID: "rpm", label: "近 60 秒 RPM"),
+            Self.valueCapability(metricID: "tpm", label: "近 60 秒 TPM"),
+            Self.valueCapability(metricID: "request-count", label: "账户累计请求")
+        ]
+    }
+
     func validate(_ credential: ProviderCredential, now: Date) async throws -> UsageSnapshot? {
         try await fetchUsage(credential, now: now)
     }
@@ -286,6 +315,19 @@ struct NewAPIUsageProvider: UsageProvider {
 
     private static func restrictedStart(_ start: Date, now: Date) -> Date {
         max(start, now.addingTimeInterval(-2592000))
+    }
+
+    private static func valueCapability(metricID: String, label: String) -> UsageMetricCapability {
+        UsageMetricCapability(
+            metricID: metricID,
+            label: label,
+            presentation: .value,
+            semantic: .value,
+            isMenuBarSelectable: false,
+            menuBarPriority: nil,
+            defaultAlertEnabled: false,
+            defaultAbsoluteAlertThreshold: nil
+        )
     }
 
     private func request<T: Decodable>(

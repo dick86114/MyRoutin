@@ -9,6 +9,46 @@ struct RoutinUsageProvider: UsageProvider {
         self.descriptor = ProviderRegistry.builtInDescriptors.first(where: { $0.id == .routin })!
     }
 
+    func metricCapabilities(for configuration: KeyConfiguration) -> [UsageMetricCapability] {
+        guard configuration.credentialKind == .bearerAPIKey else { return [] }
+        if configuration.metadata["usageKind"] == "tokenPack" {
+            return [
+                UsageMetricCapability(
+                    metricID: "token",
+                    label: "Token",
+                    presentation: .progress,
+                    semantic: .usedQuota,
+                    isMenuBarSelectable: true,
+                    menuBarPriority: 0,
+                    defaultAlertEnabled: true,
+                    defaultAbsoluteAlertThreshold: nil
+                )
+            ]
+        }
+        return [
+            UsageMetricCapability(
+                metricID: "fiveHour",
+                label: "5 小时",
+                presentation: .progress,
+                semantic: .usedQuota,
+                isMenuBarSelectable: true,
+                menuBarPriority: 0,
+                defaultAlertEnabled: true,
+                defaultAbsoluteAlertThreshold: nil
+            ),
+            UsageMetricCapability(
+                metricID: "weekly",
+                label: "周",
+                presentation: .progress,
+                semantic: .usedQuota,
+                isMenuBarSelectable: true,
+                menuBarPriority: 1,
+                defaultAlertEnabled: true,
+                defaultAbsoluteAlertThreshold: nil
+            )
+        ]
+    }
+
     func validate(_ credential: ProviderCredential, now: Date) async throws -> UsageSnapshot? {
         try await fetchUsage(credential, now: now)
     }

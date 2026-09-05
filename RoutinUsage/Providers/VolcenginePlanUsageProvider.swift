@@ -17,6 +17,27 @@ struct VolcenginePlanUsageProvider: UsageProvider {
         self.descriptor = ProviderRegistry.builtInDescriptors.first(where: { $0.id == .volcengine })!
     }
 
+    func metricCapabilities(for configuration: KeyConfiguration) -> [UsageMetricCapability] {
+        guard configuration.credentialKind == .accessKeyPair else { return [] }
+        let windows: [(metricID: String, label: String)] = [
+            ("fiveHour", "近 5 小时用量"),
+            ("weekly", "近一周用量"),
+            ("monthly", "近一月用量")
+        ]
+        return windows.enumerated().map { index, window in
+            UsageMetricCapability(
+                metricID: window.metricID,
+                label: window.label,
+                presentation: .progress,
+                semantic: .usedQuota,
+                isMenuBarSelectable: true,
+                menuBarPriority: index,
+                defaultAlertEnabled: true,
+                defaultAbsoluteAlertThreshold: nil
+            )
+        }
+    }
+
     func validate(_ credential: ProviderCredential, now: Date) async throws -> UsageSnapshot? {
         try await validatePersonalPlan(credential, now: now)
         return try await fetchUsage(credential, now: now)

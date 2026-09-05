@@ -11,6 +11,52 @@ struct GLMUsageProvider: UsageProvider {
         self.descriptor = ProviderRegistry.builtInDescriptors.first(where: { $0.id == .glm })!
     }
 
+    func metricCapabilities(for configuration: KeyConfiguration) -> [UsageMetricCapability] {
+        guard configuration.credentialKind == .apiKey else { return [] }
+        return [
+            UsageMetricCapability(
+                metricID: "five-hour",
+                label: "5 小时用量",
+                presentation: .progress,
+                semantic: .usedQuota,
+                isMenuBarSelectable: true,
+                menuBarPriority: 0,
+                defaultAlertEnabled: true,
+                defaultAbsoluteAlertThreshold: nil
+            ),
+            UsageMetricCapability(
+                metricID: "weekly",
+                label: "每周用量",
+                presentation: .progress,
+                semantic: .usedQuota,
+                isMenuBarSelectable: true,
+                menuBarPriority: 1,
+                defaultAlertEnabled: true,
+                defaultAbsoluteAlertThreshold: nil
+            ),
+            UsageMetricCapability(
+                metricID: "model-calls",
+                label: "模型调用量",
+                presentation: .value,
+                semantic: .value,
+                isMenuBarSelectable: false,
+                menuBarPriority: nil,
+                defaultAlertEnabled: false,
+                defaultAbsoluteAlertThreshold: nil
+            ),
+            UsageMetricCapability(
+                metricID: "zcode-mcp",
+                label: "MCP 调用量",
+                presentation: .value,
+                semantic: .value,
+                isMenuBarSelectable: false,
+                menuBarPriority: nil,
+                defaultAlertEnabled: false,
+                defaultAbsoluteAlertThreshold: nil
+            )
+        ]
+    }
+
     func validate(_ credential: ProviderCredential, now: Date) async throws -> UsageSnapshot? {
         try await fetchUsage(credential, now: now)
     }

@@ -3,6 +3,62 @@ import XCTest
 
 @MainActor
 final class ProviderRoutingTests: XCTestCase {
+    func test火山CodingPlan在首次刷新前声明可选窗口() throws {
+        let configuration = KeyConfiguration(
+            id: UUID(),
+            name: "火山",
+            keySuffix: "",
+            sortOrder: 0,
+            providerID: .volcengine,
+            credentialKind: .accessKeyPair,
+            metadata: ["planType": "coding"]
+        )
+
+        let registry = ProviderRegistry(providers: [VolcenginePlanUsageProvider()])
+        let capabilities = registry.metricCapabilities(for: configuration)
+
+        XCTAssertEqual(capabilities.map(\.metricID), ["fiveHour", "weekly", "monthly"])
+        XCTAssertEqual(capabilities.first?.menuBarPriority, 0)
+    }
+
+    func test供应商能力声明保留指标策略和预警默认值() throws {
+        let configuration = KeyConfiguration(
+            id: UUID(),
+            name: "DeepSeek",
+            keySuffix: "",
+            sortOrder: 0,
+            providerID: .deepseek,
+            credentialKind: .apiKey,
+            metadata: ["balanceWarningThreshold": "10.5"]
+        )
+        let registry = ProviderRegistry(providers: [DeepSeekUsageProvider()])
+
+        let capabilities = registry.metricCapabilities(for: configuration)
+
+        XCTAssertEqual(capabilities.map(\.metricID), ["balance", "availability"])
+        XCTAssertEqual(capabilities.first?.defaultAbsoluteAlertThreshold, Decimal(string: "10.5"))
+        XCTAssertTrue(capabilities.first?.isMenuBarSelectable == true)
+        XCTAssertFalse(capabilities.last?.defaultAlertEnabled == true)
+    }
+
+    func testNewAPI统计指标默认不进入菜单栏或预警() throws {
+        let configuration = KeyConfiguration(
+            id: UUID(),
+            name: "New API",
+            keySuffix: "",
+            sortOrder: 0,
+            providerID: .newAPI,
+            credentialKind: .bearerAPIKey
+        )
+        let registry = ProviderRegistry(providers: [NewAPIUsageProvider()])
+
+        let capabilities = registry.metricCapabilities(for: configuration)
+        let statistics = capabilities.filter { $0.metricID.hasSuffix("token") }
+
+        XCTAssertTrue(capabilities.first?.isMenuBarSelectable == true)
+        XCTAssertTrue(statistics.allSatisfy { !$0.isMenuBarSelectable && !$0.defaultAlertEnabled })
+    }
+
     func testUsageStore按凭证供应商路由刷新请求() async throws {
         let suite = "provider-routing-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

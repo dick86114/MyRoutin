@@ -2,6 +2,27 @@ import XCTest
 @testable import RoutinUsage
 
 final class UsageSnapshotTests: XCTestCase {
+    func test指标能力编码后保留策略和标识() throws {
+        let capability = UsageMetricCapability(
+            metricID: "balance",
+            label: "余额",
+            presentation: .balance,
+            semantic: .balance,
+            isMenuBarSelectable: true,
+            menuBarPriority: 0,
+            defaultAlertEnabled: true,
+            defaultAbsoluteAlertThreshold: Decimal(string: "10.5")
+        )
+
+        let decoded = try JSONDecoder().decode(
+            UsageMetricCapability.self,
+            from: JSONEncoder().encode(capability)
+        )
+
+        XCTAssertEqual(decoded, capability)
+        XCTAssertEqual(decoded.id, "balance")
+    }
+
     func test通用指标四种展示类型可编码解码() throws {
         let metrics = [
             NormalizedUsageMetric(id: "quota", label: "配额", used: 20, limit: 100, remaining: 80, unit: .token, presentation: .progress, semantic: .usedQuota),
