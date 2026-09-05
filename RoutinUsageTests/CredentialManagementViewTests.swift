@@ -89,6 +89,14 @@ final class CredentialManagementViewTests: XCTestCase {
         let key = try context.addCredential(name: "待删除", providerID: .routin)
         context.settings.displayOrder.menuBarCredentialIDs = [key.id]
         context.settings.displayOrder.popoverCredentialIDs = [key.id]
+        context.settings.setUsagePreferences(
+            CredentialUsagePreferences(
+                menuBarMetricID: "weekly",
+                notificationsEnabled: true,
+                alertRules: []
+            ),
+            for: key.id
+        )
         let model = context.makeModel()
         model.pendingDeletion = key
 
@@ -98,6 +106,7 @@ final class CredentialManagementViewTests: XCTestCase {
         XCTAssertEqual(context.store.orderedKeyIDs, [])
         XCTAssertEqual(context.settings.displayOrder.menuBarCredentialIDs, [])
         XCTAssertEqual(context.settings.displayOrder.popoverCredentialIDs, [])
+        XCTAssertNil(context.settings.storedUsagePreferences(for: key.id))
         XCTAssertNil(model.operationNotice)
     }
 
@@ -107,6 +116,14 @@ final class CredentialManagementViewTests: XCTestCase {
         let key = try context.addCredential(name: "缓存失败", providerID: .routin)
         context.settings.displayOrder.menuBarCredentialIDs = [key.id]
         context.settings.displayOrder.popoverCredentialIDs = [key.id]
+        context.settings.setUsagePreferences(
+            CredentialUsagePreferences(
+                menuBarMetricID: "balance",
+                notificationsEnabled: false,
+                alertRules: []
+            ),
+            for: key.id
+        )
         let model = context.makeModel()
         model.pendingDeletion = key
 
@@ -116,6 +133,7 @@ final class CredentialManagementViewTests: XCTestCase {
         XCTAssertEqual(context.store.orderedKeyIDs, [])
         XCTAssertEqual(context.settings.displayOrder.menuBarCredentialIDs, [])
         XCTAssertEqual(context.settings.displayOrder.popoverCredentialIDs, [])
+        XCTAssertNil(context.settings.storedUsagePreferences(for: key.id))
         XCTAssertEqual(
             model.operationNotice,
             CredentialOperationNotice(

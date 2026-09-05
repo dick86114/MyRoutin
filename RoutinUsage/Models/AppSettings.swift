@@ -6,6 +6,7 @@ final class AppSettings {
     static let allowedRefreshMinutes = [1, 5, 15, 30]
 
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private var credentialUsagePreferences: [String: CredentialUsagePreferences]
 
     var refreshMinutes: Int {
         didSet {
@@ -81,6 +82,24 @@ final class AppSettings {
         displayOrder = displayOrder.removingCredential(id)
     }
 
+    func usagePreferences(for id: UUID) -> CredentialUsagePreferences {
+        credentialUsagePreferences[id.uuidString] ?? .defaultValue
+    }
+
+    func storedUsagePreferences(for id: UUID) -> CredentialUsagePreferences? {
+        credentialUsagePreferences[id.uuidString]
+    }
+
+    func setUsagePreferences(_ preferences: CredentialUsagePreferences, for id: UUID) {
+        credentialUsagePreferences[id.uuidString] = preferences
+        persistCredentialUsagePreferences()
+    }
+
+    func removeUsagePreferences(for id: UUID) {
+        credentialUsagePreferences.removeValue(forKey: id.uuidString)
+        persistCredentialUsagePreferences()
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
@@ -122,6 +141,16 @@ final class AppSettings {
         } else {
             displayOrder = CredentialDisplayOrder()
         }
+
+        if let data = defaults.data(forKey: Self.credentialUsagePreferencesKey),
+           let decoded = try? JSONDecoder().decode(
+               [String: CredentialUsagePreferences].self,
+               from: data
+           ) {
+            credentialUsagePreferences = decoded
+        } else {
+            credentialUsagePreferences = [:]
+        }
     }
 }
 
@@ -139,10 +168,17 @@ private extension AppSettings {
     }
 
     static let displayOrderKey = "displayOrder.v1"
+    static let credentialUsagePreferencesKey = "credentialUsagePreferences.v1"
 
     func persistDisplayOrder() {
         if let data = try? JSONEncoder().encode(displayOrder) {
             defaults.set(data, forKey: Self.displayOrderKey)
+        }
+    }
+
+    func persistCredentialUsagePreferences() {
+        if let data = try? JSONEncoder().encode(credentialUsagePreferences) {
+            defaults.set(data, forKey: Self.credentialUsagePreferencesKey)
         }
     }
 }

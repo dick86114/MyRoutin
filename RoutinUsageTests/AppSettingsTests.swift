@@ -38,6 +38,37 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.menuBarStyle, .aliasLogoProgress)
     }
 
+    func test新凭证用量偏好默认自动且提醒开启() throws {
+        let context = try makeContext()
+        defer { context.cleanUp() }
+        let settings = AppSettings(defaults: context.defaults)
+        let id = UUID()
+
+        let preferences = settings.usagePreferences(for: id)
+
+        XCTAssertNil(preferences.menuBarMetricID)
+        XCTAssertTrue(preferences.notificationsEnabled)
+        XCTAssertEqual(preferences.alertRules, [])
+    }
+
+    func test凭证用量偏好可持久化并按凭证删除() throws {
+        let context = try makeContext()
+        defer { context.cleanUp() }
+        let id = UUID()
+        let settings = AppSettings(defaults: context.defaults)
+        var preferences = settings.usagePreferences(for: id)
+        preferences.menuBarMetricID = "weekly"
+        settings.setUsagePreferences(preferences, for: id)
+
+        XCTAssertEqual(
+            AppSettings(defaults: context.defaults).usagePreferences(for: id).menuBarMetricID,
+            "weekly"
+        )
+
+        settings.removeUsagePreferences(for: id)
+        XCTAssertNil(AppSettings(defaults: context.defaults).storedUsagePreferences(for: id))
+    }
+
     func test菜单栏样式可持久化并重新载入() throws {
         let context = try makeContext()
         defer { context.cleanUp() }

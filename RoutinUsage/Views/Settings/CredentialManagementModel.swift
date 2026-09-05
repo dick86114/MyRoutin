@@ -141,7 +141,9 @@ final class CredentialManagementModel {
         }
         pendingDeletion = nil
         do {
-            if try ordering.delete(configuration.id) == .cacheCleanupFailed {
+            let outcome = try ordering.delete(configuration.id)
+            settings.removeUsagePreferences(for: configuration.id)
+            if outcome == .cacheCleanupFailed {
                 operationNotice = CredentialOperationNotice(
                     title: "缓存清理失败",
                     message: "凭证已删除，但用量缓存未能清理。"
