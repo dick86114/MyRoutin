@@ -1,6 +1,21 @@
 import Foundation
 import Observation
 
+struct AlertThresholds: Equatable, Sendable {
+    let low: Int
+    let high: Int
+
+    init(low: Int = 80, high: Int = 95) {
+        precondition(Self.isValid(low: low, high: high), "通知阈值必须位于 1...100，且低阈值小于高阈值")
+        self.low = low
+        self.high = high
+    }
+
+    static func isValid(low: Int, high: Int) -> Bool {
+        (1...100).contains(low) && (1...100).contains(high) && low < high
+    }
+}
+
 @Observable
 final class AppSettings {
     static let allowedRefreshMinutes = [1, 5, 15, 30]

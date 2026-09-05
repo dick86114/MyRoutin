@@ -41,9 +41,15 @@ final class GenericAlertTests: XCTestCase {
             )]
         )
 
-        let alert = try XCTUnwrap(evaluator.evaluate(key: key, snapshot: snapshot, thresholds: .init()).first)
+        let rules = [MetricAlertRule.absoluteValue(
+            metricID: "balance",
+            isEnabled: true,
+            threshold: 10,
+            currencyCode: "CNY"
+        )]
+        let alert = try XCTUnwrap(evaluator.evaluate(key: key, snapshot: snapshot, rules: rules).first)
 
-        XCTAssertEqual(alert.dimension, .balance)
+        XCTAssertEqual(alert.metricID, "balance")
         XCTAssertTrue(alert.notificationBody().contains("余额低于预警值"))
         XCTAssertFalse(alert.notificationBody().contains("已达 0%"))
     }
@@ -80,14 +86,19 @@ final class GenericAlertTests: XCTestCase {
                 limit: 100,
                 remaining: 20,
                 unit: .token,
+                windowEnd: Date(timeIntervalSince1970: 10_000),
                 presentation: .progress,
                 semantic: .remainingQuota
             )]
         )
 
-        let alert = try XCTUnwrap(evaluator.evaluate(key: key, snapshot: snapshot, thresholds: .init()).first)
+        let alert = try XCTUnwrap(evaluator.evaluate(
+            key: key,
+            snapshot: snapshot,
+            rules: [.remainingPercent(metricID: "quota", isEnabled: true, low: 20, high: 5)]
+        ).first)
 
-        XCTAssertEqual(alert.percent, 80)
+        XCTAssertEqual(alert.percent, 20)
         XCTAssertEqual(alert.level, .low)
     }
 
@@ -128,6 +139,6 @@ final class GenericAlertTests: XCTestCase {
             )]
         )
 
-        XCTAssertTrue(evaluator.evaluate(key: key, snapshot: snapshot, thresholds: .init()).isEmpty)
+        XCTAssertTrue(evaluator.evaluate(key: key, snapshot: snapshot, rules: []).isEmpty)
     }
 }

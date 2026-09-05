@@ -34,7 +34,6 @@ final class UsageStoreTests: XCTestCase {
 
         store.updateSettings(
             refreshMinutes: 1,
-            thresholds: AlertThresholds(),
             notificationsEnabled: true
         )
 

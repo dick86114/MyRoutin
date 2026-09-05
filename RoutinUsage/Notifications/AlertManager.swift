@@ -1,21 +1,6 @@
 import Foundation
 @preconcurrency import UserNotifications
 
-struct AlertThresholds: Equatable, Sendable {
-    let low: Int
-    let high: Int
-
-    init(low: Int = 80, high: Int = 95) {
-        precondition(Self.isValid(low: low, high: high), "通知阈值必须位于 1...100，且低阈值小于高阈值")
-        self.low = low
-        self.high = high
-    }
-
-    static func isValid(low: Int, high: Int) -> Bool {
-        (1...100).contains(low) && (1...100).contains(high) && low < high
-    }
-}
-
 enum AlertLevel: String, Codable, Equatable, Sendable {
     case low
     case high
@@ -25,7 +10,6 @@ struct UsageAlert: Equatable, Sendable {
     let keyID: UUID
     let keyName: String
     let providerName: String
-    let dimension: UsageDimension
     let metricID: String
     let metricLabel: String
     let valueSource: MetricAlertValueSource
@@ -59,42 +43,10 @@ struct UsageAlert: Equatable, Sendable {
         self.keyID = keyID
         self.keyName = keyName
         self.providerName = providerName
-        self.dimension = .token
         self.metricID = metricID
         self.metricLabel = metricLabel
         self.valueSource = valueSource
         self.currentValue = currentValue
-        self.level = level
-        self.percent = percent
-        self.windowEnd = windowEnd
-        self.balanceAmount = balanceAmount
-        self.currencyCode = currencyCode
-        self.reservationID = reservationID
-        self.triggeredWindows = triggeredWindows
-        self.replacedReservationOwners = replacedReservationOwners
-    }
-
-    init(
-        keyID: UUID,
-        keyName: String,
-        dimension: UsageDimension,
-        level: AlertLevel,
-        percent: Double,
-        windowEnd: Date?,
-        balanceAmount: Decimal?,
-        currencyCode: String?,
-        reservationID: UUID,
-        triggeredWindows: Set<AlertWindowKey>,
-        replacedReservationOwners: [AlertWindowKey: UUID]
-    ) {
-        self.keyID = keyID
-        self.keyName = keyName
-        self.providerName = "MyToken"
-        self.dimension = dimension
-        self.metricID = dimension.rawValue
-        self.metricLabel = dimension.notificationName
-        self.valueSource = dimension == .balance ? .absoluteValue : .usedPercent
-        self.currentValue = balanceAmount
         self.level = level
         self.percent = percent
         self.windowEnd = windowEnd
@@ -115,8 +67,23 @@ struct UsageAlert: Equatable, Sendable {
             let currency = currencyCode.map { " \($0)" } ?? ""
             return "\(keyName) · 余额低于预警值，当前 \(amount)\(currency)"
         }
-        let base = "\(keyName) · \(dimension.notificationName)用量已达 \(formattedPercent)%"
-        guard let windowEnd, dimension != .token else {
+        let action: String
+        switch valueSource {
+        case .usedPercent:
+            action = "用量已达"
+        case .remainingPercent:
+            action = "剩余低于"
+        case .absoluteValue, .healthState:
+            action = "状态异常"
+        }
+        let label: String
+        switch metricLabel {
+        case "周": label = "周用量"
+        case "Token": label = "Token "
+        default: label = metricLabel
+        }
+        let base = "\(keyName) · \(label)\(action) \(formattedPercent)%"
+        guard let windowEnd, valueSource == .usedPercent || valueSource == .remainingPercent else {
             return base
         }
 
@@ -140,24 +107,8 @@ struct UsageAlert: Equatable, Sendable {
     }
 }
 
-private extension UsageDimension {
-    var notificationName: String {
-        switch self {
-        case .fiveHour:
-            return "5 小时"
-        case .weekly:
-            return "周"
-        case .token:
-            return "Token "
-        case .balance:
-            return "余额"
-        }
-    }
-}
-
 struct AlertWindowKey: Codable, Hashable, Sendable {
     let keyID: UUID
-    let dimension: UsageDimension
     let metricID: String
     let ruleID: String
     let windowIdentifier: String
@@ -165,32 +116,14 @@ struct AlertWindowKey: Codable, Hashable, Sendable {
 
     init(
         keyID: UUID,
-        dimension: UsageDimension,
-        windowIdentifier: String,
-        threshold: Int
-    ) {
-        self.init(
-            keyID: keyID,
-            metricID: dimension.rawValue,
-            ruleID: "legacy",
-            dimension: dimension,
-            windowIdentifier: windowIdentifier,
-            threshold: threshold
-        )
-    }
-
-    init(
-        keyID: UUID,
         metricID: String,
         ruleID: String,
-        dimension: UsageDimension,
         windowIdentifier: String,
         threshold: Int
     ) {
         self.keyID = keyID
         self.metricID = metricID
         self.ruleID = ruleID
-        self.dimension = dimension
         self.windowIdentifier = windowIdentifier
         self.threshold = threshold
     }
@@ -198,7 +131,8 @@ struct AlertWindowKey: Codable, Hashable, Sendable {
 
 private struct AlertPeriodicWindowWatermark: Codable, Hashable, Sendable {
     let keyID: UUID
-    let dimension: UsageDimension
+    let metricID: String
+    let ruleID: String
     let windowIdentifier: String
 }
 
@@ -229,14 +163,6 @@ final class AlertEvaluator: @unchecked Sendable {
     func evaluate(
         key: KeyConfiguration,
         snapshot: UsageSnapshot,
-        thresholds: AlertThresholds
-    ) -> [UsageAlert] {
-        evaluateLegacy(key: key, snapshot: snapshot, thresholds: thresholds)
-    }
-
-    func evaluate(
-        key: KeyConfiguration,
-        snapshot: UsageSnapshot,
         rules: [MetricAlertRule]
     ) -> [UsageAlert] {
         deliveryCoordinator.lock.lock()
@@ -246,21 +172,30 @@ final class AlertEvaluator: @unchecked Sendable {
         var triggeredWindows = deliveredWindows.union(deliveryCoordinator.reservationOwners.keys)
         var alerts: [UsageAlert] = []
         let metricsByID = Dictionary(uniqueKeysWithValues: snapshot.normalizedMetrics.map { ($0.id, $0) })
+        var periodicWatermarks = Self.loadPeriodicWatermarks(from: defaults)
 
         for rule in rules where rule.isEnabled {
             guard let metric = metricsByID[rule.metricID] else { continue }
-            let triggered: Bool
+            let matchedThresholds: [MetricAlertThreshold]
             let percent: Double
+            let windowIdentifier = metric.windowEnd.map { String($0.timeIntervalSince1970) } ?? metric.id
+            let numericWindow = Double(windowIdentifier)
 
             switch rule.valueSource {
             case .usedPercent:
                 guard let used = metric.used, let limit = metric.limit, limit > 0 else { continue }
                 percent = Self.percent(used: used, limit: limit)
-                triggered = Self.matchesUsed(percent: percent, thresholds: rule.thresholds)
+                matchedThresholds = rule.thresholds.filter { threshold in
+                    guard let value = threshold.value else { return false }
+                    return percent >= NSDecimalNumber(decimal: value).doubleValue
+                }
             case .remainingPercent:
                 guard let remaining = metric.remaining, let limit = metric.limit, limit > 0 else { continue }
                 percent = Self.percent(used: remaining, limit: limit)
-                triggered = Self.matchesRemaining(percent: percent, thresholds: rule.thresholds)
+                matchedThresholds = rule.thresholds.filter { threshold in
+                    guard let value = threshold.value else { return false }
+                    return percent <= NSDecimalNumber(decimal: value).doubleValue
+                }
             case .absoluteValue:
                 guard
                     let value = metric.value,
@@ -268,34 +203,130 @@ final class AlertEvaluator: @unchecked Sendable {
                     let threshold = rule.thresholds.first?.value
                 else { continue }
                 percent = 0
-                triggered = value <= threshold
+                matchedThresholds = value <= threshold ? rule.thresholds : []
             case .healthState:
                 percent = 0
-                triggered = [.warning, .critical, .unavailable].contains(metric.healthState)
+                matchedThresholds = [.warning, .critical, .unavailable].contains(metric.healthState)
+                    ? [MetricAlertThreshold(level: .high, value: nil)]
+                    : []
             }
 
             let ruleWindowKeys = triggeredWindows.filter { $0.keyID == key.id && $0.ruleID == rule.id }
-            guard triggered else {
-                if rule.valueSource != .healthState {
+            let obsoleteWindowKeys = ruleWindowKeys.filter { $0.windowIdentifier != windowIdentifier }
+            removeState(for: obsoleteWindowKeys, triggeredWindows: &triggeredWindows)
+            let matchingWatermarks = periodicWatermarks.filter {
+                $0.keyID == key.id && $0.metricID == rule.metricID && $0.ruleID == rule.id
+            }
+            if let numericWindow {
+                let historicWindows = (
+                    ruleWindowKeys.compactMap { Double($0.windowIdentifier) }
+                        + matchingWatermarks.compactMap { Double($0.windowIdentifier) }
+                ).max()
+                guard historicWindows == nil || numericWindow >= historicWindows! else {
+                    continue
+                }
+                periodicWatermarks.subtract(matchingWatermarks)
+                periodicWatermarks.insert(AlertPeriodicWindowWatermark(
+                    keyID: key.id,
+                    metricID: rule.metricID,
+                    ruleID: rule.id,
+                    windowIdentifier: windowIdentifier
+                ))
+            }
+
+            guard !matchedThresholds.isEmpty else {
+                let isWindowlessPercent = metric.windowEnd == nil
+                    && (rule.valueSource == .usedPercent || rule.valueSource == .remainingPercent)
+                if !isWindowlessPercent {
                     removeState(for: ruleWindowKeys, triggeredWindows: &triggeredWindows)
+                } else {
+                    for windowKey in ruleWindowKeys where Double(windowKey.threshold) > percent {
+                        if
+                            let reservationID = deliveryCoordinator.reservationOwners[windowKey],
+                            deliveryCoordinator.inFlightReservations.contains(reservationID)
+                        {
+                            deliveryCoordinator.pendingResetWindows[windowKey] = reservationID
+                        } else {
+                            removeState(for: [windowKey], triggeredWindows: &triggeredWindows)
+                        }
+                    }
                 }
                 continue
             }
+            if metric.windowEnd == nil
+                && (rule.valueSource == .usedPercent || rule.valueSource == .remainingPercent) {
+                for windowKey in ruleWindowKeys where Double(windowKey.threshold) > percent {
+                    if
+                        let reservationID = deliveryCoordinator.reservationOwners[windowKey],
+                        deliveryCoordinator.inFlightReservations.contains(reservationID)
+                    {
+                        deliveryCoordinator.pendingResetWindows[windowKey] = reservationID
+                    } else {
+                        removeState(for: [windowKey], triggeredWindows: &triggeredWindows)
+                    }
+                }
+            }
 
-            let level = rule.thresholds.last?.level ?? .low
-            let windowKey = AlertWindowKey(
-                keyID: key.id,
-                metricID: rule.metricID,
-                ruleID: rule.id,
-                dimension: dimension(for: rule.valueSource),
-                windowIdentifier: metric.windowEnd.map { String($0.timeIntervalSince1970) } ?? metric.id,
-                threshold: NSDecimalNumber(decimal: rule.thresholds.last?.value ?? 0).intValue
-            )
-            guard !triggeredWindows.contains(windowKey) else { continue }
+            guard
+                metric.windowEnd != nil
+                    || snapshot.kind == .tokenPack
+                    || (rule.valueSource != .usedPercent && rule.valueSource != .remainingPercent)
+            else {
+                continue
+            }
+
+            let newlyReached = matchedThresholds.filter { threshold in
+                let windowKey = AlertWindowKey(
+                    keyID: key.id,
+                    metricID: rule.metricID,
+                    ruleID: rule.id,
+                    windowIdentifier: windowIdentifier,
+                    threshold: NSDecimalNumber(decimal: threshold.value ?? 0).intValue
+                )
+                return !triggeredWindows.contains(windowKey)
+            }
+            guard let highestThreshold = newlyReached.last else {
+                continue
+            }
 
             let reservationID = UUID()
-            triggeredWindows.insert(windowKey)
-            deliveryCoordinator.reservationOwners[windowKey] = reservationID
+            var reservedWindows = Set<AlertWindowKey>()
+            var replacedReservationOwners: [AlertWindowKey: UUID] = [:]
+
+            for threshold in newlyReached {
+                let windowKey = AlertWindowKey(
+                    keyID: key.id,
+                    metricID: rule.metricID,
+                    ruleID: rule.id,
+                    windowIdentifier: windowIdentifier,
+                    threshold: NSDecimalNumber(decimal: threshold.value ?? 0).intValue
+                )
+                if !triggeredWindows.contains(windowKey) {
+                    triggeredWindows.insert(windowKey)
+                } else if let previousOwner = deliveryCoordinator.reservationOwners[windowKey],
+                          previousOwner != reservationID {
+                    replacedReservationOwners[windowKey] = previousOwner
+                }
+                reservedWindows.insert(windowKey)
+                deliveryCoordinator.reservationOwners[windowKey] = reservationID
+                if replacedReservationOwners[windowKey] == nil {
+                    deliveryCoordinator.pendingResetWindows.removeValue(forKey: windowKey)
+                }
+            }
+
+            for previousKey in ruleWindowKeys
+            where previousKey.windowIdentifier == windowIdentifier && !reservedWindows.contains(previousKey) {
+                if let previousOwner = deliveryCoordinator.reservationOwners[previousKey] {
+                    reservedWindows.insert(previousKey)
+                    replacedReservationOwners[previousKey] = previousOwner
+                    deliveryCoordinator.reservationOwners[previousKey] = reservationID
+                }
+            }
+            let obsoleteThresholdKeys = ruleWindowKeys.filter {
+                $0.windowIdentifier == windowIdentifier && !reservedWindows.contains($0)
+            }
+            removeState(for: obsoleteThresholdKeys, triggeredWindows: &triggeredWindows)
+
             alerts.append(UsageAlert(
                 keyID: key.id,
                 keyName: key.displayName,
@@ -304,18 +335,19 @@ final class AlertEvaluator: @unchecked Sendable {
                 metricLabel: metric.label,
                 valueSource: rule.valueSource,
                 currentValue: rule.valueSource == .absoluteValue ? metric.value : nil,
-                level: level,
+                level: highestThreshold.level,
                 percent: percent,
                 windowEnd: metric.windowEnd,
                 balanceAmount: rule.valueSource == .absoluteValue ? metric.value : nil,
                 currencyCode: metric.currencyCode,
                 reservationID: reservationID,
-                triggeredWindows: [windowKey],
-                replacedReservationOwners: [:]
+                triggeredWindows: reservedWindows,
+                replacedReservationOwners: replacedReservationOwners
             ))
         }
 
         persistTriggeredWindows(deliveredWindows.intersection(triggeredWindows))
+        persistPeriodicWatermarks(periodicWatermarks)
         return alerts
     }
 
@@ -326,179 +358,10 @@ final class AlertEvaluator: @unchecked Sendable {
             .doubleValue
     }
 
-    private static func matchesUsed(percent: Double, thresholds: [MetricAlertThreshold]) -> Bool {
-        thresholds.contains { threshold in
-            guard let value = threshold.value else { return false }
-            return percent >= NSDecimalNumber(decimal: value).doubleValue
-        }
-    }
-
-    private static func matchesRemaining(percent: Double, thresholds: [MetricAlertThreshold]) -> Bool {
-        thresholds.contains { threshold in
-            guard let value = threshold.value else { return false }
-            return percent <= NSDecimalNumber(decimal: value).doubleValue
-        }
-    }
-
     private static func providerName(for id: ProviderID) -> String {
         ProviderRegistry.builtInDescriptors.first { $0.id == id }?.displayName ?? id.rawValue
     }
 
-    private func dimension(for source: MetricAlertValueSource) -> UsageDimension {
-        source == .absoluteValue ? .balance : .token
-    }
-
-    private func evaluateLegacy(
-        key: KeyConfiguration,
-        snapshot: UsageSnapshot,
-        thresholds: AlertThresholds
-    ) -> [UsageAlert] {
-        deliveryCoordinator.lock.lock()
-        defer { deliveryCoordinator.lock.unlock() }
-
-        let deliveredWindows = Self.loadTriggeredWindows(from: defaults)
-        var triggeredWindows = deliveredWindows.union(deliveryCoordinator.reservationOwners.keys)
-        var periodicWatermarks = Self.loadPeriodicWatermarks(from: defaults)
-        var alerts: [UsageAlert] = []
-        switch snapshot.kind {
-        case .periodic:
-            if let metric = snapshot.fiveHour, let windowEnd = metric.windowEnd {
-                alerts += evaluate(
-                    key: key,
-                    metric: metric,
-                    dimension: .fiveHour,
-                    windowIdentifier: String(windowEnd.timeIntervalSince1970),
-                    thresholds: thresholds,
-                    clearsWhenBelowThreshold: false,
-                    triggeredWindows: &triggeredWindows,
-                    periodicWatermarks: &periodicWatermarks
-                )
-            }
-            if let metric = snapshot.weekly, let windowEnd = metric.windowEnd {
-                alerts += evaluate(
-                    key: key,
-                    metric: metric,
-                    dimension: .weekly,
-                    windowIdentifier: String(windowEnd.timeIntervalSince1970),
-                    thresholds: thresholds,
-                    clearsWhenBelowThreshold: false,
-                    triggeredWindows: &triggeredWindows,
-                    periodicWatermarks: &periodicWatermarks
-                )
-            }
-        case .tokenPack:
-            if let metric = snapshot.token {
-                alerts += evaluate(
-                    key: key,
-                    metric: metric,
-                    dimension: .token,
-                    windowIdentifier: "token-pack",
-                    thresholds: thresholds,
-                    clearsWhenBelowThreshold: true,
-                    triggeredWindows: &triggeredWindows,
-                    periodicWatermarks: &periodicWatermarks
-                )
-            }
-        }
-
-        for metric in snapshot.metrics where metric.presentation == .progress {
-            guard let limit = metric.limit, limit > 0 else { continue }
-            let used: Decimal
-            switch metric.semantic {
-            case .usedQuota:
-                guard let amount = metric.used else { continue }
-                used = amount
-            case .remainingQuota:
-                guard let remaining = metric.remaining else { continue }
-                used = limit - remaining
-            case .balance, .status, .value:
-                continue
-            }
-            let percent = NSDecimalNumber(decimal: used)
-                .dividing(by: NSDecimalNumber(decimal: limit))
-                .multiplying(by: 100)
-                .doubleValue
-            let dimension: UsageDimension
-            if metric.id == "fiveHour" || metric.id == "five-hour" {
-                dimension = .fiveHour
-            } else if metric.id == "weekly" {
-                dimension = .weekly
-            } else {
-                dimension = .token
-            }
-            let normalized = UsageMetric(
-                used: used,
-                limit: limit,
-                remaining: metric.remaining ?? max(0, limit - used),
-                percent: percent,
-                unit: .token,
-                windowEnd: metric.windowEnd
-            )
-            alerts += evaluate(
-                key: key,
-                metric: normalized,
-                dimension: dimension,
-                windowIdentifier: metric.windowEnd.map { String($0.timeIntervalSince1970) } ?? metric.id,
-                thresholds: thresholds,
-                clearsWhenBelowThreshold: metric.windowEnd == nil,
-                triggeredWindows: &triggeredWindows,
-                periodicWatermarks: &periodicWatermarks
-            )
-        }
-
-        if let thresholdText = key.metadata["balanceWarningThreshold"],
-           let threshold = Decimal(string: thresholdText),
-           let balanceMetric = snapshot.metrics.first(where: { $0.semantic == .balance }),
-           let balance = balanceMetric.value {
-            alerts += evaluateBalance(
-                key: key,
-                balance: balance,
-                threshold: threshold,
-                currencyCode: balanceMetric.currencyCode,
-                triggeredWindows: &triggeredWindows
-            )
-        }
-
-        persistTriggeredWindows(deliveredWindows.intersection(triggeredWindows))
-        persistPeriodicWatermarks(periodicWatermarks)
-        return alerts
-    }
-
-    private func evaluateBalance(
-        key: KeyConfiguration,
-        balance: Decimal,
-        threshold: Decimal,
-        currencyCode: String?,
-        triggeredWindows: inout Set<AlertWindowKey>
-    ) -> [UsageAlert] {
-        let windowKey = AlertWindowKey(
-            keyID: key.id,
-            dimension: .balance,
-            windowIdentifier: currencyCode ?? "currency",
-            threshold: 0
-        )
-        if balance > threshold {
-            removeState(for: [windowKey], triggeredWindows: &triggeredWindows)
-            return []
-        }
-        guard !triggeredWindows.contains(windowKey) else { return [] }
-        let reservationID = UUID()
-        triggeredWindows.insert(windowKey)
-        deliveryCoordinator.reservationOwners[windowKey] = reservationID
-        return [UsageAlert(
-            keyID: key.id,
-            keyName: key.displayName,
-            dimension: .balance,
-            level: .low,
-            percent: 0,
-            windowEnd: nil,
-            balanceAmount: balance,
-            currencyCode: currencyCode,
-            reservationID: reservationID,
-            triggeredWindows: [windowKey],
-            replacedReservationOwners: [:]
-        )]
-    }
 
     func restoreEligibility(for alerts: ArraySlice<UsageAlert>) {
         deliveryCoordinator.lock.lock()
@@ -629,161 +492,6 @@ final class AlertEvaluator: @unchecked Sendable {
         persistPeriodicWatermarks(periodicWatermarks)
     }
 
-    private func evaluate(
-        key: KeyConfiguration,
-        metric: UsageMetric,
-        dimension: UsageDimension,
-        windowIdentifier: String,
-        thresholds: AlertThresholds,
-        clearsWhenBelowThreshold: Bool,
-        triggeredWindows: inout Set<AlertWindowKey>,
-        periodicWatermarks: inout Set<AlertPeriodicWindowWatermark>
-    ) -> [UsageAlert] {
-        guard metric.percent.isSafeNotificationPercent else {
-            return []
-        }
-        let levels: [(threshold: Int, level: AlertLevel)] = [
-            (thresholds.low, .low),
-            (thresholds.high, .high)
-        ]
-
-        guard prepareCurrentWindow(
-            keyID: key.id,
-            dimension: dimension,
-            windowIdentifier: windowIdentifier,
-            activeThresholds: Set(levels.map(\.threshold)),
-            isPeriodic: !clearsWhenBelowThreshold,
-            triggeredWindows: &triggeredWindows,
-            periodicWatermarks: &periodicWatermarks
-        ) else {
-            return []
-        }
-
-        if clearsWhenBelowThreshold {
-            for item in levels where metric.percent < Double(item.threshold) {
-                let windowKey = AlertWindowKey(
-                    keyID: key.id,
-                    dimension: dimension,
-                    windowIdentifier: windowIdentifier,
-                    threshold: item.threshold
-                )
-                if
-                    let reservationID = deliveryCoordinator.reservationOwners[windowKey],
-                    deliveryCoordinator.inFlightReservations.contains(reservationID)
-                {
-                    deliveryCoordinator.pendingResetWindows[windowKey] = reservationID
-                    continue
-                }
-                removeState(for: [windowKey], triggeredWindows: &triggeredWindows)
-            }
-        }
-
-        let newlyReached = levels.filter { item in
-            guard metric.percent >= Double(item.threshold) else {
-                return false
-            }
-            let windowKey = AlertWindowKey(
-                keyID: key.id,
-                dimension: dimension,
-                windowIdentifier: windowIdentifier,
-                threshold: item.threshold
-            )
-            return !triggeredWindows.contains(windowKey)
-        }
-
-        guard let highest = newlyReached.last else {
-            return []
-        }
-
-        let newlyTriggeredWindows = Set(newlyReached.map { item in
-            AlertWindowKey(
-                keyID: key.id,
-                dimension: dimension,
-                windowIdentifier: windowIdentifier,
-                threshold: item.threshold
-            )
-        })
-        let reservationID = UUID()
-        triggeredWindows.formUnion(newlyTriggeredWindows)
-        var reservedWindows = newlyTriggeredWindows
-        var replacedReservationOwners: [AlertWindowKey: UUID] = [:]
-        for item in levels where item.threshold < highest.threshold {
-            let lowerWindowKey = AlertWindowKey(
-                keyID: key.id,
-                dimension: dimension,
-                windowIdentifier: windowIdentifier,
-                threshold: item.threshold
-            )
-            if
-                !newlyTriggeredWindows.contains(lowerWindowKey),
-                let previousOwner = deliveryCoordinator.reservationOwners[lowerWindowKey]
-            {
-                reservedWindows.insert(lowerWindowKey)
-                replacedReservationOwners[lowerWindowKey] = previousOwner
-            }
-        }
-        for windowKey in reservedWindows {
-            deliveryCoordinator.reservationOwners[windowKey] = reservationID
-            if replacedReservationOwners[windowKey] == nil {
-                deliveryCoordinator.pendingResetWindows.removeValue(forKey: windowKey)
-            }
-        }
-
-        return [UsageAlert(
-            keyID: key.id,
-            keyName: key.displayName,
-            dimension: dimension,
-            level: highest.level,
-            percent: metric.percent,
-            windowEnd: metric.windowEnd,
-            balanceAmount: nil,
-            currencyCode: nil,
-            reservationID: reservationID,
-            triggeredWindows: reservedWindows,
-            replacedReservationOwners: replacedReservationOwners
-        )]
-    }
-
-    private func prepareCurrentWindow(
-        keyID: UUID,
-        dimension: UsageDimension,
-        windowIdentifier: String,
-        activeThresholds: Set<Int>,
-        isPeriodic: Bool,
-        triggeredWindows: inout Set<AlertWindowKey>,
-        periodicWatermarks: inout Set<AlertPeriodicWindowWatermark>
-    ) -> Bool {
-        let matchingKeys = triggeredWindows.filter {
-            $0.keyID == keyID && $0.dimension == dimension
-        }
-        if isPeriodic, let currentWindow = Double(windowIdentifier) {
-            let matchingWatermarks = periodicWatermarks.filter {
-                $0.keyID == keyID && $0.dimension == dimension
-            }
-            let latestWindow = (
-                matchingKeys.compactMap { Double($0.windowIdentifier) }
-                    + matchingWatermarks.compactMap { Double($0.windowIdentifier) }
-            ).max()
-            if let latestWindow, currentWindow < latestWindow {
-                return false
-            }
-
-            periodicWatermarks.subtract(matchingWatermarks)
-            periodicWatermarks.insert(AlertPeriodicWindowWatermark(
-                keyID: keyID,
-                dimension: dimension,
-                windowIdentifier: windowIdentifier
-            ))
-        }
-
-        let obsoleteKeys = matchingKeys.filter {
-            $0.windowIdentifier != windowIdentifier
-                || !activeThresholds.contains($0.threshold)
-        }
-        removeState(for: obsoleteKeys, triggeredWindows: &triggeredWindows)
-        return true
-    }
-
     private func removeState(
         for windowKeys: some Sequence<AlertWindowKey>,
         triggeredWindows: inout Set<AlertWindowKey>
@@ -862,24 +570,6 @@ struct AlertManager: Sendable {
     init(evaluator: AlertEvaluator = AlertEvaluator(), sender: any NotificationSending) {
         self.evaluator = evaluator
         self.sender = sender
-    }
-
-    func evaluateAndNotify(
-        key: KeyConfiguration,
-        snapshot: UsageSnapshot,
-        thresholds: AlertThresholds = AlertThresholds(),
-        notificationsEnabled: Bool,
-        shouldDeliver: @escaping @Sendable () async -> Bool = { true }
-    ) async throws -> [UsageAlert] {
-        guard notificationsEnabled else {
-            return []
-        }
-
-        let alerts = evaluator.evaluate(key: key, snapshot: snapshot, thresholds: thresholds)
-        return try await deliver(
-            alerts,
-            shouldDeliver: shouldDeliver
-        )
     }
 
     func evaluateAndNotify(

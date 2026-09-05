@@ -80,7 +80,6 @@ final class UsageStore {
     @ObservationIgnored private let usagePreferencesProvider: @MainActor @Sendable (UUID) -> CredentialUsagePreferences
     @ObservationIgnored private let setUsagePreferencesHandler: @MainActor @Sendable (CredentialUsagePreferences, UUID) -> Void
     @ObservationIgnored private let metricCapabilitiesProvider: @MainActor @Sendable (KeyConfiguration) -> [UsageMetricCapability]
-    @ObservationIgnored private let legacyReconcileThresholds: AlertThresholds
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private var refreshingKeyIDs: Set<UUID> = []
     @ObservationIgnored private var refreshGenerationByKeyID: [UUID: UUID] = [:]
@@ -95,7 +94,6 @@ final class UsageStore {
         notificationSender: any NotificationSending,
         defaults: UserDefaults = .standard,
         refreshMinutes: Int = 5,
-        thresholds: AlertThresholds = AlertThresholds(),
         notificationsEnabled: Bool = true,
         usagePreferencesProvider: @escaping @MainActor @Sendable (UUID) -> CredentialUsagePreferences = { _ in .defaultValue },
         setUsagePreferencesHandler: @escaping @MainActor @Sendable (CredentialUsagePreferences, UUID) -> Void = { _, _ in },
@@ -112,7 +110,6 @@ final class UsageStore {
         self.notificationSender = notificationSender
         self.defaults = defaults
         self.refreshMinutes = refreshMinutes
-        self.legacyReconcileThresholds = thresholds
         self.notificationsEnabled = notificationsEnabled
         self.usagePreferencesProvider = usagePreferencesProvider
         self.setUsagePreferencesHandler = setUsagePreferencesHandler
@@ -143,17 +140,6 @@ final class UsageStore {
             return
         }
         await perform([request])
-    }
-
-    func updateSettings(
-        refreshMinutes: Int,
-        thresholds: AlertThresholds,
-        notificationsEnabled: Bool
-    ) {
-        updateSettings(
-            refreshMinutes: refreshMinutes,
-            notificationsEnabled: notificationsEnabled
-        )
     }
 
     func updateSettings(
@@ -207,7 +193,7 @@ final class UsageStore {
                 existing: preferences,
                 metrics: snapshot.normalizedMetrics,
                 capabilities: metricCapabilitiesProvider(state.configuration),
-                legacyThresholds: legacyReconcileThresholds
+                legacyThresholds: .init()
             )
             setUsagePreferencesHandler(preferences, keyID)
             scheduleNotification(NotificationWork(
@@ -285,7 +271,7 @@ final class UsageStore {
                 existing: preferences,
                 metrics: result.normalizedMetrics,
                 capabilities: metricCapabilitiesProvider(configuration),
-                legacyThresholds: legacyReconcileThresholds
+                legacyThresholds: .init()
             )
             setUsagePreferencesHandler(preferences, configuration.id)
             scheduleNotification(NotificationWork(

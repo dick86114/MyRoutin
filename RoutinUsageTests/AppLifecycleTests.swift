@@ -114,7 +114,7 @@ final class AppLifecycleTests: XCTestCase {
         }
 
         let alerts = await context.notificationSender.sentAlerts()
-        XCTAssertEqual(alerts.map(\.level), [.high, .high])
+        XCTAssertEqual(alerts.map(\.level), [.low, .high])
     }
 
     func test运行期刷新间隔变更立即影响过期判断() async throws {
@@ -137,7 +137,7 @@ final class AppLifecycleTests: XCTestCase {
         XCTAssertEqual(context.scheduler.rescheduledMinutes, [1])
     }
 
-    func test启动使用启动时最新通知阈值与刷新间隔设置() async throws {
+    func test启动使用默认指标规则与刷新间隔设置() async throws {
         let context = try makeContext()
         defer { context.cleanUp() }
         _ = try context.repository.add(name: "主账号", secret: "plan-main-0001")
@@ -145,7 +145,6 @@ final class AppLifecycleTests: XCTestCase {
         await context.fetcher.setResponse(.success(usage), for: "plan-main-0001")
         let environment = context.makeEnvironment()
         environment.settings.notificationsEnabled = true
-        environment.settings.thresholds = AlertThresholds(low: 80, high: 90)
         environment.settings.refreshMinutes = 1
 
         await environment.start()
@@ -154,7 +153,7 @@ final class AppLifecycleTests: XCTestCase {
         }
 
         let alerts = await context.notificationSender.sentAlerts()
-        XCTAssertEqual(alerts.map(\.level), [.high])
+        XCTAssertEqual(alerts.map(\.level), [.low])
         XCTAssertEqual(context.scheduler.startedMinutes, [1])
     }
 
@@ -963,7 +962,6 @@ private struct AppLifecycleTestContext {
             notificationSender: notificationSender,
             defaults: defaults,
             refreshMinutes: settings.refreshMinutes,
-            thresholds: settings.thresholds,
             notificationsEnabled: settings.notificationsEnabled,
             usagePreferencesProvider: { id in
                 settings.usagePreferences(for: id)

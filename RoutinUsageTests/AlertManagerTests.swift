@@ -15,6 +15,7 @@ final class AlertManagerTests: XCTestCase {
             limit: 100,
             remaining: 4,
             unit: .token,
+            windowEnd: Date(timeIntervalSince1970: 10_000),
             presentation: .progress,
             semantic: .remainingQuota
         )
@@ -107,7 +108,7 @@ final class AlertManagerTests: XCTestCase {
 
         XCTAssertEqual(alerts.map(\.level), [.low])
         XCTAssertEqual(alerts.first?.keyName, "主账号")
-        XCTAssertEqual(alerts.first?.dimension, .fiveHour)
+        XCTAssertEqual(alerts.first?.metricID, "fiveHour")
         XCTAssertEqual(alerts.first?.percent, 80)
         XCTAssertEqual(
             context.evaluator.evaluate(
@@ -138,7 +139,7 @@ final class AlertManagerTests: XCTestCase {
 
         XCTAssertEqual(alerts.map(\.level), [.high])
         XCTAssertEqual(alerts.first?.keyName, "主账号")
-        XCTAssertEqual(alerts.first?.dimension, .fiveHour)
+        XCTAssertEqual(alerts.first?.metricID, "fiveHour")
         XCTAssertEqual(
             context.evaluator.evaluate(
                 key: key,
@@ -164,7 +165,7 @@ final class AlertManagerTests: XCTestCase {
             thresholds: .init(low: 80, high: 95)
         )
 
-        XCTAssertEqual(alerts.map(\.dimension), [.fiveHour, .weekly])
+        XCTAssertEqual(alerts.map(\.metricID), ["fiveHour", "weekly"])
         XCTAssertEqual(alerts.map(\.level), [.low, .high])
     }
 
@@ -277,7 +278,7 @@ final class AlertManagerTests: XCTestCase {
 
         var persistedKeys = try persistedWindowKeys(from: context.defaults)
         var currentKeys = persistedKeys.filter {
-            $0.keyID == key.id && $0.dimension == .fiveHour
+            $0.keyID == key.id && $0.metricID == "fiveHour"
         }
         XCTAssertEqual(currentKeys.count, 2)
         XCTAssertEqual(Set(currentKeys.map(\.windowIdentifier)), ["100000.0"])
@@ -299,7 +300,7 @@ final class AlertManagerTests: XCTestCase {
 
         persistedKeys = try persistedWindowKeys(from: context.defaults)
         currentKeys = persistedKeys.filter {
-            $0.keyID == key.id && $0.dimension == .fiveHour
+            $0.keyID == key.id && $0.metricID == "fiveHour"
         }
         XCTAssertEqual(currentKeys.count, 2)
         XCTAssertEqual(Set(currentKeys.map(\.windowIdentifier)), ["100000.0"])
@@ -447,7 +448,7 @@ final class AlertManagerTests: XCTestCase {
             snapshot: tokenSnapshot(percent: 96),
             thresholds: .init()
         )
-        XCTAssertEqual(initialAlerts.map(\.dimension), [.token])
+        XCTAssertEqual(initialAlerts.map(\.metricID), ["token"])
         XCTAssertEqual(initialAlerts.map(\.level), [.high])
         XCTAssertEqual(
             context.evaluator.evaluate(
@@ -1166,6 +1167,56 @@ final class AlertManagerTests: XCTestCase {
             XCTAssertTrue(evaluator.beginDelivery(of: alert))
             evaluator.finishDelivery(of: alert)
         }
+    }
+}
+
+extension AlertEvaluator {
+    func evaluate(
+        key: KeyConfiguration,
+        snapshot: UsageSnapshot,
+        thresholds: AlertThresholds
+    ) -> [UsageAlert] {
+        evaluate(
+            key: key,
+            snapshot: snapshot,
+            rules: snapshot.normalizedMetrics.map { metric in
+                .usedPercent(
+                    metricID: metric.id,
+                    isEnabled: true,
+                    low: Decimal(thresholds.low),
+                    high: Decimal(thresholds.high)
+                )
+            }
+        )
+    }
+}
+
+extension AlertManager {
+    func evaluateAndNotify(
+        key: KeyConfiguration,
+        snapshot: UsageSnapshot,
+        thresholds: AlertThresholds = .init(),
+        notificationsEnabled: Bool,
+        shouldDeliver: @escaping @Sendable () async -> Bool = { true }
+    ) async throws -> [UsageAlert] {
+        try await evaluateAndNotify(
+            key: key,
+            snapshot: snapshot,
+            preferences: CredentialUsagePreferences(
+                menuBarMetricID: nil,
+                notificationsEnabled: true,
+                alertRules: snapshot.normalizedMetrics.map { metric in
+                    .usedPercent(
+                        metricID: metric.id,
+                        isEnabled: true,
+                        low: Decimal(thresholds.low),
+                        high: Decimal(thresholds.high)
+                    )
+                }
+            ),
+            applicationNotificationsEnabled: notificationsEnabled,
+            shouldDeliver: shouldDeliver
+        )
     }
 }
 
