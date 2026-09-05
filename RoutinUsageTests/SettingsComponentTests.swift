@@ -10,7 +10,7 @@ final class SettingsComponentTests: XCTestCase {
 
         XCTAssertTrue(source.contains("MenuBarIndicatorModel.make("))
         XCTAssertTrue(source.contains("MenuBarMultiUsageIcon.image("))
-        XCTAssertTrue(source.contains("let dimension: DisplayDimension"))
+        XCTAssertTrue(source.contains("let metric: NormalizedUsageMetric?"))
         XCTAssertTrue(source.contains("static func =="))
         XCTAssertFalse(source.contains("@Bindable var environment"))
     }

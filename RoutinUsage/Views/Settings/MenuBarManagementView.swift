@@ -167,7 +167,7 @@ struct MenuBarManagementView: View {
                         MenuBarIndicatorPreview(
                             state: state,
                             descriptor: descriptor,
-                            dimension: environment.settings.displayDimension
+                            metric: menuBarMetric(for: state)
                         )
                         .equatable()
                     }
@@ -347,7 +347,7 @@ struct MenuBarManagementView: View {
                 MenuBarIndicatorPreview(
                     state: state,
                     descriptor: descriptor,
-                    dimension: environment.settings.displayDimension
+                    metric: menuBarMetric(for: state)
                 )
                 .equatable()
                 .frame(width: 42, height: 32)
@@ -443,6 +443,17 @@ struct MenuBarManagementView: View {
 
     private func descriptor(for state: KeyUsageState) -> ProviderDescriptor? {
         ProviderRegistry.builtInDescriptors.first { $0.id == state.configuration.providerID }
+    }
+
+    private func menuBarMetric(for state: KeyUsageState) -> NormalizedUsageMetric? {
+        let id = state.configuration.id
+        let preferences = environment.settings.usagePreferences(for: id)
+        let capabilities = environment.providerRegistry?.metricCapabilities(for: state.configuration) ?? []
+        return MenuBarMetricResolver.resolve(
+            selectedMetricID: preferences.menuBarMetricID,
+            metrics: state.snapshot?.normalizedMetrics ?? [],
+            capabilities: capabilities
+        ).metric
     }
 
     private func providerName(for state: KeyUsageState) -> String {

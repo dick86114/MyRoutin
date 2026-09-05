@@ -4,19 +4,19 @@ import SwiftUI
 struct MenuBarIndicatorPreview: View, Equatable {
     let state: KeyUsageState
     let descriptor: ProviderDescriptor
-    let dimension: DisplayDimension
+    let metric: NormalizedUsageMetric?
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.state == rhs.state
             && lhs.descriptor == rhs.descriptor
-            && lhs.dimension == rhs.dimension
+            && lhs.metric == rhs.metric
     }
 
     var body: some View {
         let indicator = MenuBarIndicatorModel.make(
             state: state,
             descriptor: descriptor,
-            dimension: dimension
+            metric: metric
         )
         let image = MenuBarMultiUsageIcon.image(
             indicators: [indicator],

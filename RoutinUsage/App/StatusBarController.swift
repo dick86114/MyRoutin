@@ -69,7 +69,6 @@ final class StatusBarController: NSObject {
 
     private func observeEnvironment() {
         withObservationTracking {
-            _ = environment.settings.displayDimension
             _ = environment.settings.menuBarStyle
             _ = environment.settings.refreshMinutes
             _ = environment.settings.notificationsEnabled
@@ -114,10 +113,17 @@ final class StatusBarController: NSObject {
             guard let state = environment.store.state(for: id),
                   let descriptor = ProviderRegistry.builtInDescriptors.first(where: { $0.id == state.configuration.providerID })
             else { return nil }
+            let preferences = environment.settings.usagePreferences(for: id)
+            let capabilities = environment.providerRegistry?.metricCapabilities(for: state.configuration) ?? []
+            let resolution = MenuBarMetricResolver.resolve(
+                selectedMetricID: preferences.menuBarMetricID,
+                metrics: state.snapshot?.normalizedMetrics ?? [],
+                capabilities: capabilities
+            )
             return MenuBarIndicatorModel.make(
                 state: state,
                 descriptor: descriptor,
-                dimension: environment.settings.displayDimension
+                metric: resolution.metric
             )
         }
         if !selectedIndicators.isEmpty {
@@ -137,41 +143,10 @@ final class StatusBarController: NSObject {
             return
         }
         let state: KeyUsageState? = nil
-        let text = UsageFormatter.menuBarText(
-            state: state,
-            dimension: environment.settings.displayDimension,
-            style: environment.settings.menuBarStyle
-        )
-        let metric = MenuBarVerticalUsage.metric(
-            state: state,
-            dimension: environment.settings.displayDimension,
-            style: environment.settings.menuBarStyle
-        )
-
-        if let metric {
-            button.title = text.isEmpty ? "" : text + " · "
-            button.image = switch environment.settings.menuBarStyle {
-            case .aliasLogoProgress, .logoProgress:
-                MenuBarLogoUsageIcon.image(
-                    percent: metric.percent,
-                    appearance: button.effectiveAppearance
-                )
-            case .aliasVerticalBar:
-                MenuBarVerticalUsageIcon.image(percent: metric.percent)
-            case .percent, .aliasPercent:
-                nil
-            }
-            button.imagePosition = .imageRight
-            let usedPercent = UsageFormatter.percentText(metric) ?? ""
-            let accessibilityText = text.isEmpty
-                ? "已使用 \(usedPercent)"
-                : "\(text)，已使用 \(usedPercent)"
-            button.setAccessibilityLabel(accessibilityText)
-        } else {
-            button.title = text
-            button.image = nil
-            button.setAccessibilityLabel(text)
-        }
+        let text = "尚未配置 Key"
+        button.title = text
+        button.image = nil
+        button.setAccessibilityLabel(text)
         button.toolTip = helpText(for: state)
     }
 
