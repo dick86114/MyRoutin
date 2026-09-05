@@ -876,6 +876,34 @@ struct AlertManager: Sendable {
         }
 
         let alerts = evaluator.evaluate(key: key, snapshot: snapshot, thresholds: thresholds)
+        return try await deliver(
+            alerts,
+            shouldDeliver: shouldDeliver
+        )
+    }
+
+    func evaluateAndNotify(
+        key: KeyConfiguration,
+        snapshot: UsageSnapshot,
+        preferences: CredentialUsagePreferences,
+        applicationNotificationsEnabled: Bool,
+        shouldDeliver: @escaping @Sendable () async -> Bool = { true }
+    ) async throws -> [UsageAlert] {
+        guard applicationNotificationsEnabled, preferences.notificationsEnabled else {
+            return []
+        }
+
+        let alerts = evaluator.evaluate(key: key, snapshot: snapshot, rules: preferences.alertRules)
+        return try await deliver(
+            alerts,
+            shouldDeliver: shouldDeliver
+        )
+    }
+
+    private func deliver(
+        _ alerts: [UsageAlert],
+        shouldDeliver: @escaping @Sendable () async -> Bool
+    ) async throws -> [UsageAlert] {
         guard !alerts.isEmpty else {
             return []
         }

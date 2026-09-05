@@ -85,7 +85,7 @@ final class AppLifecycleTests: XCTestCase {
         XCTAssertEqual(alerts.first?.level, .high)
     }
 
-    func test运行期阈值变更立即影响通知去重() async throws {
+    func test运行期指标规则变更立即影响通知去重() async throws {
         let context = try makeContext(notificationsEnabled: true)
         defer { context.cleanUp() }
         _ = try context.repository.add(name: "主账号", secret: "plan-main-0001")
@@ -97,15 +97,24 @@ final class AppLifecycleTests: XCTestCase {
             await context.notificationSender.sentAlerts().count == 1
         }
 
-        environment.settings.thresholds = AlertThresholds(low: 80, high: 90)
-        environment.thresholdsDidChange(to: environment.settings.thresholds)
+        var preferences = environment.settings.usagePreferences(for: environment.store.orderedKeyIDs[0])
+        preferences.alertRules = [.usedPercent(
+            metricID: "token",
+            isEnabled: true,
+            low: 80,
+            high: 90
+        )]
+        environment.settings.setUsagePreferences(
+            preferences,
+            for: environment.store.orderedKeyIDs[0]
+        )
         await environment.store.refreshAll()
         await 等待条件 {
             await context.notificationSender.sentAlerts().count == 2
         }
 
         let alerts = await context.notificationSender.sentAlerts()
-        XCTAssertEqual(alerts.map(\.level), [.low, .high])
+        XCTAssertEqual(alerts.map(\.level), [.high, .high])
     }
 
     func test运行期刷新间隔变更立即影响过期判断() async throws {
@@ -926,6 +935,7 @@ private struct AppLifecycleTestContext {
     let workspaceNotificationCenter: NotificationCenter
     let timerScheduler: LifecycleTimerScheduler
     let notificationsEnabled: Bool
+    let preferenceStore = UsagePreferenceStore()
 
     func makeEnvironment() -> AppEnvironment {
         makeEnvironment(
@@ -955,6 +965,13 @@ private struct AppLifecycleTestContext {
             refreshMinutes: settings.refreshMinutes,
             thresholds: settings.thresholds,
             notificationsEnabled: settings.notificationsEnabled,
+            usagePreferencesProvider: { id in
+                settings.usagePreferences(for: id)
+            },
+            setUsagePreferencesHandler: { preferences, id in
+                settings.setUsagePreferences(preferences, for: id)
+            },
+            metricCapabilitiesProvider: { _ in [] },
             now: { Date(timeIntervalSince1970: 10_000) }
         )
         return AppEnvironment(

@@ -190,6 +190,15 @@ final class AppEnvironment {
             refreshMinutes: settings.refreshMinutes,
             thresholds: settings.thresholds,
             notificationsEnabled: settings.notificationsEnabled,
+            usagePreferencesProvider: { id in
+                settings.usagePreferences(for: id)
+            },
+            setUsagePreferencesHandler: { preferences, id in
+                settings.setUsagePreferences(preferences, for: id)
+            },
+            metricCapabilitiesProvider: { configuration in
+                providerRegistry.metricCapabilities(for: configuration)
+            },
             providerRegistry: providerRegistry
         )
 
