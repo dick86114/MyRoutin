@@ -15,6 +15,7 @@ final class StatusBarController: NSObject {
     private var notificationsEnabled: Bool
     private var appearanceObservation: NSKeyValueObservation?
     private var popoverWindowResignObserver: NSObjectProtocol?
+    private var applicationDidBecomeActiveObserver: NSObjectProtocol?
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -26,19 +27,49 @@ final class StatusBarController: NSObject {
 
     func start() {
         guard statusItem == nil else { return }
-        // 等应用完成启动并进入主运行循环后再向 SystemUIServer 注册状态项。
+        registerStatusItem()
+        observeStatusBarAppearance()
+        observeEnvironment()
+        applicationDidBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: NSApp,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.restoreStatusItemIfNeeded()
+            }
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            // 应用升级后旧进程可能暂时占用旧状态项位置，下一轮主循环再确认一次。
+            try? await Task.sleep(for: .milliseconds(500))
+            self.restoreStatusItemIfNeeded()
+            await self.environment.start()
+            self.environment.presentUpdateCompletionNoticeIfNeeded()
+        }
+    }
+
+    private func registerStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         configurePopover()
         configureStatusButton()
         updateStatusButton()
-        observeStatusBarAppearance()
-        observeEnvironment()
+    }
 
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            await self.environment.start()
-            self.environment.presentUpdateCompletionNoticeIfNeeded()
+    private func restoreStatusItemIfNeeded() {
+        guard let statusItem else {
+            registerStatusItem()
+            return
         }
+        guard statusItem.button?.window == nil else {
+            statusItem.isVisible = true
+            updateStatusButton()
+            return
+        }
+        NSStatusBar.system.removeStatusItem(statusItem)
+        self.statusItem = nil
+        registerStatusItem()
     }
 
     private func configurePopover() {
