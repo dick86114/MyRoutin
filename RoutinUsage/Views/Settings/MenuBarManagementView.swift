@@ -42,22 +42,18 @@ struct MenuBarManagementView: View {
         }
     }
 
-    @ViewBuilder
     private var previews: some View {
-        GeometryReader { geometry in
-            if geometry.size.width < 820 {
-                VStack(alignment: .leading, spacing: 18) {
-                    menuBarPreview
-                    popoverPreview
-                }
-            } else {
-                HStack(alignment: .top, spacing: 18) {
-                    menuBarPreview
-                    popoverPreview
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 18) {
+                menuBarPreview
+                popoverPreview
+            }
+
+            VStack(alignment: .leading, spacing: 18) {
+                menuBarPreview
+                popoverPreview
             }
         }
-        .frame(height: 178)
     }
 
     private var menuBarPreview: some View {

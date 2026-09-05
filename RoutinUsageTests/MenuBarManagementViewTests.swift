@@ -11,9 +11,11 @@ final class MenuBarManagementViewTests: XCTestCase {
         XCTAssertTrue(source.contains("菜单栏管理"))
         XCTAssertTrue(source.contains("菜单栏预览"))
         XCTAssertTrue(source.contains("弹窗预览"))
+        XCTAssertTrue(source.contains("ViewThatFits(in: .horizontal)"))
         XCTAssertTrue(source.contains("movingDisplay"))
         XCTAssertTrue(source.contains("accessibilityLabel"))
         XCTAssertFalse(source.contains("onDrag"))
         XCTAssertFalse(source.contains("onDrop"))
+        XCTAssertFalse(source.contains(".frame(height: 178)"))
     }
 }
