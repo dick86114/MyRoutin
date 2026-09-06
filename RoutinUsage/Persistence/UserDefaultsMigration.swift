@@ -2,11 +2,13 @@ import Foundation
 
 enum UserDefaultsMigration {
     static let legacyBundleIdentifier = "ai.routin.usage-monitor"
-    static let currentBundleIdentifier = "ai.routin.myroutin"
+    static let previousProductionBundleIdentifier = "ai.routin.myroutin"
+    static let currentBundleIdentifier = "cc.idickies.mytoken"
     static let debugBundleIdentifier = "ai.routin.mytoken.debug"
     static let debugV2BundleIdentifier = "ai.routin.mytoken.debug.v2"
     static let bundleIdentifierChain = [
         legacyBundleIdentifier,
+        previousProductionBundleIdentifier,
         currentBundleIdentifier,
         debugBundleIdentifier,
         debugV2BundleIdentifier,
@@ -30,7 +32,8 @@ enum UserDefaultsMigration {
 
             let sourceValues = sourceProvider(sourceDomain)?
                 .persistentDomain(forName: sourceDomain) ?? [:]
-            for (key, value) in sourceValues where migratedKeys.insert(key).inserted {
+            // 保留业务数据，不把旧身份的 AppKit 窗口和状态栏记录带入新身份。
+            for (key, value) in sourceValues where !isSystemPresentationKey(key) && migratedKeys.insert(key).inserted {
                 if currentValues[key] == nil {
                     currentValues[key] = value
                 }
@@ -46,10 +49,16 @@ enum UserDefaultsMigration {
         }
     }
 
-    private static func compatibilitySources(for currentDomain: String) -> [String] {
+    static func compatibilitySources(for currentDomain: String) -> [String] {
         guard let currentIndex = bundleIdentifierChain.firstIndex(of: currentDomain) else {
             return []
         }
         return Array(bundleIdentifierChain[..<currentIndex])
+    }
+
+    private static func isSystemPresentationKey(_ key: String) -> Bool {
+        key.hasPrefix("NSStatusItem ") ||
+            key.hasPrefix("NSWindow ") ||
+            key.hasPrefix("NSSplitView ")
     }
 }

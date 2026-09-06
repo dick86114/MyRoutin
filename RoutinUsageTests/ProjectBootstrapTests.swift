@@ -10,7 +10,7 @@ final class ProjectBootstrapTests: XCTestCase {
         let project = try sourceText(at: "project.yml")
         let environment = try sourceText(at: "RoutinUsage/App/AppEnvironment.swift")
 
-        XCTAssertTrue(project.contains("PRODUCT_BUNDLE_IDENTIFIER: ai.routin.myroutin"))
+        XCTAssertTrue(project.contains("PRODUCT_BUNDLE_IDENTIFIER: cc.idickies.mytoken"))
         XCTAssertTrue(environment.contains("UserDefaultsMigration.migrateCompatiblePreferences()"))
     }
 
