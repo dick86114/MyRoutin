@@ -1,5 +1,17 @@
 import Foundation
 
+private enum TransferBase64URLLexicalValidator {
+    static func isValid(_ value: String) -> Bool {
+        guard !value.isEmpty, value.utf8.count % 4 != 1 else { return false }
+        return value.utf8.allSatisfy { byte in
+            (byte >= 65 && byte <= 90) ||
+            (byte >= 97 && byte <= 122) ||
+            (byte >= 48 && byte <= 57) ||
+            byte == 45 || byte == 95
+        }
+    }
+}
+
 struct TransferPackageV1: Codable, Equatable, Sendable {
     let schemaVersion: Int
     let credentials: [TransferCredential]
@@ -188,7 +200,9 @@ struct EncryptedSecretEnvelope: Codable, Equatable, Sendable {
         }
         guard keyAgreement == "X25519-HKDF-SHA256" else { throw TransferSchemaError.invalidEnvelope("keyAgreement") }
         for (name, value) in [("nonce", nonce), ("ciphertext", ciphertext), ("tag", tag), ("ephemeralPublicKey", ephemeralPublicKey)] {
-            guard Self.isBase64URL(value) else { throw TransferSchemaError.invalidEnvelope(name) }
+            guard TransferBase64URLLexicalValidator.isValid(value) else {
+                throw TransferSchemaError.invalidEnvelope(name)
+            }
         }
         let ids = entries.map(\.credentialId)
         guard Set(ids).count == ids.count else { throw TransferSchemaError.invalidEnvelope("entries") }
@@ -218,10 +232,6 @@ struct EncryptedSecretEnvelope: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case algorithm, keyAgreement, nonce, ciphertext, tag, ephemeralPublicKey, associatedData, entries
-    }
-
-    private static func isBase64URL(_ value: String) -> Bool {
-        !value.isEmpty && value.allSatisfy { $0.isNumber || $0.isLetter || $0 == "-" || $0 == "_" }
     }
 }
 
@@ -267,7 +277,9 @@ struct EncryptedSecretEntry: Codable, Equatable, Sendable {
             throw TransferSchemaError.invalidEnvelope("secretFields")
         }
         for (name, value) in [("bearerToken", bearerToken), ("apiKey", apiKey), ("accessKeyID", accessKeyID), ("secretAccessKey", secretAccessKey)] {
-            if let value, !Self.isBase64URL(value) { throw TransferSchemaError.invalidEnvelope(name) }
+            if let value, !TransferBase64URLLexicalValidator.isValid(value) {
+                throw TransferSchemaError.invalidEnvelope(name)
+            }
         }
         guard (accessKeyID == nil) == (secretAccessKey == nil) else {
             throw TransferSchemaError.invalidEnvelope("accessKeyPair")
@@ -277,12 +289,6 @@ struct EncryptedSecretEntry: Codable, Equatable, Sendable {
     /// Shared lexical contract with transfer-schema-v1.json: non-empty, unpadded
     /// URL-safe Base64 alphabet and a length that is not 4n+1. This is an
     /// encoding contract only; confidentiality is provided by later AEAD.
-    private static func isBase64URL(_ value: String) -> Bool {
-        !value.isEmpty &&
-        value.count % 4 != 1 &&
-        value.utf8.allSatisfy { ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122) || ($0 >= 48 && $0 <= 57) || $0 == 45 || $0 == 95 }
-    }
-
     private enum CodingKeys: String, CodingKey {
         case credentialId, bearerToken, apiKey, accessKeyID, secretAccessKey
     }

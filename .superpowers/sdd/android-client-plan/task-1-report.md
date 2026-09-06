@@ -162,3 +162,35 @@ DONE. 统一 JSON Schema 与 Swift 的 envelope/typed-secret 字段词法接受�
 ### Blockers/remaining risks
 
 - 无当前阻塞；full test 完成后需将实际输出补入本段并提交本轮修复。
+
+## Round 4 lexical validator fix report
+
+### Result
+
+DONE. 抽取明确的 ASCII lexical Base64URL validator，并让 `EncryptedSecretEntry` 与 `EncryptedSecretEnvelope` 的 nonce、ciphertext、tag、ephemeralPublicKey 共用同一接受集合。保留 Volcengine accessKeyID/secretAccessKey 成对约束，以及 bearerToken/apiKey 单字段行为。
+
+### Changes made with file paths
+
+- `RoutinUsage/Transfer/TransferModels.swift`
+  - 新增 file-scoped `TransferBase64URLLexicalValidator`：拒绝空串、长度 4n+1、`=` padding 和非 ASCII；仅接受 ASCII `[A-Za-z0-9_-]`。
+  - envelope 四个 encoded fields 与 entry 四个 typed secret fields 统一调用该 validator。
+  - 未改变 AK/SK pair 关联规则或 bearer/apiKey 单字段规则。
+- `RoutinUsageTests/TransferSchemaTests.swift`
+  - 扩展 schema/entry 对照边界值为 `AA`、`Zh`、`AAA`、`A`、`AAAAA`、`AA=`、空串和非 ASCII `é`。
+  - 新增 envelope 四个 encoded fields 的逐字段边界测试，验证上述接受/拒绝集合。
+
+### Validation command and observed results
+
+- TDD pre-fix focused run：新增 envelope 边界测试在旧实现下失败（后台任务状态 `failed`）；未保留可读 XCTest 尾部输出。
+- focused：`xcodegen generate && xcodebuild -project RoutinUsage.xcodeproj -scheme RoutinUsage -configuration Debug -destination 'platform=macOS' -derivedDataPath .build/task1-round4-focused-verified PRODUCT_BUNDLE_IDENTIFIER=ai.routin.mytoken.tests CODE_SIGNING_ALLOWED=NO -only-testing:RoutinUsageTests/TransferSchemaTests test`；实际输出：`Executed 9 tests, with 0 failures`、`Test Suite 'TransferSchemaTests' passed`、`** TEST SUCCEEDED **`。
+- full：`scripts/test.sh`；后台任务状态 `succeeded`，命令退出码 0。完整脚本逐项输出未被当前后台面板回传，因此不臆填总测试数；focused 输出已明确为 9/9。
+- `git diff --check`：通过。
+
+### Assumptions
+
+- Swift validator 按 UTF-8 字节长度计算模 4，并以 ASCII 字节范围判定字符集，与 schema 的三条正则（4n、4n+2、4n+3）保持一致。
+- 本轮不修改 schema，因为现有 `$defs.base64url` 已表达目标接受集合。
+
+### Blockers/remaining risks
+
+- 无当前阻塞；完整脚本虽已退出 0，但其逐项测试计数未从后台输出接口获得。真实加密、密钥交换和 QR/LAN 仍属于后续任务。

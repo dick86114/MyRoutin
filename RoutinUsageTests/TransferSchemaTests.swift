@@ -97,7 +97,10 @@ final class TransferSchemaTests: XCTestCase {
         let base64url = try XCTUnwrap(definitions["base64url"] as? [String: Any])
         let patterns = try XCTUnwrap(base64url["anyOf"] as? [[String: Any]]).compactMap { $0["pattern"] as? String }
         XCTAssertEqual(patterns.count, 3)
-        for (value, expected) in [("AA", true), ("Zh", true), ("A", false), ("plain-text-secret", false), ("AA=", false)] {
+        for (value, expected) in [
+            ("AA", true), ("Zh", true), ("AAA", true),
+            ("A", false), ("AAAAA", false), ("AA=", false), ("", false), ("é", false)
+        ] {
             let schemaAccepted = patterns.contains { pattern in
                 (try? NSRegularExpression(pattern: pattern).firstMatch(in: value, range: NSRange(value.startIndex..., in: value))) != nil
             }
@@ -105,6 +108,46 @@ final class TransferSchemaTests: XCTestCase {
             let swiftAccepted = (try? JSONDecoder().decode(EncryptedSecretEntry.self, from: entry)) != nil
             XCTAssertEqual(schemaAccepted, expected, value)
             XCTAssertEqual(swiftAccepted, schemaAccepted, value)
+        }
+    }
+
+    func testEncryptedSecretEnvelope所有encoded字段与schema词法接受集一致() throws {
+        let encodedFields = ["nonce", "ciphertext", "tag", "ephemeralPublicKey"]
+        let acceptedValues = ["AA", "Zh", "AAA"]
+        let rejectedValues = ["A", "AAAAA", "AA=", "", "é"]
+        let base: [String: Any] = [
+            "algorithm": "AES-256-GCM",
+            "keyAgreement": "X25519-HKDF-SHA256",
+            "nonce": "AA",
+            "ciphertext": "AA",
+            "tag": "AA",
+            "ephemeralPublicKey": "AA",
+            "entries": []
+        ]
+
+        for field in encodedFields {
+            for value in acceptedValues {
+                var object = base
+                object[field] = value
+                XCTAssertNoThrow(
+                    try JSONDecoder().decode(
+                        EncryptedSecretEnvelope.self,
+                        from: JSONSerialization.data(withJSONObject: object)
+                    ),
+                    "expected \(field)=\(value) to be accepted"
+                )
+            }
+            for value in rejectedValues {
+                var object = base
+                object[field] = value
+                XCTAssertThrowsError(
+                    try JSONDecoder().decode(
+                        EncryptedSecretEnvelope.self,
+                        from: JSONSerialization.data(withJSONObject: object)
+                    ),
+                    "expected \(field)=\(value) to be rejected"
+                )
+            }
         }
     }
 
