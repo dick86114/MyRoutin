@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>FormatVersion</key>
+	<integer>1</integer>
+	<key>Store</key>
+	<dict>
+		<key>RoutinUsageTests</key>
+		<dict>
+			<key>StatusBarIconRenderTests</key>
+			<dict>
+				<key>test多指标图标保留用量风险颜色</key>
+				<dict>
+					<key>mrnet</key>
+					<real>0.031430959701538086</real>
+				</dict>
+				<key>test多指标图标最多绘制五个</key>
+				<dict>
+					<key>mrnet</key>
+					<real>0.00097596645355224609</real>
+				</dict>
+				<key>test多指标图标生成有效图片和像素数据</key>
+				<dict>
+					<key>mrnet</key>
+					<real>0.0027360916137695312</real>
+				</dict>
+			</dict>
+			<key>StatusBarVisibilityTests</key>
+			<dict>
+				<key>test状态栏不直接移动系统托管的状态项窗口</key>
+				<dict>
+					<key>mrnet</key>
+					<real>0.001690983772277832</real>
+				</dict>
+				<key>test状态栏控制器由应用级强引用并显式保持状态项可见</key>
+				<dict>
+					<key>mrnet</key>
+					<real>0.00087201595306396484</real>
+				</dict>
+			</dict>
+		</dict>
+	</dict>
+</dict>
+</plist>

@@ -7,6 +7,10 @@ final class RoutinUsageAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        // 旧版本曾保存状态项位置；移除旧缓存，避免升级后状态项落到不可见位置。
+        UserDefaults.standard.removeObject(forKey: Self.statusItemPositionCacheKey)
+        UserDefaults.standard.removeObject(forKey: "NSStatusItem VisibleCC MyRoutinStatusBar")
+        UserDefaults.standard.removeObject(forKey: "NSStatusItem VisibleCC ai.routin.myroutin")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             guard !RoutinUsageApp.isRunningUnitTests else {
                 return

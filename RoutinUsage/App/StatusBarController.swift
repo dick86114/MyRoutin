@@ -52,6 +52,7 @@ final class StatusBarController: NSObject {
 
     private func registerStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        logStatusItem("创建")
         configurePopover()
         configureStatusButton()
         updateStatusButton()
@@ -59,9 +60,11 @@ final class StatusBarController: NSObject {
 
     private func restoreStatusItemIfNeeded() {
         guard let statusItem else {
+            logStatusItem("恢复时为空")
             registerStatusItem()
             return
         }
+        logStatusItem("恢复前")
         guard statusItem.button?.window == nil else {
             statusItem.isVisible = true
             updateStatusButton()
@@ -70,6 +73,14 @@ final class StatusBarController: NSObject {
         NSStatusBar.system.removeStatusItem(statusItem)
         self.statusItem = nil
         registerStatusItem()
+    }
+
+    private func logStatusItem(_ stage: String) {
+        let button = statusItem?.button
+        let title = button?.title ?? ""
+        let window = button?.window
+        let message = "[MyToken 状态栏] \(stage) item=\(statusItem != nil) button=\(button != nil) window=\(window != nil) windowVisible=\(window?.isVisible ?? false) frame=\(window?.frame ?? .zero) buttonFrame=\(button?.frame ?? .zero) visible=\(statusItem?.isVisible ?? false) length=\(statusItem?.length ?? -1) title=\(title) image=\(button?.image != nil) policy=\(NSApp.activationPolicy().rawValue)\n"
+        FileHandle.standardError.write(Data(message.utf8))
     }
 
     private func configurePopover() {
@@ -84,6 +95,7 @@ final class StatusBarController: NSObject {
             return
         }
         statusItem.isVisible = true
+        statusItem.length = 24
         button.target = self
         button.action = #selector(handleStatusButtonClick(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -175,8 +187,11 @@ final class StatusBarController: NSObject {
         }
         let state: KeyUsageState? = nil
         let text = "尚未配置 Key"
-        button.title = text
-        button.image = nil
+        statusItem.length = 24
+        button.title = ""
+        button.image = NSImage(named: "MenuBarLogoMask")
+        button.imagePosition = .imageOnly
+        button.imageScaling = .scaleProportionallyDown
         button.setAccessibilityLabel(text)
         button.toolTip = helpText(for: state)
     }
