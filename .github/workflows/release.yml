@@ -51,3 +51,4 @@ jobs:
           generate_release_notes: false
           files: |
             build/dist/${{ env.dmg_name }}
+            build/dist/MyToken.dmg
