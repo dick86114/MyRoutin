@@ -52,6 +52,15 @@
         "pinnedCredentialIds": { "type": "array", "items": { "type": "string", "format": "uuid" } }
       }
     },
+    "base64url": {
+      "type": "string",
+      "description": "Non-empty, unpadded URL-safe Base64 lexical value; lengths 4n, 4n+2, or 4n+3 are accepted.",
+      "anyOf": [
+        { "pattern": "^[A-Za-z0-9_-]{4}([A-Za-z0-9_-]{4})*$" },
+        { "pattern": "^[A-Za-z0-9_-]{2}([A-Za-z0-9_-]{4})*$" },
+        { "pattern": "^[A-Za-z0-9_-]{3}([A-Za-z0-9_-]{4})*$" }
+      ]
+    },
     "secretEnvelope": {
       "type": "object",
       "additionalProperties": true,
@@ -59,10 +68,10 @@
       "properties": {
         "algorithm": { "enum": ["AES-256-GCM", "ChaCha20-Poly1305"] },
         "keyAgreement": { "const": "X25519-HKDF-SHA256" },
-        "nonce": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
-        "ciphertext": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
-        "tag": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
-        "ephemeralPublicKey": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+        "nonce": { "$ref": "#/$defs/base64url" },
+        "ciphertext": { "$ref": "#/$defs/base64url" },
+        "tag": { "$ref": "#/$defs/base64url" },
+        "ephemeralPublicKey": { "$ref": "#/$defs/base64url" },
         "associatedData": { "type": "string" },
         "entries": { "type": "array", "items": { "$ref": "#/$defs/secretEntry" } }
       }
@@ -73,10 +82,10 @@
       "required": ["credentialId"],
       "properties": {
         "credentialId": { "type": "string", "format": "uuid" },
-        "bearerToken": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
-        "apiKey": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
-        "accessKeyID": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
-        "secretAccessKey": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" }
+        "bearerToken": { "$ref": "#/$defs/base64url" },
+        "apiKey": { "$ref": "#/$defs/base64url" },
+        "accessKeyID": { "$ref": "#/$defs/base64url" },
+        "secretAccessKey": { "$ref": "#/$defs/base64url" }
       },
       "anyOf": [
         { "required": ["bearerToken"] }, { "required": ["apiKey"] },

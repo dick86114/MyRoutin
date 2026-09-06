@@ -274,18 +274,13 @@ struct EncryptedSecretEntry: Codable, Equatable, Sendable {
         }
     }
 
+    /// Shared lexical contract with transfer-schema-v1.json: non-empty, unpadded
+    /// URL-safe Base64 alphabet and a length that is not 4n+1. This is an
+    /// encoding contract only; confidentiality is provided by later AEAD.
     private static func isBase64URL(_ value: String) -> Bool {
-        guard !value.isEmpty,
-              value.count % 4 != 1,
-              value.utf8.allSatisfy({ ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122) || ($0 >= 48 && $0 <= 57) || $0 == 45 || $0 == 95 })
-        else { return false }
-        let padded = value + String(repeating: "=", count: (4 - value.count % 4) % 4)
-        guard let data = Data(base64Encoded: padded, options: [.ignoreUnknownCharacters]) else { return false }
-        let canonical = data.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-        return canonical == value
+        !value.isEmpty &&
+        value.count % 4 != 1 &&
+        value.utf8.allSatisfy { ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122) || ($0 >= 48 && $0 <= 57) || $0 == 45 || $0 == 95 }
     }
 
     private enum CodingKeys: String, CodingKey {

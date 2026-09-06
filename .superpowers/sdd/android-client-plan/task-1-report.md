@@ -126,9 +126,39 @@ DONE. 收紧 `EncryptedSecretEntry` 的安全边界：所有 bearerToken/apiKey/
 
 ### Assumptions
 
-- Base64URL 采用无 `=` padding 的 canonical 表示；后续加密任务须输出该格式。
+- Base64URL 采用无 `=` padding 的 URL-safe 词法表示；长度允许 4n、4n+2、4n+3，Swift 与 JSON Schema 接受集一致；后续加密任务须输出该格式。
 - pair 规则针对 typed access-key fields，不影响 bearerToken/apiKey 单字段 entry。
 
 ### Blockers/remaining risks
 
 - 无当前阻塞；真实加密、密钥交换和 QR/LAN 仍属于后续任务。
+
+## Latest scoped re-review fix
+
+### Result
+
+DONE. 统一 JSON Schema 与 Swift 的 envelope/typed-secret 字段词法接受集：非空、无 `=` padding、仅 URL-safe Base64 字符集，长度仅允许 4n、4n+2 或 4n+3。Swift 不再额外执行 schema 无法独立表达的 canonical Base64 bit 检查，因此 `Zh` 两端均接受，`A` 与 `plain-text-secret` 两端均拒绝。AK/SK 成对语义及 bearer/apiKey 行为保持不变。
+
+### Changes made with file paths
+
+- `RoutinUsage/Transfer/TransferModels.swift`
+  - 将 entry 字段校验收敛为与 schema 相同的词法规则，并在 decode/encode 两条路径执行。
+  - 注释明确词法 Base64 不提供保密性，真实 confidentiality 由后续 AEAD 提供。
+- `shared/transfer-schema/transfer-schema-v1.json`
+  - 新增可独立执行的 `base64url` 定义，使用三种长度模式表达与 Swift 相同的接受集。
+  - nonce、ciphertext、tag、ephemeralPublicKey 与 typed secret fields 共用该定义。
+- `RoutinUsageTests/TransferSchemaTests.swift`
+  - 增加 schema regex 与 Swift decode 接受集对照测试，覆盖 `AA`、`Zh`、`A`、`plain-text-secret`、`AA=`；保留有效 AK/SK pair、partial pair 拒绝和 bearer/apiKey 测试。
+
+### Validation command and observed results
+
+- focused：`xcodegen generate && xcodebuild -project RoutinUsage.xcodeproj -scheme RoutinUsage -configuration Debug -destination 'platform=macOS' -derivedDataPath .build/task1-review3-focused PRODUCT_BUNDLE_IDENTIFIER=ai.routin.mytoken.tests CODE_SIGNING_ALLOWED=NO -only-testing:RoutinUsageTests/TransferSchemaTests test`：退出码 0，8/8 passed，`** TEST SUCCEEDED **`。
+- full：`scripts/test.sh`：退出码 0，478/478 tests passed，0 failures，`** TEST SUCCEEDED **`。
+
+### Assumptions
+
+- `Zh` 是词法上有效的无 padding URL-safe Base64 值；该协议不把词法编码误认为秘密或真实性保护。
+
+### Blockers/remaining risks
+
+- 无当前阻塞；full test 完成后需将实际输出补入本段并提交本轮修复。

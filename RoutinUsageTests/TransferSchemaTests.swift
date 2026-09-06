@@ -90,6 +90,24 @@ final class TransferSchemaTests: XCTestCase {
         XCTAssertThrowsError(try JSONDecoder().decode(EncryptedSecretEntry.self, from: plainSecret))
     }
 
+    func testBase64URL词法契约在schema与Swift接受集一致() throws {
+        let schemaURL = try XCTUnwrap(fixtureBundle.url(forResource: "transfer-schema-v1", withExtension: "json"))
+        let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: schemaURL)) as? [String: Any])
+        let definitions = try XCTUnwrap(schema["$defs"] as? [String: Any])
+        let base64url = try XCTUnwrap(definitions["base64url"] as? [String: Any])
+        let patterns = try XCTUnwrap(base64url["anyOf"] as? [[String: Any]]).compactMap { $0["pattern"] as? String }
+        XCTAssertEqual(patterns.count, 3)
+        for (value, expected) in [("AA", true), ("Zh", true), ("A", false), ("plain-text-secret", false), ("AA=", false)] {
+            let schemaAccepted = patterns.contains { pattern in
+                (try? NSRegularExpression(pattern: pattern).firstMatch(in: value, range: NSRange(value.startIndex..., in: value))) != nil
+            }
+            let entry = Data(#"{"credentialId":"44444444-4444-4444-8444-444444444444","bearerToken":""#.utf8) + Data(value.utf8) + Data(#""}"#.utf8)
+            let swiftAccepted = (try? JSONDecoder().decode(EncryptedSecretEntry.self, from: entry)) != nil
+            XCTAssertEqual(schemaAccepted, expected, value)
+            XCTAssertEqual(swiftAccepted, schemaAccepted, value)
+        }
+    }
+
     func testschema和能力清单资源可解析且包含五个provider及Volcengine两个variant() throws {
         let schemaURL = try XCTUnwrap(fixtureBundle.url(forResource: "transfer-schema-v1", withExtension: "json"))
         let capabilityURL = try XCTUnwrap(fixtureBundle.url(forResource: "provider-capabilities", withExtension: "json"))
