@@ -43,6 +43,10 @@ targets:
         buildPhase: resources
       - path: shared/fixtures/usage
         buildPhase: resources
+      - path: shared/transfer-schema
+        buildPhase: resources
+      - path: shared/provider-contracts
+        buildPhase: resources
     preBuildScripts:
       - name: 同步静态源码测试资源
         basedOnDependencyAnalysis: false

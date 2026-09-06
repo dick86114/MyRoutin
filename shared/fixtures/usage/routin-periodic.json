@@ -2,6 +2,6 @@
   "schemaVersion": 1,
   "credentials": [],
   "preferences": { "refreshIntervalMinutes": 15, "wifiOnly": false, "openAppRefresh": true, "notificationsEnabled": true, "alertThresholds": [50, 80], "pinnedCredentialIds": [] },
-  "secretEnvelope": null,
-  "exportedAt": 1700000000
+  "secretEnvelope": { "algorithm": "AES-256-GCM", "keyAgreement": "X25519-HKDF-SHA256", "nonce": "AA", "ciphertext": "AA", "tag": "AA", "ephemeralPublicKey": "AA", "entries": [] },
+  "exportedAt": "2023-11-14T22:13:20Z"
 }

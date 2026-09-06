@@ -2,85 +2,98 @@ import XCTest
 @testable import RoutinUsage
 
 final class TransferSchemaTests: XCTestCase {
-    private let fixtureNames = [
-        "routin-bearer",
-        "deepseek-bearer",
-        "glm-bearer",
-        "volcengine-access-key"
-    ]
-
+    private let credentialNames = ["routin-bearer", "deepseek-bearer", "glm-bearer", "volcengine-access-key"]
+    private let usageNames = ["routin-periodic", "deepseek-balance", "glm-usage", "volcengine-usage"]
     private var fixtureBundle: Bundle { Bundle(for: TransferSchemaTests.self) }
 
     func test凭证fixtures可解析且不包含明文秘密() throws {
-        for name in fixtureNames {
+        for name in credentialNames {
             let url = try XCTUnwrap(fixtureBundle.url(forResource: name, withExtension: "json"))
             let data = try Data(contentsOf: url)
             let credential = try JSONDecoder().decode(TransferCredential.self, from: data)
-
+            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
             XCTAssertEqual(credential.schemaVersion, 1, name)
-            XCTAssertFalse(credential.providerId.isEmpty, name)
-            XCTAssertFalse(credential.credentialKind.isEmpty, name)
+            XCTAssertNotNil(ProviderID(rawValue: credential.providerId), name)
+            XCTAssertNotNil(CredentialKind(rawValue: credential.credentialKind), name)
             XCTAssertNotNil(UUID(uuidString: credential.credentialId), name)
-            XCTAssertNil(credential.secret, name)
+            XCTAssertNil(object["secret"], name)
+            XCTAssertNil(object["accessKeyID"], name)
         }
     }
 
-    func test凭证缺少必需字段或UUID时被拒绝() throws {
-        let valid = """
-        {"schemaVersion":1,"credentialId":"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE","providerId":"routin","credentialKind":"bearerAPIKey","name":"fixture","isEnabled":true,"sortOrder":0,"metadata":{}}
-        """.data(using: .utf8)!
-
+    func test凭证缺少必需字段无效UUID供应商或类型时被拒绝() throws {
+        let valid = Data(#"{"schemaVersion":1,"credentialId":"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE","providerId":"routin","credentialKind":"bearerAPIKey","name":"fixture","isEnabled":true,"sortOrder":0,"metadata":{}}"#.utf8)
         for key in ["schemaVersion", "credentialId", "providerId", "credentialKind"] {
-            var object = try JSONSerialization.jsonObject(with: valid) as! [String: Any]
+            var object = try XCTUnwrap(JSONSerialization.jsonObject(with: valid) as? [String: Any])
             object.removeValue(forKey: key)
-            let data = try JSONSerialization.data(withJSONObject: object)
-            XCTAssertThrowsError(try JSONDecoder().decode(TransferCredential.self, from: data), key)
+            XCTAssertThrowsError(try JSONDecoder().decode(TransferCredential.self, from: JSONSerialization.data(withJSONObject: object)), key)
         }
-
-        var malformed = try JSONSerialization.jsonObject(with: valid) as! [String: Any]
-        malformed["credentialId"] = "not-a-uuid"
-        let malformedData = try JSONSerialization.data(withJSONObject: malformed)
-        XCTAssertThrowsError(try JSONDecoder().decode(TransferCredential.self, from: malformedData))
+        for (key, value) in [("credentialId", "not-a-uuid"), ("providerId", "unknown"), ("credentialKind", "password")] {
+            var object = try XCTUnwrap(JSONSerialization.jsonObject(with: valid) as? [String: Any])
+            object[key] = value
+            XCTAssertThrowsError(try JSONDecoder().decode(TransferCredential.self, from: JSONSerialization.data(withJSONObject: object)), key)
+        }
+        var metadataObject = try XCTUnwrap(JSONSerialization.jsonObject(with: valid) as? [String: Any])
+        metadataObject["metadata"] = ["accessKeyID": "must-be-encrypted"]
+        XCTAssertThrowsError(try JSONDecoder().decode(TransferCredential.self, from: JSONSerialization.data(withJSONObject: metadataObject)))
     }
 
-    func test所有usageFixtures可解析() throws {
-        let usageNames = ["routin-periodic", "deepseek-balance", "glm-usage", "volcengine-usage"]
+    func test所有usageFixtures通过TransferSchemaCodec解析RFC3339日期() throws {
         for name in usageNames {
             let url = try XCTUnwrap(fixtureBundle.url(forResource: name, withExtension: "json"))
-            let package = try JSONDecoder().decode(TransferPackageV1.self, from: Data(contentsOf: url))
+            let package = try TransferSchemaCodec.decode(Data(contentsOf: url))
             XCTAssertEqual(package.schemaVersion, 1, name)
         }
     }
 
-    func test未知字段被忽略且codec往返保持协议数据() throws {
-        let data = """
-        {"schemaVersion":1,"credentialId":"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE","providerId":"routin","credentialKind":"bearerAPIKey","name":"fixture","isEnabled":true,"sortOrder":0,"metadata":{},"futureField":"ignored"}
-        """.data(using: .utf8)!
+    func test未知字段被Swift忽略且codec输出包含显式secretEnvelope() throws {
+        let data = Data(#"{"schemaVersion":1,"credentialId":"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE","providerId":"routin","credentialKind":"bearerAPIKey","name":"fixture","metadata":{},"futureField":"ignored"}"#.utf8)
         let credential = try JSONDecoder().decode(TransferCredential.self, from: data)
-        XCTAssertEqual(credential.providerId, "routin")
-
-        let package = TransferPackageV1(
-            credentials: [credential],
-            preferences: TransferPreferences(),
-            secretEnvelope: nil,
-            exportedAt: Date(timeIntervalSince1970: 1_700_000_000)
-        )
-        let decoded = try TransferSchemaCodec.decode(TransferSchemaCodec.encode(package))
-        XCTAssertEqual(decoded, package)
+        let package = TransferPackageV1(credentials: [credential], preferences: TransferPreferences(), exportedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let encoded = try TransferSchemaCodec.encode(package)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        XCTAssertNotNil(object["secretEnvelope"] as? [String: Any])
+        XCTAssertNil(object["futureField"])
     }
 
-    func testsecretEnvelope可承载密文但二维码payload类型不含秘密字段() throws {
-        let envelope = EncryptedSecretEnvelope(
-            algorithm: "AES-256-GCM",
-            keyAgreement: "X25519-HKDF-SHA256",
-            nonce: "bm9uY2U",
-            ciphertext: "Y2lwaGVydGV4dA",
-            tag: "dGFn",
-            ephemeralPublicKey: "cHVibGljLWtleQ"
+    func testsecretEnvelope按credentialId关联多凭证且Volcengine字段有类型() throws {
+        let id = UUID(uuidString: "44444444-4444-4444-8444-444444444444")!
+        let entry = try EncryptedSecretEntry(credentialId: id, accessKeyID: "YWstZHVtbXk", secretAccessKey: "c2VjcmV0LWR1bW15")
+        let envelope = try EncryptedSecretEnvelope(algorithm: "AES-256-GCM", keyAgreement: "X25519-HKDF-SHA256", nonce: "bm9uY2U", ciphertext: "Y2lwaGVydGV4dA", tag: "dGFn", ephemeralPublicKey: "cHVibGljLWtleQ", entries: [entry])
+        XCTAssertEqual(envelope.entries.first?.credentialId, id.uuidString)
+        XCTAssertEqual(envelope.entries.first?.accessKeyID, "YWstZHVtbXk")
+        XCTAssertNil(envelope.entries.first?.bearerToken)
+        let package = TransferPackageV1(
+            credentials: [TransferCredential(credentialId: id, providerId: "volcengine", credentialKind: "accessKeyPair", name: "fixture")],
+            preferences: TransferPreferences(), secretEnvelope: envelope, exportedAt: Date()
         )
-        XCTAssertEqual(envelope.algorithm, "AES-256-GCM")
-        let package = TransferPackageV1(credentials: [], preferences: TransferPreferences(), secretEnvelope: envelope, exportedAt: Date())
-        let encoded = try TransferSchemaCodec.encode(package)
-        XCTAssertNotNil(String(data: encoded, encoding: .utf8))
+        XCTAssertNoThrow(try TransferSchemaCodec.encode(package))
+        let orphan = try EncryptedSecretEntry(credentialId: UUID(), apiKey: "AA")
+        let orphanEnvelope = try EncryptedSecretEnvelope(algorithm: "AES-256-GCM", keyAgreement: "X25519-HKDF-SHA256", nonce: "AA", ciphertext: "AA", tag: "AA", ephemeralPublicKey: "AA", entries: [orphan])
+        XCTAssertThrowsError(try TransferSchemaCodec.encode(TransferPackageV1(credentials: [], preferences: TransferPreferences(), secretEnvelope: orphanEnvelope, exportedAt: Date())))
+    }
+
+    func test偏好范围算法编码必填字段和重复秘密凭证被拒绝() throws {
+        let invalidPreferences = Data(#"{"refreshIntervalMinutes":2,"wifiOnly":false,"openAppRefresh":true,"notificationsEnabled":true,"alertThresholds":[50],"pinnedCredentialIds":[]}"#.utf8)
+        XCTAssertThrowsError(try JSONDecoder().decode(TransferPreferences.self, from: invalidPreferences))
+        XCTAssertThrowsError(try EncryptedSecretEnvelope(algorithm: "RSA", keyAgreement: "X25519-HKDF-SHA256", nonce: "AA", ciphertext: "AA", tag: "AA", ephemeralPublicKey: "AA"))
+        XCTAssertThrowsError(try EncryptedSecretEnvelope(algorithm: "AES-256-GCM", keyAgreement: "wrong", nonce: "AA", ciphertext: "AA", tag: "AA", ephemeralPublicKey: "AA"))
+        let id = UUID()
+        let entry = try EncryptedSecretEntry(credentialId: id, apiKey: "AA")
+        XCTAssertThrowsError(try EncryptedSecretEnvelope(algorithm: "AES-256-GCM", keyAgreement: "X25519-HKDF-SHA256", nonce: "AA", ciphertext: "AA", tag: "AA", ephemeralPublicKey: "AA", entries: [entry, entry]))
+        let malformed = Data(#"{"algorithm":"AES-256-GCM","keyAgreement":"X25519-HKDF-SHA256","nonce":"AA","ciphertext":"AA","tag":"AA","ephemeralPublicKey":"AA"}"#.utf8)
+        XCTAssertThrowsError(try JSONDecoder().decode(EncryptedSecretEnvelope.self, from: malformed))
+    }
+
+    func testschema和能力清单资源可解析且包含五个provider及Volcengine两个variant() throws {
+        let schemaURL = try XCTUnwrap(fixtureBundle.url(forResource: "transfer-schema-v1", withExtension: "json"))
+        let capabilityURL = try XCTUnwrap(fixtureBundle.url(forResource: "provider-capabilities", withExtension: "json"))
+        let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: schemaURL)) as? [String: Any])
+        let capabilities = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: capabilityURL)) as? [String: Any])
+        XCTAssertEqual(schema["$id"] as? String, "https://mytoken.routin.ai/schema/transfer/v1")
+        let providers = try XCTUnwrap(capabilities["providers"] as? [[String: Any]])
+        XCTAssertEqual(providers.count, 5)
+        let volcengine = try XCTUnwrap(providers.first { $0["providerId"] as? String == "volcengine" })
+        XCTAssertEqual((volcengine["variants"] as? [[String: Any]])?.count, 2)
     }
 }

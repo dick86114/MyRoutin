@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "credentials": [],
+  "credentials": [{ "schemaVersion": 1, "credentialId": "44444444-4444-4444-8444-444444444444", "providerId": "volcengine", "credentialKind": "accessKeyPair", "name": "火山方舟示例", "isEnabled": true, "sortOrder": 3, "metadata": { "region": "cn-beijing", "planType": "coding" } }],
   "preferences": { "refreshIntervalMinutes": 15, "wifiOnly": false, "openAppRefresh": true, "notificationsEnabled": true, "alertThresholds": [50, 80], "pinnedCredentialIds": [] },
-  "secretEnvelope": null,
-  "exportedAt": 1700000000
+  "secretEnvelope": { "algorithm": "AES-256-GCM", "keyAgreement": "X25519-HKDF-SHA256", "nonce": "AA", "ciphertext": "AA", "tag": "AA", "ephemeralPublicKey": "AA", "entries": [{ "credentialId": "44444444-4444-4444-8444-444444444444", "accessKeyID": "YWstZHVtbXk", "secretAccessKey": "c2VjcmV0LWR1bW15" }] },
+  "exportedAt": "2023-11-14T22:13:20Z"
 }
