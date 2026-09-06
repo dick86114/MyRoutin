@@ -30,4 +30,16 @@ final class StatusBarVisibilityTests: XCTestCase {
         XCTAssertFalse(controller.contains("synchronizeStatusItemPlacement"))
         XCTAssertFalse(controller.contains("window.setFrameOrigin(origin)"))
     }
+
+    func test状态栏会拒绝屏幕外的状态项窗口() throws {
+        let controller = try TestSourceReader.read([
+            "RoutinUsage",
+            "App",
+            "StatusBarController.swift"
+        ])
+
+        XCTAssertTrue(controller.contains("isUsableStatusItemWindow"))
+        XCTAssertTrue(controller.contains("NSScreen.screens"))
+        XCTAssertTrue(controller.contains("screen.frame.intersects(window.frame)"))
+    }
 }

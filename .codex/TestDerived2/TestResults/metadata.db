@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>FormatVersion</key>
+	<integer>1</integer>
+	<key>Store</key>
+	<dict>
+		<key>RoutinUsageTests</key>
+		<dict>
+			<key>StatusBarVisibilityTests</key>
+			<dict>
+				<key>test状态栏不直接移动系统托管的状态项窗口</key>
+				<dict>
+					<key>mrnet</key>
+					<real>0.0016959905624389648</real>
+				</dict>
+				<key>test状态栏会拒绝屏幕外的状态项窗口</key>
+				<dict>
+					<key>mrnet</key>
+					<real>0.00053703784942626953</real>
+				</dict>
+				<key>test状态栏控制器由应用级强引用并显式保持状态项可见</key>
+				<dict>
+					<key>mrnet</key>
+					<real>0.00076699256896972656</real>
+				</dict>
+			</dict>
+		</dict>
+	</dict>
+</dict>
+</plist>

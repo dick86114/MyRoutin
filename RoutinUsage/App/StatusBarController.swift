@@ -65,14 +65,23 @@ final class StatusBarController: NSObject {
             return
         }
         logStatusItem("恢复前")
-        guard statusItem.button?.window == nil else {
-            statusItem.isVisible = true
-            updateStatusButton()
+        guard let window = statusItem.button?.window, isUsableStatusItemWindow(window) else {
+            NSStatusBar.system.removeStatusItem(statusItem)
+            self.statusItem = nil
+            registerStatusItem()
             return
         }
-        NSStatusBar.system.removeStatusItem(statusItem)
-        self.statusItem = nil
-        registerStatusItem()
+        statusItem.isVisible = true
+        updateStatusButton()
+    }
+
+    private func isUsableStatusItemWindow(_ window: NSWindow) -> Bool {
+        guard window.isVisible, window.frame.width > 0, window.frame.height > 0 else {
+            return false
+        }
+        return NSScreen.screens.contains { screen in
+            screen.frame.intersects(window.frame)
+        }
     }
 
     private func logStatusItem(_ stage: String) {
