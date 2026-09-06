@@ -101,3 +101,34 @@ DONE_WITH_CONCERNS. 已处理 review 的 7 项 findings：日期统一为 RFC333
 - `xcodegen generate && xcodebuild ... -only-testing:RoutinUsageTests/TransferSchemaTests test`：退出码 0；7/7 focused tests passed，`** TEST SUCCEEDED **`。
 - `scripts/test.sh`：退出码 0；477 tests passed，0 failures，`** TEST SUCCEEDED **`。
 - `python3 -m json.tool` 逐文件校验 shared JSON：10 个文件通过；`git diff --check` 通过。
+
+## Scoped re-review fix report
+
+### Result
+
+DONE. 收紧 `EncryptedSecretEntry` 的安全边界：所有 bearerToken/apiKey/accessKeyID/secretAccessKey 在 Swift decode 与 encode 均必须是非空、无 padding 的 canonical Base64URL；Volcengine accessKeyID 与 secretAccessKey 必须同时存在，bearer/apiKey 不受该 pair 规则影响。
+
+### Changes made with file paths
+
+- `RoutinUsage/Transfer/TransferModels.swift`
+  - 为 typed secret entry 增加 canonical Base64URL 校验（字符集、长度模 4、解码后再编码一致性），覆盖 decode 与 encode。
+  - 强制 accessKeyID/secretAccessKey 成对出现。
+- `shared/transfer-schema/transfer-schema-v1.json`
+  - secret entry 保持 Base64URL pattern，并通过 required/allOf 条件约束 access-key pair。
+- `RoutinUsageTests/TransferSchemaTests.swift`
+  - 覆盖 `plain-text-secret` 拒绝、有效 Base64URL 接受、编码校验、AK/SK 单独出现拒绝及成对接受；确认 bearer/apiKey 不套用 AK/SK pair 规则。
+
+### Validation command and observed results
+
+- focused TransferSchemaTests：`xcodegen generate && xcodebuild ... -only-testing:RoutinUsageTests/TransferSchemaTests test`，退出码 0，7/7 passed，`** TEST SUCCEEDED **`。
+- `scripts/test.sh`：退出码 0，477 tests passed，0 failures，`** TEST SUCCEEDED **`。
+- JSON 解析与 `git diff --check`：通过。
+
+### Assumptions
+
+- Base64URL 采用无 `=` padding 的 canonical 表示；后续加密任务须输出该格式。
+- pair 规则针对 typed access-key fields，不影响 bearerToken/apiKey 单字段 entry。
+
+### Blockers/remaining risks
+
+- 无当前阻塞；真实加密、密钥交换和 QR/LAN 仍属于后续任务。

@@ -233,14 +233,12 @@ struct EncryptedSecretEntry: Codable, Equatable, Sendable {
     let secretAccessKey: String?
 
     init(credentialId: UUID, bearerToken: String? = nil, apiKey: String? = nil, accessKeyID: String? = nil, secretAccessKey: String? = nil) throws {
-        guard bearerToken != nil || apiKey != nil || accessKeyID != nil || secretAccessKey != nil else {
-            throw TransferSchemaError.invalidEnvelope("secretFields")
-        }
         self.credentialId = credentialId.uuidString
         self.bearerToken = bearerToken
         self.apiKey = apiKey
         self.accessKeyID = accessKeyID
         self.secretAccessKey = secretAccessKey
+        try validate()
     }
 
     init(from decoder: Decoder) throws {
@@ -251,9 +249,43 @@ struct EncryptedSecretEntry: Codable, Equatable, Sendable {
         apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey)
         accessKeyID = try container.decodeIfPresent(String.self, forKey: .accessKeyID)
         secretAccessKey = try container.decodeIfPresent(String.self, forKey: .secretAccessKey)
+        try validate()
+    }
+
+    func encode(to encoder: Encoder) throws {
+        try validate()
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(credentialId, forKey: .credentialId)
+        try container.encodeIfPresent(bearerToken, forKey: .bearerToken)
+        try container.encodeIfPresent(apiKey, forKey: .apiKey)
+        try container.encodeIfPresent(accessKeyID, forKey: .accessKeyID)
+        try container.encodeIfPresent(secretAccessKey, forKey: .secretAccessKey)
+    }
+
+    private func validate() throws {
         guard bearerToken != nil || apiKey != nil || accessKeyID != nil || secretAccessKey != nil else {
             throw TransferSchemaError.invalidEnvelope("secretFields")
         }
+        for (name, value) in [("bearerToken", bearerToken), ("apiKey", apiKey), ("accessKeyID", accessKeyID), ("secretAccessKey", secretAccessKey)] {
+            if let value, !Self.isBase64URL(value) { throw TransferSchemaError.invalidEnvelope(name) }
+        }
+        guard (accessKeyID == nil) == (secretAccessKey == nil) else {
+            throw TransferSchemaError.invalidEnvelope("accessKeyPair")
+        }
+    }
+
+    private static func isBase64URL(_ value: String) -> Bool {
+        guard !value.isEmpty,
+              value.count % 4 != 1,
+              value.utf8.allSatisfy({ ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122) || ($0 >= 48 && $0 <= 57) || $0 == 45 || $0 == 95 })
+        else { return false }
+        let padded = value + String(repeating: "=", count: (4 - value.count % 4) % 4)
+        guard let data = Data(base64Encoded: padded, options: [.ignoreUnknownCharacters]) else { return false }
+        let canonical = data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        return canonical == value
     }
 
     private enum CodingKeys: String, CodingKey {

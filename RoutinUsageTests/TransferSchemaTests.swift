@@ -63,6 +63,7 @@ final class TransferSchemaTests: XCTestCase {
         XCTAssertEqual(envelope.entries.first?.credentialId, id.uuidString)
         XCTAssertEqual(envelope.entries.first?.accessKeyID, "YWstZHVtbXk")
         XCTAssertNil(envelope.entries.first?.bearerToken)
+        XCTAssertNoThrow(try JSONEncoder().encode(entry))
         let package = TransferPackageV1(
             credentials: [TransferCredential(credentialId: id, providerId: "volcengine", credentialKind: "accessKeyPair", name: "fixture")],
             preferences: TransferPreferences(), secretEnvelope: envelope, exportedAt: Date()
@@ -80,9 +81,13 @@ final class TransferSchemaTests: XCTestCase {
         XCTAssertThrowsError(try EncryptedSecretEnvelope(algorithm: "AES-256-GCM", keyAgreement: "wrong", nonce: "AA", ciphertext: "AA", tag: "AA", ephemeralPublicKey: "AA"))
         let id = UUID()
         let entry = try EncryptedSecretEntry(credentialId: id, apiKey: "AA")
+        XCTAssertThrowsError(try EncryptedSecretEntry(credentialId: id, accessKeyID: "AA"))
+        XCTAssertThrowsError(try EncryptedSecretEntry(credentialId: id, secretAccessKey: "AA"))
         XCTAssertThrowsError(try EncryptedSecretEnvelope(algorithm: "AES-256-GCM", keyAgreement: "X25519-HKDF-SHA256", nonce: "AA", ciphertext: "AA", tag: "AA", ephemeralPublicKey: "AA", entries: [entry, entry]))
         let malformed = Data(#"{"algorithm":"AES-256-GCM","keyAgreement":"X25519-HKDF-SHA256","nonce":"AA","ciphertext":"AA","tag":"AA","ephemeralPublicKey":"AA"}"#.utf8)
         XCTAssertThrowsError(try JSONDecoder().decode(EncryptedSecretEnvelope.self, from: malformed))
+        let plainSecret = Data(#"{"credentialId":"44444444-4444-4444-8444-444444444444","bearerToken":"plain-text-secret"}"#.utf8)
+        XCTAssertThrowsError(try JSONDecoder().decode(EncryptedSecretEntry.self, from: plainSecret))
     }
 
     func testschema和能力清单资源可解析且包含五个provider及Volcengine两个variant() throws {

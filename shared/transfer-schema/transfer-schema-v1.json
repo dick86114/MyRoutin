@@ -80,7 +80,11 @@
       },
       "anyOf": [
         { "required": ["bearerToken"] }, { "required": ["apiKey"] },
-        { "required": ["accessKeyID"] }, { "required": ["secretAccessKey"] }
+        { "required": ["accessKeyID", "secretAccessKey"] }
+      ],
+      "allOf": [
+        { "if": { "required": ["accessKeyID"] }, "then": { "required": ["secretAccessKey"] } },
+        { "if": { "required": ["secretAccessKey"] }, "then": { "required": ["accessKeyID"] } }
       ]
     }
   }
