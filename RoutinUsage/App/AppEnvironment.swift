@@ -151,7 +151,7 @@ final class AppEnvironment {
                 // 回迁失败时不标记完成，下一次启动继续尝试。
             }
         }
-        let localStore: any LocalKeyStoring = legacyStore
+        let localStore: any SecureCredentialStoring = legacyStore
         let keyRepository = legacyRepository
         let cache = UsageCache(defaults: defaults)
         let apiClient = UsageAPIClient(session: .shared, mapper: UsageMapper())

@@ -1,13 +1,7 @@
 import Foundation
 import Security
 
-protocol LocalKeyStoring: Sendable {
-    func save(_ secret: String, for id: UUID) throws
-    func read(for id: UUID) throws -> String?
-    func delete(for id: UUID) throws
-}
-
-final class LocalKeyStore: LocalKeyStoring, @unchecked Sendable {
+final class LocalKeyStore: SecureCredentialStoring, @unchecked Sendable {
     private let defaults: UserDefaults
     private let keyPrefix: String
 
@@ -33,7 +27,7 @@ final class LocalKeyStore: LocalKeyStoring, @unchecked Sendable {
     }
 }
 
-final class KeychainSecretStore: LocalKeyStoring, @unchecked Sendable {
+final class KeychainSecretStore: SecureCredentialStoring, @unchecked Sendable {
     private let service: String
 
     init(service: String = "ai.routin.usage-monitor.credentials") {
@@ -110,8 +104,8 @@ enum KeychainSecretStoreError: Error, Equatable, Sendable {
 enum KeychainMigration {
     static func migrate(
         ids: [UUID],
-        from oldStore: any LocalKeyStoring,
-        to newStore: any LocalKeyStoring
+        from oldStore: any SecureCredentialStoring,
+        to newStore: any SecureCredentialStoring
     ) throws {
         for id in ids {
             guard let secret = try oldStore.read(for: id) else {
@@ -124,8 +118,8 @@ enum KeychainMigration {
 
     static func restore(
         ids: [UUID],
-        from keychainStore: any LocalKeyStoring,
-        to appStore: any LocalKeyStoring
+        from keychainStore: any SecureCredentialStoring,
+        to appStore: any SecureCredentialStoring
     ) throws {
         for id in ids {
             guard try appStore.read(for: id) == nil,
