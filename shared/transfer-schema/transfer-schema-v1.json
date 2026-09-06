@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mytoken.routin.ai/schema/transfer/v1",
+  "title": "MyToken Transfer Package v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "credentials", "preferences", "secretEnvelope", "exportedAt"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "credentials": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/credential" }
+    },
+    "preferences": { "$ref": "#/$defs/preferences" },
+    "secretEnvelope": {
+      "anyOf": [
+        { "$ref": "#/$defs/secretEnvelope" },
+        { "type": "null" }
+      ]
+    },
+    "exportedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "credentialId", "providerId", "credentialKind", "name", "isEnabled", "sortOrder", "metadata"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "credentialId": { "type": "string", "format": "uuid" },
+        "providerId": { "type": "string", "minLength": 1 },
+        "credentialKind": { "enum": ["bearerAPIKey", "apiKey", "accessKeyPair"] },
+        "name": { "type": "string" },
+        "isEnabled": { "type": "boolean" },
+        "sortOrder": { "type": "integer" },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "baseURL": { "type": "string", "format": "uri" },
+            "userID": { "type": "string" },
+            "region": { "type": "string" },
+            "planType": { "enum": ["personal", "coding", "tokenPack"] },
+            "usageKind": { "enum": ["periodic", "tokenPack"] },
+            "websiteURL": { "type": "string", "format": "uri" }
+          }
+        }
+      }
+    },
+    "preferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["refreshIntervalMinutes", "wifiOnly", "openAppRefresh", "notificationsEnabled", "alertThresholds", "pinnedCredentialIds"],
+      "properties": {
+        "refreshIntervalMinutes": { "type": "integer", "enum": [1, 5, 15, 30] },
+        "wifiOnly": { "type": "boolean" },
+        "openAppRefresh": { "type": "boolean" },
+        "notificationsEnabled": { "type": "boolean" },
+        "alertThresholds": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 100 } },
+        "pinnedCredentialIds": { "type": "array", "items": { "type": "string", "format": "uuid" } }
+      }
+    },
+    "secretEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "keyAgreement", "nonce", "ciphertext", "tag", "ephemeralPublicKey"],
+      "properties": {
+        "algorithm": { "enum": ["AES-256-GCM", "ChaCha20-Poly1305"] },
+        "keyAgreement": { "const": "X25519-HKDF-SHA256" },
+        "nonce": { "type": "string", "minLength": 1 },
+        "ciphertext": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string", "minLength": 1 },
+        "ephemeralPublicKey": { "type": "string", "minLength": 1 },
+        "associatedData": { "type": "string" }
+      }
+    }
+  }
+}

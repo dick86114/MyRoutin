@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "credentials": [],
+  "preferences": { "refreshIntervalMinutes": 15, "wifiOnly": false, "openAppRefresh": true, "notificationsEnabled": true, "alertThresholds": [50, 80], "pinnedCredentialIds": [] },
+  "secretEnvelope": null,
+  "exportedAt": 1700000000
+}

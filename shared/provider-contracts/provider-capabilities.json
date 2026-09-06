@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "providers": [
+    {
+      "providerId": "routin",
+      "credentialKinds": ["bearerAPIKey"],
+      "capabilities": {
+        "fiveHour": true,
+        "weekly": true,
+        "balance": false,
+        "remainingQuota": true,
+        "resetTime": true
+      }
+    },
+    {
+      "providerId": "deepseek",
+      "credentialKinds": ["apiKey"],
+      "capabilities": {
+        "fiveHour": false,
+        "weekly": false,
+        "balance": true,
+        "remainingQuota": false,
+        "resetTime": false
+      }
+    },
+    {
+      "providerId": "glm",
+      "credentialKinds": ["apiKey"],
+      "capabilities": {
+        "fiveHour": true,
+        "weekly": true,
+        "balance": false,
+        "remainingQuota": true,
+        "resetTime": false
+      }
+    },
+    {
+      "providerId": "volcengine",
+      "credentialKinds": ["accessKeyPair"],
+      "capabilities": {
+        "fiveHour": false,
+        "weekly": false,
+        "balance": false,
+        "remainingQuota": true,
+        "resetTime": true
+      }
+    },
+    {
+      "providerId": "newAPI",
+      "credentialKinds": ["bearerAPIKey"],
+      "capabilities": {
+        "fiveHour": false,
+        "weekly": false,
+        "balance": true,
+        "remainingQuota": false,
+        "resetTime": false
+      }
+    }
+  ]
+}

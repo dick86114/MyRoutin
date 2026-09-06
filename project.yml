@@ -39,6 +39,10 @@ targets:
         buildPhase: resources
       - path: docs/brand-assets/routin-menu-bar-logo-source.png
         buildPhase: resources
+      - path: shared/fixtures/credentials
+        buildPhase: resources
+      - path: shared/fixtures/usage
+        buildPhase: resources
     preBuildScripts:
       - name: 同步静态源码测试资源
         basedOnDependencyAnalysis: false
