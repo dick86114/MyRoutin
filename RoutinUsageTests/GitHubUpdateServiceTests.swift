@@ -67,11 +67,17 @@ final class GitHubUpdateServiceTests: XCTestCase {
                 )
                 return (response, Data(#"{"message":"API rate limit exceeded"}"#.utf8))
             }
-            XCTAssertEqual(url, GitHubUpdateService.releasesAtomURL)
+            if url == GitHubUpdateService.releasesAtomURL {
+                let response = try XCTUnwrap(
+                    HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+                )
+                return (response, Data(atom.utf8))
+            }
+            XCTAssertEqual(request.httpMethod, "HEAD")
             let response = try XCTUnwrap(
                 HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
             )
-            return (response, Data(atom.utf8))
+            return (response, Data())
         }
         let service = GitHubUpdateService(session: stub.session, currentVersion: "1.2.0")
 
@@ -84,10 +90,54 @@ final class GitHubUpdateServiceTests: XCTestCase {
         )
         XCTAssertEqual(
             update?.downloadURL.absoluteString,
-            "https://github.com/dick86114/MyToken/releases/download/v5.0.0/MyToken.dmg"
+            "https://github.com/dick86114/MyToken/releases/download/v5.0.0/MyToken-5.0.0-arm64.dmg"
         )
         XCTAssertEqual(update?.notes, "<p>更换品牌名</p>")
         XCTAssertFalse(update?.notes.contains("旧版本日志") == true)
+    }
+
+    func testAtom回退在版本化安装包缺失时使用旧固定文件名() async throws {
+        let atom = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <entry>
+            <id>tag:github.com,2008:Repository/1/v5.0.0</id>
+            <updated>2026-09-03T13:38:39Z</updated>
+            <link rel="alternate" href="https://github.com/dick86114/MyToken/releases/tag/v5.0.0" />
+            <title>MyToken v5.0.0</title>
+          </entry>
+        </feed>
+        """
+        let stub = URLProtocolStub.makeSession { request in
+            let url = try XCTUnwrap(request.url)
+            if url == GitHubUpdateService.releasesURL {
+                let response = try XCTUnwrap(
+                    HTTPURLResponse(url: url, statusCode: 403, httpVersion: nil, headerFields: nil)
+                )
+                return (response, Data())
+            }
+            if url == GitHubUpdateService.releasesAtomURL {
+                let response = try XCTUnwrap(
+                    HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+                )
+                return (response, Data(atom.utf8))
+            }
+            XCTAssertEqual(request.httpMethod, "HEAD")
+            // 只放行旧版固定文件名，验证版本化文件名缺失时逐级回退。
+            let statusCode = url.lastPathComponent == "MyToken.dmg" ? 200 : 404
+            let response = try XCTUnwrap(
+                HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: nil, headerFields: nil)
+            )
+            return (response, Data())
+        }
+        let service = GitHubUpdateService(session: stub.session, currentVersion: "1.2.0")
+
+        let update = try await service.checkForUpdate()
+
+        XCTAssertEqual(
+            update?.downloadURL.absoluteString,
+            "https://github.com/dick86114/MyToken/releases/download/v5.0.0/MyToken.dmg"
+        )
     }
 
     func test下载更新逐步报告百分比并保存完整文件() async throws {

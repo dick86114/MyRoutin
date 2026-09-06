@@ -36,6 +36,12 @@ jobs:
           sed -i '' "s/MARKETING_VERSION: \"[^\"]*\"/MARKETING_VERSION: \"${{ inputs.version }}\"/" project.yml
       - name: 构建 DMG
         run: scripts/build-dmg.sh
+      - name: 附加版本号与架构重命名安装包
+        run: |
+          arch="$(uname -m)"
+          dmg_name="MyToken-${{ inputs.version }}-${arch}.dmg"
+          cp "build/dist/MyToken.dmg" "build/dist/${dmg_name}"
+          echo "dmg_name=${dmg_name}" >> "$GITHUB_ENV"
       - name: 创建 GitHub Release 并上传 DMG
         uses: softprops/action-gh-release@v2
         with:
@@ -44,4 +50,4 @@ jobs:
           body: ${{ inputs.release_notes }}
           generate_release_notes: false
           files: |
-            build/dist/MyToken.dmg
+            build/dist/${{ env.dmg_name }}

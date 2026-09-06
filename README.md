@@ -27,7 +27,7 @@ brew install xcodegen
 
 ## 安装使用
 
-1. 下载 `MyToken.dmg`，或从 GitHub Release 下载正式版本。
+1. 下载对应版本的安装包（例如 `MyToken-1.2.0-arm64.dmg`），或从 GitHub Release 下载正式版本。
 2. 打开 DMG，将 `MyToken` 拖入“应用程序”文件夹。
 3. 启动应用，在设置中选择供应商并手动添加 API Key 或 Access Key/SecretAccessKey。
 4. 点击菜单栏中的 MyToken 图标查看用量。

@@ -436,6 +436,9 @@ final class ProjectBootstrapTests: XCTestCase {
 
         XCTAssertTrue(releaseWorkflow.contains("name: MyToken v${{ inputs.version }}"))
         XCTAssertTrue(releaseWorkflow.contains("build/dist/MyToken.dmg"))
+        XCTAssertTrue(releaseWorkflow.contains("MyToken-${{ inputs.version }}-${arch}.dmg"))
+        XCTAssertTrue(releaseWorkflow.contains("uname -m"))
+        XCTAssertTrue(releaseWorkflow.contains("build/dist/${{ env.dmg_name }}"))
         XCTAssertFalse(releaseWorkflow.contains("MyRoutin.dmg"))
         XCTAssertFalse(releaseWorkflow.contains("Routin Usage"))
     }

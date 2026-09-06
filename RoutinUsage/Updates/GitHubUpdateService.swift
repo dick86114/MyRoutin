@@ -213,9 +213,16 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
         }
 
         let tag = release.version.hasPrefix("v") ? release.version : "v\(release.version)"
-        guard let downloadURL = URL(string: "https://github.com/\(Self.repository)/releases/download/\(tag)/MyToken.dmg"),
+        guard let assetName = try await Self.resolveDMGAssetName(version: version, tag: tag, session: session),
+              let downloadURL = URL(
+                string: "https://github.com/\(Self.repository)/releases/download/\(tag)/\(assetName)"
+              ),
               let releaseURL = URL(string: release.releaseURL) else {
-            await logWriter.log(level: .error, event: "update_check_atom_url_invalid", details: "version=\(version)")
+            await logWriter.log(
+                level: .error,
+                event: "update_check_atom_asset_missing",
+                details: "version=\(version)"
+            )
             throw UpdateServiceError.invalidResponse
         }
         await logWriter.log(
@@ -230,6 +237,37 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
             notes: release.notes,
             publishedAt: release.publishedAt
         )
+    }
+
+    /// Atom feed 不包含资产列表，只能按命名约定探测下载地址：
+    /// 优先新命名的版本化文件（GitHub macOS CI runner 为 arm64），再回退旧的固定文件名。
+    private static func resolveDMGAssetName(
+        version: String,
+        tag: String,
+        session: URLSession
+    ) async throws -> String? {
+        let baseURL = "https://github.com/\(repository)/releases/download/\(tag)"
+        let candidates = [
+            "MyToken-\(version)-arm64.dmg",
+            "MyToken-\(version)-x86_64.dmg",
+            "MyToken.dmg",
+        ]
+        for candidate in candidates {
+            guard let url = URL(string: "\(baseURL)/\(candidate)") else { continue }
+            var request = URLRequest(url: url, timeoutInterval: 30)
+            request.httpMethod = "HEAD"
+            do {
+                let (_, response) = try await session.data(for: request)
+                if let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
+                    return candidate
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                continue
+            }
+        }
+        return nil
     }
 
     func download(
