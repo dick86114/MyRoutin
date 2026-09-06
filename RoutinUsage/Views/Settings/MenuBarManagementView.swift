@@ -391,11 +391,20 @@ struct MenuBarManagementView: View {
             Button {
                 setMenuBarMembership(isInMenuBar: !isInMenuBar, id: id)
             } label: {
-                Image(systemName: isInMenuBar ? "minus.circle" : "plus.circle")
+                Image(
+                    systemName: isInMenuBar
+                        ? "checkmark.circle.fill"
+                        : "plus.circle.fill"
+                )
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(isInMenuBar ? Color.green : Color.blue)
+                    .frame(width: 34, height: 34)
+                    .contentShape(Circle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .disabled(!isInMenuBar && menuBarStates.count >= CredentialDisplayOrder.maximumMenuBarCount)
             .help(isInMenuBar ? "从菜单栏移除 \(state.configuration.displayName)" : "添加到菜单栏 \(state.configuration.displayName)")
+            .accessibilityLabel(isInMenuBar ? "从菜单栏移除" : "添加到菜单栏")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

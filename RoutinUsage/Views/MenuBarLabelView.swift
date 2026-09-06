@@ -100,7 +100,7 @@ enum MenuBarMultiUsageIcon {
     static let maximumCount = 5
     static let unitWidth: CGFloat = 24
     static let gap: CGFloat = 0
-    static let outerPadding: CGFloat = 3
+    static let outerPadding: CGFloat = 1.5
     static let size = NSSize(width: unitWidth, height: 26)
 
     static func imageWidth(for count: Int) -> CGFloat {

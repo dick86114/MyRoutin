@@ -51,7 +51,7 @@ final class CredentialManagementViewTests: XCTestCase {
         XCTAssertEqual(model.visibleStates.map(\.configuration.id), [provider.id])
     }
 
-    func test添加凭证只追加弹窗顺序不进入菜单栏() async throws {
+    func test添加凭证默认追加弹窗顺序并进入菜单栏() async throws {
         let context = CredentialManagementTestContext()
         defer { context.cleanUp() }
         let model = context.makeModel()
@@ -66,9 +66,48 @@ final class CredentialManagementViewTests: XCTestCase {
         let result = try await model.addValidatedCredential(input)
 
         XCTAssertEqual(result, .saved)
-        XCTAssertEqual(context.settings.displayOrder.menuBarCredentialIDs, [])
+        XCTAssertEqual(
+            context.settings.displayOrder.menuBarCredentialIDs,
+            context.settings.displayOrder.popoverCredentialIDs
+        )
         XCTAssertEqual(context.settings.displayOrder.popoverCredentialIDs.count, 1)
         XCTAssertEqual(context.store.orderedKeyIDs, context.settings.displayOrder.popoverCredentialIDs)
+    }
+
+    func test菜单栏满额后添加凭证只追加弹窗顺序() async throws {
+        let context = CredentialManagementTestContext()
+        defer { context.cleanUp() }
+        for index in 0..<CredentialDisplayOrder.maximumMenuBarCount {
+            let configuration = try context.addCredential(name: "已满 \(index)", providerID: .routin)
+            context.settings.displayOrder = context.settings.displayOrder.addingToMenuBar(
+                configuration.id,
+                toIndex: index
+            )
+        }
+        let model = context.makeModel()
+        let input = ValidatedCredentialInput(
+            providerID: .deepseek,
+            credentialKind: .apiKey,
+            name: "菜单栏外凭证",
+            secret: "deepseek-secret",
+            metadata: [:]
+        )
+
+        _ = try await model.addValidatedCredential(input)
+
+        XCTAssertEqual(
+            context.settings.displayOrder.menuBarCredentialIDs.count,
+            CredentialDisplayOrder.maximumMenuBarCount
+        )
+        XCTAssertEqual(
+            context.settings.displayOrder.popoverCredentialIDs.count,
+            CredentialDisplayOrder.maximumMenuBarCount + 1
+        )
+        XCTAssertFalse(
+            context.settings.displayOrder.menuBarCredentialIDs.contains(
+                context.settings.displayOrder.popoverCredentialIDs.last!
+            )
+        )
     }
 
     func test启停凭证保留两个独立顺序数组() throws {

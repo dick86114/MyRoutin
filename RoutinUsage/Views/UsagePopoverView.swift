@@ -12,6 +12,7 @@ struct UsagePopoverView: View {
     let updateStatus: AppUpdateStatus
     let installAvailableUpdate: InstallAvailableUpdate
     let startCodexGroupDetection: StartCodexGroupDetection
+    let openSettings: @MainActor () -> Void
 
     @Environment(\.openWindow) private var openWindow
     @State private var pendingDetectionKeyID: UUID?
@@ -26,7 +27,8 @@ struct UsagePopoverView: View {
         codexGroupDetection: CodexGroupDetectionService,
         updateStatus: AppUpdateStatus = .idle,
         installAvailableUpdate: @escaping InstallAvailableUpdate = {},
-        startCodexGroupDetection: @escaping StartCodexGroupDetection = { _ in }
+        startCodexGroupDetection: @escaping StartCodexGroupDetection = { _ in },
+        openSettings: @escaping @MainActor () -> Void = {}
     ) {
         self.store = store
         self.settings = settings
@@ -34,6 +36,7 @@ struct UsagePopoverView: View {
         self.updateStatus = updateStatus
         self.installAvailableUpdate = installAvailableUpdate
         self.startCodexGroupDetection = startCodexGroupDetection
+        self.openSettings = openSettings
     }
 
     var body: some View {
@@ -424,8 +427,7 @@ private extension UsagePopoverView {
             .accessibilityLabel(refreshAccessibilityLabel)
 
             Button {
-                NSApp.setActivationPolicy(.regular)
-                openWindow(id: "settings")
+                openSettings()
             } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 13, weight: .medium))

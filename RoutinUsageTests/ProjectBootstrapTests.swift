@@ -567,11 +567,14 @@ final class ProjectBootstrapTests: XCTestCase {
         XCTAssertTrue(settings.contains("更新完成"))
     }
 
-    func test弹窗设置入口直接打开独立设置窗口() throws {
+    func test弹窗设置入口复用右键菜单设置逻辑() throws {
         let usagePopoverView = try sourceText(at: "RoutinUsage/Views/UsagePopoverView.swift")
+        let statusBarController = try sourceText(at: "RoutinUsage/App/StatusBarController.swift")
 
-        XCTAssertTrue(usagePopoverView.contains("@Environment(\\.openWindow)"))
-        XCTAssertTrue(usagePopoverView.contains("openWindow(id: \"settings\")"))
+        XCTAssertTrue(usagePopoverView.contains("openSettings()"))
+        XCTAssertFalse(usagePopoverView.contains("NSApp.setActivationPolicy(.regular)"))
+        XCTAssertTrue(statusBarController.contains("openSettings: { [weak self] in"))
+        XCTAssertTrue(statusBarController.contains("self?.openSettingsWindow()"))
         XCTAssertTrue(usagePopoverView.contains("设置"))
         XCTAssertFalse(usagePopoverView.contains("SettingsLink"))
     }

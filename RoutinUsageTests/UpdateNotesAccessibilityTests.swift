@@ -9,6 +9,21 @@ final class UpdateNotesAccessibilityTests: XCTestCase {
         )
     }
 
+    func testMarkdown更新日志渲染块级标题列表和代码块() throws {
+        let attributedText = try XCTUnwrap(
+            UpdateNotesRenderer.attributedText(
+                notes: "## 改进\n\n- 修复 **更新检查**\n- 支持 `Markdown`\n\n```swift\nlet version = 1\n```"
+            )
+        )
+
+        let text = String(attributedText.characters)
+        XCTAssertTrue(text.contains("•  修复 更新检查"))
+        XCTAssertTrue(text.contains("•  支持 Markdown"))
+        XCTAssertTrue(text.contains("let version = 1"))
+        XCTAssertFalse(text.contains("##"))
+        XCTAssertFalse(text.contains("- "))
+    }
+
     func test空更新日志朗读明确空状态() {
         XCTAssertEqual(
             UpdateNotesAccessibility.label(notes: " \n "),

@@ -48,4 +48,22 @@ final class UsagePopoverLayoutTests: XCTestCase {
         XCTAssertTrue(controller.contains("view.fittingSize"))
         XCTAssertTrue(controller.contains("min(max(idealSize.height, 1), maximumHeight)"))
     }
+
+    func test弹窗设置按钮复用右键菜单激活逻辑() throws {
+        let popover = try TestSourceReader.read([
+            "RoutinUsage",
+            "Views",
+            "UsagePopoverView.swift"
+        ])
+        let controller = try TestSourceReader.read([
+            "RoutinUsage",
+            "App",
+            "StatusBarController.swift"
+        ])
+
+        XCTAssertTrue(popover.contains("openSettings()"))
+        XCTAssertTrue(popover.contains("let openSettings: @MainActor () -> Void"))
+        XCTAssertTrue(controller.contains("openSettings: { [weak self] in"))
+        XCTAssertTrue(controller.contains("self?.openSettingsWindow()"))
+    }
 }

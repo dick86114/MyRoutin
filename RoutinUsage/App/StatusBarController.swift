@@ -95,7 +95,12 @@ final class StatusBarController: NSObject {
     private func configurePopover() {
         popover.behavior = .transient
         popover.contentViewController = NSHostingController(
-            rootView: StatusPopoverContent(environment: environment)
+            rootView: StatusPopoverContent(
+                environment: environment,
+                openSettings: { [weak self] in
+                    self?.openSettingsWindow()
+                }
+            )
         )
     }
 
@@ -388,6 +393,7 @@ enum PopoverWindowPlacement {
 @MainActor
 private struct StatusPopoverContent: View {
     @Bindable var environment: AppEnvironment
+    let openSettings: @MainActor () -> Void
 
     @Environment(\.openWindow) private var openWindow
 
@@ -398,7 +404,8 @@ private struct StatusPopoverContent: View {
             codexGroupDetection: environment.codexGroupDetection,
             updateStatus: environment.updateStatus,
             installAvailableUpdate: environment.installAvailableUpdate,
-            startCodexGroupDetection: environment.startCodexGroupDetection(for:)
+            startCodexGroupDetection: environment.startCodexGroupDetection(for:),
+            openSettings: openSettings
         )
         .sheet(isPresented: $environment.showsOnboarding) {
             OnboardingView(store: environment.store) {

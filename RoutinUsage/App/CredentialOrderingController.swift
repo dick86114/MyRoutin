@@ -38,6 +38,12 @@ final class CredentialOrderingController {
         if let addedID = outcome.addedCredentialID,
            !previousIDs.contains(addedID) {
             settings.appendCredential(addedID)
+            if settings.displayOrder.menuBarCredentialIDs.count < CredentialDisplayOrder.maximumMenuBarCount {
+                settings.displayOrder = settings.displayOrder.addingToMenuBar(
+                    addedID,
+                    toIndex: settings.displayOrder.menuBarCredentialIDs.count
+                )
+            }
         }
         return outcome.saveResult
     }
