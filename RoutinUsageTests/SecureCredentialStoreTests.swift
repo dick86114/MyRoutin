@@ -9,7 +9,7 @@ final class SecureCredentialStoreTests: XCTestCase {
         let id = UUID()
         let secret = "secure-contract-secret"
 
-        let store: any SecureCredentialStoring = context.store
+        let store: any CredentialStoring = context.store
         try store.save(secret, for: id)
         XCTAssertTrue(try store.read(for: id) == secret)
 
@@ -21,7 +21,7 @@ final class SecureCredentialStoreTests: XCTestCase {
         let context = try makeContext()
         defer { context.cleanUp() }
 
-        let store: any SecureCredentialStoring = context.store
+        let store: any CredentialStoring = context.store
         XCTAssertNil(try store.read(for: UUID()))
     }
 
@@ -29,12 +29,26 @@ final class SecureCredentialStoreTests: XCTestCase {
         let context = try makeContext()
         defer { context.cleanUp() }
         let id = UUID()
-        let store: any SecureCredentialStoring = context.store
+        let store: any CredentialStoring = context.store
 
         try store.save("secure-contract-old", for: id)
         try store.save("secure-contract-new", for: id)
 
         XCTAssertTrue(try store.read(for: id) == "secure-contract-new")
+    }
+
+    func testKeychainSecretStore执行安全存储契约() throws {
+        let id = UUID()
+        let store: any SecureCredentialStoring = KeychainSecretStore(
+            service: "ai.routin.usage-monitor.tests.\(UUID().uuidString)"
+        )
+        defer { try? store.delete(for: id) }
+
+        try store.save("keychain-contract-secret", for: id)
+        XCTAssertTrue(try store.read(for: id) == "keychain-contract-secret")
+
+        try store.delete(for: id)
+        XCTAssertNil(try store.read(for: id))
     }
 
     private struct TestContext {

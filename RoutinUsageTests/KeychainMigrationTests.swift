@@ -39,9 +39,44 @@ final class KeychainMigrationTests: XCTestCase {
         XCTAssertEqual(try app.read(for: id), "sk-existing")
         XCTAssertNil(try keychain.read(for: id))
     }
+
+    func testApp已有值时回迁保留双方值() throws {
+        let id = UUID()
+        let keychain = TestSecretStore(values: [id: "keychain-value"])
+        let app = TestSecretStore(values: [id: "app-value"])
+
+        try KeychainMigration.restore(ids: [id], from: keychain, to: app)
+
+        XCTAssertEqual(try app.read(for: id), "app-value")
+        XCTAssertEqual(try keychain.read(for: id), "keychain-value")
+    }
+
+    func test回迁保存失败时保留Keychain值且App无值() {
+        let id = UUID()
+        let keychain = TestSecretStore(values: [id: "keychain-value"])
+        let app = TestSecretStore(failingOnSave: true)
+
+        XCTAssertThrowsError(try KeychainMigration.restore(ids: [id], from: keychain, to: app))
+        XCTAssertEqual(try? keychain.read(for: id), "keychain-value")
+        XCTAssertNil(try? app.read(for: id))
+    }
+
+    func test回迁缺少ID时不改变任何存储() throws {
+        let storedID = UUID()
+        let missingID = UUID()
+        let keychain = TestSecretStore(values: [storedID: "keychain-value"])
+        let app = TestSecretStore(values: [storedID: "app-value"])
+
+        try KeychainMigration.restore(ids: [missingID], from: keychain, to: app)
+
+        XCTAssertEqual(try keychain.read(for: storedID), "keychain-value")
+        XCTAssertEqual(try app.read(for: storedID), "app-value")
+        XCTAssertNil(try keychain.read(for: missingID))
+        XCTAssertNil(try app.read(for: missingID))
+    }
 }
 
-private final class TestSecretStore: LocalKeyStoring, @unchecked Sendable {
+private final class TestSecretStore: CredentialStoring, @unchecked Sendable {
     private var values: [UUID: String]
     private let failingOnSave: Bool
 

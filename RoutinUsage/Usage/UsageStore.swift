@@ -68,7 +68,7 @@ final class UsageStore {
     }
 
     @ObservationIgnored private let keyRepository: KeyRepository
-    @ObservationIgnored private let localStore: any SecureCredentialStoring
+    @ObservationIgnored private let localStore: any CredentialStoring
     @ObservationIgnored private let apiClient: any UsageFetching
     @ObservationIgnored private let providerRegistry: ProviderRegistry?
     @ObservationIgnored private let cache: any UsageCaching
@@ -87,7 +87,7 @@ final class UsageStore {
 
     init(
         keyRepository: KeyRepository,
-        localStore: any SecureCredentialStoring,
+        localStore: any CredentialStoring,
         apiClient: any UsageFetching,
         cache: any UsageCaching,
         alertEvaluator: AlertEvaluator,

@@ -19,10 +19,10 @@ enum KeyRepositoryError: LocalizedError, Equatable, Sendable {
 
 final class KeyRepository {
     private let defaults: UserDefaults
-    private let localStore: any SecureCredentialStoring
+    private let localStore: any CredentialStoring
     private let storageKey = "keyConfigurations"
 
-    init(defaults: UserDefaults = .standard, localStore: (any SecureCredentialStoring)? = nil) {
+    init(defaults: UserDefaults = .standard, localStore: (any CredentialStoring)? = nil) {
         self.defaults = defaults
         self.localStore = localStore ?? LocalKeyStore(defaults: defaults)
         migrateLegacyMetadata()

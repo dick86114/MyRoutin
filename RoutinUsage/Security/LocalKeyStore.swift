@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-final class LocalKeyStore: SecureCredentialStoring, @unchecked Sendable {
+final class LocalKeyStore: CredentialStoring, @unchecked Sendable {
     private let defaults: UserDefaults
     private let keyPrefix: String
 
@@ -104,8 +104,8 @@ enum KeychainSecretStoreError: Error, Equatable, Sendable {
 enum KeychainMigration {
     static func migrate(
         ids: [UUID],
-        from oldStore: any SecureCredentialStoring,
-        to newStore: any SecureCredentialStoring
+        from oldStore: any CredentialStoring,
+        to newStore: any CredentialStoring
     ) throws {
         for id in ids {
             guard let secret = try oldStore.read(for: id) else {
@@ -118,8 +118,8 @@ enum KeychainMigration {
 
     static func restore(
         ids: [UUID],
-        from keychainStore: any SecureCredentialStoring,
-        to appStore: any SecureCredentialStoring
+        from keychainStore: any CredentialStoring,
+        to appStore: any CredentialStoring
     ) throws {
         for id in ids {
             guard try appStore.read(for: id) == nil,
