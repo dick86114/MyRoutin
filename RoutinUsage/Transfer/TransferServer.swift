@@ -9,8 +9,8 @@ protocol TransferServing: Sendable {
     func stop() async
 }
 
-/// The unencrypted, metadata-only request accepted before Task 4's encrypted
-/// message protocol is added. It is deliberately not a transfer package.
+/// The metadata-only connection request Android sends first. The encrypted
+/// transfer package is only sent afterwards via `send(package:)`.
 struct TransferConnectionRequest: Codable, Sendable {
     let sessionID: UUID
     let connectionCode: String
@@ -24,6 +24,9 @@ enum TransferServerError: Error, Equatable {
     case alreadyStarted
     case sessionExpired
     case invalidRequest
+    case notConnected
+    case handshakeIncomplete
+    case sendFailed(String)
 }
 
 actor TransferServer: TransferServing {
@@ -229,16 +232,35 @@ actor TransferServer: TransferServing {
     private func received(data: Data?, from connection: NWConnection) async {
         let identifier = ObjectIdentifier(connection)
         if let data { receiveBuffers[identifier, default: Data()].append(data) }
-        guard let buffer = receiveBuffers[identifier] else { return }
-        guard buffer.count <= Self.maxHandshakeBytes else {
-            connection.cancel()
-            pendingConnections.removeAll { $0 === connection }
-            receiveBuffers.removeValue(forKey: identifier)
-            return
+        // Process complete lines one at a time. The consumed buffer is written
+        // back before every await, so a receive callback that interleaves
+        // during `await received(line:)` appends to (and processes) the
+        // up-to-date buffer instead of being clobbered by a stale snapshot.
+        while var buffer = receiveBuffers[identifier] {
+            guard buffer.count <= Self.maxHandshakeBytes else {
+                connection.cancel()
+                pendingConnections.removeAll { $0 === connection }
+                receiveBuffers.removeValue(forKey: identifier)
+                return
+            }
+            guard let newline = buffer.firstIndex(of: 10) else { break }
+            let lineData = Data(buffer[..<newline])
+            buffer.removeSubrange(..<buffer.index(after: newline))
+            receiveBuffers[identifier] = buffer
+            await received(line: lineData, from: connection, identifier: identifier)
+            guard receiveBuffers[identifier] != nil else { return }
         }
-        guard let newline = buffer.firstIndex(of: 10) else { return }
-        let requestData = Data(buffer[..<newline])
-        receiveBuffers.removeValue(forKey: identifier)
+    }
+
+    private func received(line lineData: Data, from connection: NWConnection, identifier: ObjectIdentifier) async {
+        if acceptedConnection !== connection {
+            await receiveConnectionRequest(lineData, from: connection, identifier: identifier)
+        } else {
+            await receiveHandshake(lineData, from: connection, identifier: identifier)
+        }
+    }
+
+    private func receiveConnectionRequest(_ requestData: Data, from connection: NWConnection, identifier: ObjectIdentifier) async {
         do {
             let request = try JSONDecoder().decode(TransferConnectionRequest.self, from: requestData)
             try await session.acceptConnection(
@@ -251,9 +273,7 @@ actor TransferServer: TransferServing {
             let acknowledgement = Data(#"{"ok":true,"protocolVersion":1}"#.utf8) + Data([10])
             connection.send(content: acknowledgement, completion: .contentProcessed { _ in })
         } catch {
-            connection.cancel()
-            pendingConnections.removeAll { $0 === connection }
-            receiveBuffers.removeValue(forKey: identifier)
+            rejectConnection(connection, identifier: identifier)
             let state = await session.state
             if state.isTerminal {
                 isStopped = true
@@ -262,6 +282,64 @@ actor TransferServer: TransferServing {
                 await closeTransport()
                 resumeStart(with: TransferServerError.sessionExpired)
             }
+        }
+    }
+
+    private func receiveHandshake(_ handshakeData: Data, from connection: NWConnection, identifier: ObjectIdentifier) async {
+        do {
+            let handshake = try JSONDecoder().decode(TransferHandshake.self, from: handshakeData)
+            try await session.acceptHandshake(handshake)
+        } catch {
+            // A failed handshake cancels the accepted connection; the
+            // disconnect handler terminates the one-shot session.
+            connection.cancel()
+            receiveBuffers.removeValue(forKey: identifier)
+            let state = await session.state
+            if state.isTerminal {
+                isStopped = true
+                timeoutTask?.cancel()
+                timeoutTask = nil
+                await closeTransport()
+            }
+        }
+    }
+
+    private func rejectConnection(_ connection: NWConnection, identifier: ObjectIdentifier) {
+        connection.cancel()
+        pendingConnections.removeAll { $0 === connection }
+        receiveBuffers.removeValue(forKey: identifier)
+    }
+
+    /// Sends the transfer package to the accepted client exactly once: the
+    /// whole package is JSON-serialized, AEAD-sealed with the derived session
+    /// key, and only then transmitted. The session is marked `sent` after the
+    /// wire write succeeds, so a second send is refused.
+    func send(package: TransferPackageV1) async throws {
+        guard !isStopped else { throw TransferServerError.notRunning }
+        guard let connection = acceptedConnection else { throw TransferServerError.notConnected }
+        guard await session.hasSessionKey else { throw TransferServerError.handshakeIncomplete }
+        let plaintext = try JSONEncoder().encode(package)
+        // sealMessage refuses a session that already sent (replay protection)
+        // or is not connected; the session error propagates to the caller.
+        let message = try await session.sealMessage(plaintext)
+        let line = try JSONEncoder().encode(message) + Data([10])
+        do {
+            try await send(line, over: connection)
+        } catch {
+            throw TransferServerError.sendFailed(error.localizedDescription)
+        }
+        try await session.markSent()
+    }
+
+    private func send(_ data: Data, over connection: NWConnection) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            connection.send(content: data, completion: .contentProcessed { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: ())
+                }
+            })
         }
     }
 

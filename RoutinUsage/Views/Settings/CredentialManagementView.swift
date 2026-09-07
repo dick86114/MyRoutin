@@ -30,6 +30,7 @@ struct CredentialManagementView: View {
     @State private var editor: EditorPresentation?
     @State private var alertSettingsState: KeyUsageState?
     @State private var detailsState: KeyUsageState?
+    @State private var showsTransferToAndroid = false
 
     init(environment: AppEnvironment, ordering: CredentialOrderingController) {
         self.environment = environment
@@ -52,6 +53,11 @@ struct CredentialManagementView: View {
         }
         .sheet(item: $editor) { presentation in
             credentialEditor(presentation)
+        }
+        .sheet(isPresented: $showsTransferToAndroid) {
+            TransferToAndroidView(environment: environment) {
+                showsTransferToAndroid = false
+            }
         }
         .sheet(item: $alertSettingsState) { state in
             CredentialAlertSettingsView(
@@ -89,13 +95,23 @@ struct CredentialManagementView: View {
     }
 
     private var addButton: some View {
-        Button {
-            editor = .add
-        } label: {
-            Label("添加凭证", systemImage: "plus")
+        HStack(spacing: 12) {
+            Button {
+                showsTransferToAndroid = true
+            } label: {
+                Label("迁移到 Android", systemImage: "iphone.and.arrow.forward")
+            }
+            .liquidGlassButton()
+            .accessibilityLabel("迁移到 Android")
+
+            Button {
+                editor = .add
+            } label: {
+                Label("添加凭证", systemImage: "plus")
+            }
+            .liquidGlassButton(prominent: true)
+            .accessibilityLabel("添加凭证")
         }
-        .liquidGlassButton(prominent: true)
-        .accessibilityLabel("添加凭证")
     }
 
     private var filterBar: some View {

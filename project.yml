@@ -61,6 +61,7 @@ targets:
           cp "$PROJECT_DIR/RoutinUsage/Views/Settings/GeneralSettingsView.swift" "$resource_dir/GeneralSettingsView.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/Settings/HelpUpdateView.swift" "$resource_dir/HelpUpdateView.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/Settings/CredentialManagementView.swift" "$resource_dir/CredentialManagementView.swift.txt"
+          cp "$PROJECT_DIR/RoutinUsage/Views/Settings/TransferToAndroidView.swift" "$resource_dir/TransferToAndroidView.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/Settings/CredentialManagementModel.swift" "$resource_dir/CredentialManagementModel.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/Settings/CredentialAlertSettingsModel.swift" "$resource_dir/CredentialAlertSettingsModel.swift.txt"
           cp "$PROJECT_DIR/RoutinUsage/Views/Settings/CredentialAlertSettingsView.swift" "$resource_dir/CredentialAlertSettingsView.swift.txt"
