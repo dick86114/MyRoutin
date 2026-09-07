@@ -1,0 +1,7 @@
+{
+    "Result": {
+        "QuotaUsage": [
+            { "Level": "5h", "Percent": 10, "ResetTimestamp": 1893456000 }
+        ]
+    }
+}

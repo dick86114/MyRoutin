@@ -12,7 +12,13 @@ import java.util.UUID
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** JSON codec for cached [UsageSnapshot] values, using org.json (no extra dependency). */
+/**
+ * JSON codec for cached [UsageSnapshot] values, using org.json (no extra dependency).
+ *
+ * Enum values are serialized with the cross-platform rawValue spelling (e.g. `boolean`,
+ * `progress`, `usedQuota`, `normal`) so cached snapshots stay interchangeable with the
+ * macOS implementation.
+ */
 object UsageSnapshotJsonCodec {
 
     fun encode(snapshot: UsageSnapshot): String {
@@ -26,13 +32,13 @@ object UsageSnapshotJsonCodec {
                     .putOpt("limit", metric.limit?.toPlainString())
                     .putOpt("remaining", metric.remaining?.toPlainString())
                     .putOpt("value", metric.value?.toPlainString())
-                    .put("unit", metric.unit.name)
+                    .put("unit", metric.unit.rawValue)
                     .putOpt("windowStart", metric.windowStart?.toString())
                     .putOpt("windowEnd", metric.windowEnd?.toString())
-                    .put("presentation", metric.presentation.name)
-                    .put("semantic", metric.semantic.name)
+                    .put("presentation", metric.presentation.rawValue)
+                    .put("semantic", metric.semantic.rawValue)
                     .putOpt("currencyCode", metric.currencyCode)
-                    .put("healthState", metric.healthState.name)
+                    .put("healthState", metric.healthState.rawValue)
             )
         }
         return JSONObject()
@@ -54,13 +60,16 @@ object UsageSnapshotJsonCodec {
                 limit = item.optNullableString("limit")?.let(::BigDecimal),
                 remaining = item.optNullableString("remaining")?.let(::BigDecimal),
                 value = item.optNullableString("value")?.let(::BigDecimal),
-                unit = UsageMetricUnit.valueOf(item.getString("unit")),
+                unit = requireNotNull(UsageMetricUnit.fromRawValue(item.getString("unit"))) { "unknown unit" },
                 windowStart = item.optNullableString("windowStart")?.let(Instant::parse),
                 windowEnd = item.optNullableString("windowEnd")?.let(Instant::parse),
-                presentation = UsageMetricPresentation.valueOf(item.getString("presentation")),
-                semantic = UsageMetricSemantic.valueOf(item.getString("semantic")),
+                presentation = requireNotNull(
+                    UsageMetricPresentation.fromRawValue(item.getString("presentation"))
+                ) { "unknown presentation" },
+                semantic = requireNotNull(UsageMetricSemantic.fromRawValue(item.getString("semantic"))) { "unknown semantic" },
                 currencyCode = item.optNullableString("currencyCode"),
-                healthState = UsageMetricHealthState.valueOf(item.getString("healthState"))
+                healthState = UsageMetricHealthState.fromRawValue(item.getString("healthState"))
+                    ?: UsageMetricHealthState.Unknown
             )
         }
         UsageSnapshot(

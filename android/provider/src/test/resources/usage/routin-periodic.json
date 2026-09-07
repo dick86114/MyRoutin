@@ -1,0 +1,15 @@
+{
+    "planName": "Pro",
+    "subscriptionId": "sub-123",
+    "planId": "plan-pro",
+    "type": 1,
+    "status": 1,
+    "dailyLimitUsd": 10,
+    "weeklyLimitUsd": 50,
+    "dailyUsedUsd": 2,
+    "weeklyUsedUsd": 10,
+    "dailyRemainingUsd": 8,
+    "weeklyRemainingUsd": 40,
+    "dayWindowEndAt": "2026-08-10T14:00:00Z",
+    "weekWindowEndAt": "2026-08-15T00:00:00Z"
+}

@@ -1,0 +1,30 @@
+{
+    "data": {
+        "limits": [
+            {
+                "type": "TIME_LIMIT",
+                "unit": 5,
+                "number": 1,
+                "usage": 1000,
+                "currentValue": 461,
+                "remaining": 539,
+                "percentage": 46,
+                "nextResetTime": 1893456000000
+            },
+            {
+                "type": "TOKENS_LIMIT",
+                "unit": 3,
+                "number": 5,
+                "percentage": 42,
+                "nextResetTime": 1893456000000
+            },
+            {
+                "type": "TOKENS_LIMIT",
+                "unit": 6,
+                "number": 1,
+                "percentage": 12,
+                "nextResetTime": 1893456000000
+            }
+        ]
+    }
+}

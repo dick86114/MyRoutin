@@ -1,0 +1,10 @@
+{
+    "planName": "Pro",
+    "subscriptionId": "sub-456",
+    "planId": "plan-pack",
+    "type": 2,
+    "status": 1,
+    "totalTokens": 1000000,
+    "consumedTokens": 250000,
+    "remainingTokens": 750000
+}
