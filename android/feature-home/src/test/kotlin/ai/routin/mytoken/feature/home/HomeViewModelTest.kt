@@ -312,32 +312,147 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `cancelled refresh leaves loading state without error`() = runTest {
+    fun `refreshAll twice concurrently issues one fetch per credential`() = runTest {
+        val rt = credential("RT-1", ProviderId.Routin)
+        val ds = credential("DS-1", ProviderId.DeepSeek)
+        addCredential(rt)
+        addCredential(ds)
+        val gate = CompletableDeferred<Unit>()
+        val rtProvider = GatedUsageProvider(ProviderId.Routin, gate, now)
+        val dsProvider = GatedUsageProvider(ProviderId.DeepSeek, gate, now)
+        providers[ProviderId.Routin] = rtProvider
+        providers[ProviderId.DeepSeek] = dsProvider
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect {} }
+
+        vm.refreshAll()
+        vm.refreshAll() // duplicate while the first pass is still in flight
+        advanceUntilIdle()
+
+        assertEquals("duplicate refreshAll must not re-fetch Routin", 1, rtProvider.fetchCalls)
+        assertEquals("duplicate refreshAll must not re-fetch DeepSeek", 1, dsProvider.fetchCalls)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(1, rtProvider.fetchCalls)
+        assertEquals(1, dsProvider.fetchCalls)
+        vm.state.value.groups.forEach { group ->
+            group.cards.forEach { card ->
+                assertEquals(RefreshStatus.Ready, card.status)
+            }
+        }
+    }
+
+    @Test
+    fun `duplicate single-credential refresh issues one fetch`() = runTest {
+        val rt = credential("RT-1", ProviderId.Routin)
+        addCredential(rt)
+        val gate = CompletableDeferred<Unit>()
+        val provider = GatedUsageProvider(ProviderId.Routin, gate, now)
+        providers[ProviderId.Routin] = provider
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect {} }
+
+        vm.refreshCredential(rt)
+        vm.refreshCredential(rt) // duplicate retry while first is still in flight
+        advanceUntilIdle()
+
+        assertEquals(1, provider.fetchCalls)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(1, provider.fetchCalls)
+        assertEquals(RefreshStatus.Ready, vm.state.value.groups.single().cards.single().status)
+    }
+
+    @Test
+    fun `refreshAll while single refresh in flight skips that credential and refreshes others`() = runTest {
+        val rt = credential("RT-1", ProviderId.Routin)
+        val ds = credential("DS-1", ProviderId.DeepSeek)
+        addCredential(rt)
+        addCredential(ds)
+        val gate = CompletableDeferred<Unit>()
+        val rtProvider = GatedUsageProvider(ProviderId.Routin, gate, now)
+        val dsProvider = GatedUsageProvider(
+            ProviderId.DeepSeek,
+            CompletableDeferred<Unit>().apply { complete(Unit) },
+            now,
+        )
+        providers[ProviderId.Routin] = rtProvider
+        providers[ProviderId.DeepSeek] = dsProvider
+
+        val vm = viewModel()
+        backgroundScope.launch { vm.state.collect {} }
+
+        vm.refreshCredential(rt)
+        advanceUntilIdle() // rt suspended mid-refresh
+        vm.refreshAll()
+        advanceUntilIdle()
+
+        assertEquals("in-flight single refresh must not be duplicated", 1, rtProvider.fetchCalls)
+        assertEquals(1, dsProvider.fetchCalls)
+        val cards = vm.state.value.groups.flatMap { it.cards }
+        assertEquals(
+            RefreshStatus.Loading,
+            cards.single { it.credential.id == rt.id }.status,
+        )
+        assertEquals(
+            RefreshStatus.Ready,
+            cards.single { it.credential.id == ds.id }.status,
+        )
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(1, rtProvider.fetchCalls)
+    }
+
+    @Test
+    fun `refresh left loading by cancellation keeps snapshot without error`() = runTest {
         val credential = credential("RT-1", ProviderId.Routin)
         addCredential(credential)
         val gate = CompletableDeferred<Result<UsageSnapshot>>()
+        var calls = 0
         providers[ProviderId.Routin] = object : UsageProvider {
             override val providerId = ProviderId.Routin
             override suspend fun fetchUsage(
                 credential: Credential,
                 secret: CredentialSecret,
-            ): Result<UsageSnapshot> = gate.await()
+            ): Result<UsageSnapshot> {
+                calls++
+                if (calls == 1) {
+                    return Result.success(snapshot(credential.id, balanceMetric(20.0)))
+                }
+                // Suspending forever is the observable state of a refresh cancelled
+                // mid-flight: Task 7 keeps the credential in Loading with no error.
+                return gate.await()
+            }
         }
 
         val vm = viewModel()
         backgroundScope.launch { vm.state.collect {} }
         vm.refreshAll()
         advanceUntilIdle()
-        assertEquals(RefreshStatus.Loading, vm.state.value.groups.single().cards.single().status)
+        assertEquals(RefreshStatus.Ready, vm.state.value.groups.single().cards.single().status)
 
-        // Task 7 semantics: cancellation is not a failure. The card stays Loading (展示"刷新中")
-        // and can be retried by the user, instead of rendering an error.
-        vm.viewModelScope.cancel()
+        vm.refreshAll()
         advanceUntilIdle()
 
+        // The collection stays alive here; assertions must hold on the live flow.
         val card = vm.state.value.groups.single().cards.single()
         assertEquals(RefreshStatus.Loading, card.status)
-        assertNull(card.error)
+        assertNull("cancelled refresh must not surface an error", card.error)
+        assertNotNull("previous successful snapshot is kept while refreshing", card.snapshot)
+        assertEquals(2, calls)
+
+        // Cleanup only: release/cancel after assertions, never before.
+        vm.viewModelScope.cancel()
+        advanceUntilIdle()
+        assertEquals(RefreshStatus.Loading, vm.state.value.groups.single().cards.single().status)
+        assertNull(vm.state.value.groups.single().cards.single().error)
     }
 }
 
@@ -372,5 +487,24 @@ class FakeUsageProvider(
     override suspend fun fetchUsage(credential: Credential, secret: CredentialSecret): Result<UsageSnapshot> {
         fetchCalls++
         return next
+    }
+}
+
+/**
+ * Usage provider that counts fetches and suspends every caller until [gate] is completed,
+ * so concurrent duplicate requests are observable as an inflated [fetchCalls].
+ */
+class GatedUsageProvider(
+    override val providerId: ProviderId,
+    private val gate: CompletableDeferred<Unit>,
+    private val fetchedAt: Instant,
+) : UsageProvider {
+    var fetchCalls = 0
+        private set
+
+    override suspend fun fetchUsage(credential: Credential, secret: CredentialSecret): Result<UsageSnapshot> {
+        fetchCalls++
+        gate.await()
+        return Result.success(UsageSnapshot(credential.id, fetchedAt, emptyList()))
     }
 }

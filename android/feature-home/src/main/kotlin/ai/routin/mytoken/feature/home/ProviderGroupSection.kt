@@ -21,6 +21,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.util.UUID
@@ -49,7 +52,10 @@ fun ProviderGroupSection(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onToggleGroup(group.providerId) }
+                    .clickable(role = Role.Button) { onToggleGroup(group.providerId) }
+                    .semantics {
+                        stateDescription = if (group.isCollapsed) "已收起" else "已展开"
+                    }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

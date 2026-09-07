@@ -2,6 +2,7 @@ package ai.routin.mytoken.feature.home
 
 import ai.routin.mytoken.domain.model.ProviderId
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -65,13 +67,19 @@ fun HomeScreen(
                 .padding(padding)
                 .fillMaxSize(),
         ) {
-            if (state.credentialCount == 0) {
-                EmptyState(
+            when {
+                // Initial load: show a spinner instead of flashing the empty state.
+                state.isLoading -> Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+                state.credentialCount == 0 -> EmptyState(
                     onImportFromMac = onImportFromMac,
                     onAddManually = onAddManually,
                 )
-            } else {
-                LazyColumn(
+                else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),

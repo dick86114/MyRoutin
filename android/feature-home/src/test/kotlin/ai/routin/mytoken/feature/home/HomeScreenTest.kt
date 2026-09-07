@@ -13,8 +13,12 @@ import ai.routin.mytoken.domain.model.UsageSnapshot
 import ai.routin.mytoken.domain.usage.RefreshStatus
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -25,6 +29,8 @@ import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -369,6 +375,79 @@ class HomeScreenTest {
         composeRule.onNodeWithText("手动添加").performClick()
         assertEquals(1, callbacks.importFromMac)
         assertEquals(1, callbacks.addedManually)
+    }
+
+    @Test
+    fun loadingStateHidesEmptyStateAndGroups() {
+        composeRule.setContent {
+            MaterialTheme {
+                HomeScreen(
+                    state = HomeUiState(isLoading = true, groups = emptyList(), credentialCount = 0),
+                    onRefreshAll = {},
+                    onRefreshCredential = {},
+                    onToggleGroup = {},
+                    onOpenCredential = {},
+                    onImportFromMac = {},
+                    onAddManually = {},
+                )
+            }
+        }
+
+        // Initial load must not flash the empty state or stale groups.
+        composeRule.onNodeWithText("尚未添加凭证").assertDoesNotExist()
+        composeRule.onNodeWithText("从 Mac 导入").assertDoesNotExist()
+    }
+
+    @Test
+    fun groupHeaderExposesButtonRoleAndStateDescription() {
+        val rt = credential("RT 主力", ProviderId.Routin)
+        composeRule.setContent {
+            MaterialTheme {
+                HomeScreen(
+                    state = HomeUiState(
+                        isLoading = false,
+                        groups = listOf(group(ProviderId.Routin, listOf(readyCard(rt, listOf(balanceMetric(1.0)))))),
+                        credentialCount = 1,
+                    ),
+                    onRefreshAll = {},
+                    onRefreshCredential = {},
+                    onToggleGroup = {},
+                    onOpenCredential = {},
+                    onImportFromMac = {},
+                    onAddManually = {},
+                )
+            }
+        }
+
+        val header = composeRule.onNodeWithText("Routin").fetchSemanticsNode()
+        assertEquals(Role.Button, header.config[SemanticsProperties.Role])
+        assertEquals("已展开", header.config[SemanticsProperties.StateDescription])
+    }
+
+    @Test
+    fun statusColorsFollowInstalledColorScheme() {
+        var observedDark: StatusColors? = null
+        var observedLight: StatusColors? = null
+
+        composeRule.setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                observedDark = statusColors()
+            }
+            MaterialTheme(colorScheme = lightColorScheme()) {
+                observedLight = statusColors()
+            }
+        }
+
+        assertEquals(StatusColors.darkPalette, observedDark)
+        assertEquals(StatusColors.lightPalette, observedLight)
+        assertNotEquals(observedLight, observedDark)
+        // Dark palette tones must be lighter than the light palette ones for contrast.
+        assertTrue(
+            observedDark!!.normal.luminance() > StatusColors.lightPalette.normal.luminance(),
+        )
+        assertTrue(
+            observedDark!!.critical.luminance() > StatusColors.lightPalette.critical.luminance(),
+        )
     }
 
     @Test

@@ -27,19 +27,20 @@ import kotlin.math.roundToInt
 /** Color + text label pair so color is never the only information channel. */
 internal data class MetricTone(val color: Color, val label: String) {
     companion object {
-        fun of(metric: UsageMetric, percent: Double?): MetricTone = when (metric.healthState) {
-            UsageMetricHealthState.Normal -> MetricTone(StatusTone.Normal, "正常")
-            UsageMetricHealthState.Warning -> MetricTone(StatusTone.Warning, "注意")
-            UsageMetricHealthState.Critical -> MetricTone(StatusTone.Critical, "告急")
-            UsageMetricHealthState.Unavailable -> MetricTone(StatusTone.Neutral, "不可用")
-            UsageMetricHealthState.Stale -> MetricTone(StatusTone.Warning, "已过期")
-            UsageMetricHealthState.Unknown -> when {
-                percent == null -> MetricTone(StatusTone.Neutral, "")
-                percent >= 80.0 -> MetricTone(StatusTone.Critical, "告急")
-                percent >= 50.0 -> MetricTone(StatusTone.Warning, "注意")
-                else -> MetricTone(StatusTone.Normal, "正常")
+        fun of(metric: UsageMetric, percent: Double?, colors: StatusColors): MetricTone =
+            when (metric.healthState) {
+                UsageMetricHealthState.Normal -> MetricTone(colors.normal, "正常")
+                UsageMetricHealthState.Warning -> MetricTone(colors.warning, "注意")
+                UsageMetricHealthState.Critical -> MetricTone(colors.critical, "告急")
+                UsageMetricHealthState.Unavailable -> MetricTone(colors.neutral, "不可用")
+                UsageMetricHealthState.Stale -> MetricTone(colors.warning, "已过期")
+                UsageMetricHealthState.Unknown -> when {
+                    percent == null -> MetricTone(colors.neutral, "")
+                    percent >= 80.0 -> MetricTone(colors.critical, "告急")
+                    percent >= 50.0 -> MetricTone(colors.warning, "注意")
+                    else -> MetricTone(colors.normal, "正常")
+                }
             }
-        }
     }
 }
 
@@ -117,7 +118,7 @@ private fun CellLabel(text: String, modifier: Modifier = Modifier) {
 @Composable
 private fun ProgressCell(metric: UsageMetric, modifier: Modifier = Modifier) {
     val percent = progressPercent(metric)
-    val tone = MetricTone.of(metric, percent)
+    val tone = MetricTone.of(metric, percent, statusColors())
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CellLabel(metric.label, modifier = Modifier.weight(1f))
@@ -175,7 +176,7 @@ private fun ProgressCell(metric: UsageMetric, modifier: Modifier = Modifier) {
 
 @Composable
 private fun BalanceCell(metric: UsageMetric, modifier: Modifier = Modifier) {
-    val tone = MetricTone.of(metric, null)
+    val tone = MetricTone.of(metric, null, statusColors())
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CellLabel(metric.label, modifier = Modifier.weight(1f))
@@ -203,7 +204,7 @@ private fun BalanceCell(metric: UsageMetric, modifier: Modifier = Modifier) {
 
 @Composable
 private fun StatusCell(metric: UsageMetric, modifier: Modifier = Modifier) {
-    val tone = MetricTone.of(metric, null)
+    val tone = MetricTone.of(metric, null, statusColors())
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
         CellLabel(metric.label)
         Text(

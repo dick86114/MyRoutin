@@ -2,7 +2,6 @@ package ai.routin.mytoken.feature.home
 
 import ai.routin.mytoken.domain.model.CredentialKind
 import ai.routin.mytoken.domain.model.ProviderId
-import ai.routin.mytoken.domain.usage.RefreshStatus
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -132,12 +131,7 @@ fun CredentialDetailScreen(
                 statusLabel(card)?.let { label ->
                     StatusBadge(
                         text = label,
-                        color = when (card.status) {
-                            RefreshStatus.Failed -> StatusTone.Critical
-                            RefreshStatus.Loading -> MaterialTheme.colorScheme.primary
-                            RefreshStatus.Disabled -> StatusTone.Neutral
-                            RefreshStatus.Ready -> StatusTone.Warning
-                        },
+                        color = statusBadgeColor(card, statusColors(), MaterialTheme.colorScheme.primary),
                     )
                 }
             }

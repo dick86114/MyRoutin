@@ -14,14 +14,18 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Data freshness buckets, mirroring the macOS popover freshness semantics. */
 enum class FreshnessLevel { NEVER, JUST_NOW, RECENT, OLD, EXPIRED }
@@ -84,8 +88,21 @@ class HomeViewModel(
 ) : ViewModel() {
 
     private val collapsedGroups = MutableStateFlow<Set<ProviderId>>(emptySet())
-    private val refreshingAll = MutableStateFlow(false)
+    private val isRefreshingAll = MutableStateFlow(false)
     private val nowTick = MutableStateFlow(0L)
+
+    /** Credential IDs whose refresh is currently in flight (guarded by [inFlightMutex]). */
+    private val inFlight = mutableSetOf<UUID>()
+    private val inFlightMutex = Mutex()
+
+    /** Atomically claims [id]; returns false when a refresh for it is already running. */
+    private suspend fun tryBeginRefresh(id: UUID): Boolean = inFlightMutex.withLock {
+        inFlight.add(id)
+    }
+
+    private suspend fun endRefresh(id: UUID) {
+        inFlightMutex.withLock { inFlight.remove(id) }
+    }
 
     init {
         // Re-render relative freshness labels periodically; disabled in tests via null interval.
@@ -107,32 +124,59 @@ class HomeViewModel(
             repository.observeCredentials(),
             refreshUseCase.states,
             collapsedGroups,
-            refreshingAll,
+            isRefreshingAll,
             nowTick,
-        ) { credentials, usageStates, collapsed, isRefreshingAll, _ ->
-            buildState(credentials, usageStates, collapsed, isRefreshingAll)
+        ) { credentials, usageStates, collapsed, refreshingAll, _ ->
+            buildState(credentials, usageStates, collapsed, refreshingAll)
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = HomeUiState(isLoading = true),
         )
 
-    /** Refreshes every enabled credential; per-credential duplication is suppressed by the use case. */
+    /**
+     * Refreshes every enabled credential. Duplicate suppression:
+     * - a second [refreshAll] while one is running is a no-op (CAS on the flag);
+     * - a credential already being refreshed (by this call or by [refreshCredential])
+     *   is skipped, so no duplicate concurrent provider request is issued.
+     */
     fun refreshAll() {
+        if (!isRefreshingAll.compareAndSet(expect = false, update = true)) return
         viewModelScope.launch {
-            refreshingAll.value = true
             try {
-                refreshUseCase.refreshAll()
+                val credentials = repository.observeCredentials().first()
+                coroutineScope {
+                    credentials.forEach { credential ->
+                        if (tryBeginRefresh(credential.id)) {
+                            launch {
+                                try {
+                                    refreshUseCase.refresh(credential)
+                                } finally {
+                                    endRefresh(credential.id)
+                                }
+                            }
+                        }
+                    }
+                }
             } finally {
-                refreshingAll.value = false
+                isRefreshingAll.value = false
             }
         }
     }
 
-    /** Refreshes one credential; failures keep its last snapshot and mark it stale. */
+    /**
+     * Refreshes one credential; failures keep its last snapshot and mark it stale.
+     * A call while the same credential is already refreshing is a no-op.
+     */
     fun refreshCredential(credential: Credential) {
         viewModelScope.launch {
-            refreshUseCase.refresh(credential)
+            if (tryBeginRefresh(credential.id)) {
+                try {
+                    refreshUseCase.refresh(credential)
+                } finally {
+                    endRefresh(credential.id)
+                }
+            }
         }
     }
 

@@ -19,16 +19,58 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-/** Status tone colors shared by cards, badges and metric cells (macOS UsageMetricTone semantics). */
-internal object StatusTone {
-    val Normal: Color = Color(0xFF2E7D32)
-    val Warning: Color = Color(0xFFEF6C00)
-    val Critical: Color = Color(0xFFC62828)
-    val Neutral: Color = Color(0xFF757575)
+/**
+ * Status colors resolved from the active theme so contrast holds in dark mode.
+ * Light palette: saturated dark tones on light backgrounds; dark palette: lighter
+ * tones for dark backgrounds. Selection is derived from the composed color scheme
+ * (background luminance), so it follows whatever scheme is installed — system or explicit.
+ */
+internal data class StatusColors(
+    val normal: Color,
+    val warning: Color,
+    val critical: Color,
+    val neutral: Color,
+) {
+    companion object {
+        val lightPalette: StatusColors = StatusColors(
+            normal = Color(0xFF2E7D32),
+            warning = Color(0xFFEF6C00),
+            critical = Color(0xFFC62828),
+            neutral = Color(0xFF757575),
+        )
+
+        val darkPalette: StatusColors = StatusColors(
+            normal = Color(0xFF81C784),
+            warning = Color(0xFFFFB74D),
+            critical = Color(0xFFE57373),
+            neutral = Color(0xFFB0BEC5),
+        )
+
+        fun forTheme(isDark: Boolean): StatusColors =
+            if (isDark) darkPalette else lightPalette
+    }
+}
+
+/** Resolves [StatusColors] from the composed MaterialTheme color scheme. */
+@Composable
+internal fun statusColors(): StatusColors =
+    StatusColors.forTheme(isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f)
+
+/** Badge color for a credential's status; every color is paired with [statusLabel] text. */
+internal fun statusBadgeColor(
+    card: CredentialCardUi,
+    colors: StatusColors,
+    loadingColor: Color,
+): Color = when (card.status) {
+    RefreshStatus.Failed -> colors.critical
+    RefreshStatus.Loading -> loadingColor
+    RefreshStatus.Disabled -> colors.neutral
+    RefreshStatus.Ready -> colors.warning
 }
 
 /** Human-readable status labels; every status color is paired with a text label. */
@@ -54,6 +96,7 @@ fun CredentialUsageCard(
     modifier: Modifier = Modifier,
 ) {
     val accent = ProviderCatalog.accentColor(card.credential.providerId)
+    val colors = statusColors()
     Card(
         onClick = onOpen,
         modifier = modifier.fillMaxWidth(),
@@ -79,12 +122,7 @@ fun CredentialUsageCard(
                 statusLabel(card)?.let { label ->
                     StatusBadge(
                         text = label,
-                        color = when (card.status) {
-                            RefreshStatus.Failed -> StatusTone.Critical
-                            RefreshStatus.Loading -> MaterialTheme.colorScheme.primary
-                            RefreshStatus.Disabled -> StatusTone.Neutral
-                            RefreshStatus.Ready -> StatusTone.Warning
-                        },
+                        color = statusBadgeColor(card, colors, MaterialTheme.colorScheme.primary),
                     )
                 }
             }
@@ -111,7 +149,7 @@ fun CredentialUsageCard(
                 Text(
                     text = "已显示上次成功数据",
                     style = MaterialTheme.typography.labelSmall,
-                    color = StatusTone.Warning,
+                    color = colors.warning,
                 )
             }
 
