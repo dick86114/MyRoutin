@@ -35,7 +35,7 @@ struct TransferQRCodePayload: Codable, Equatable, Sendable {
         guard protocolVersion == Self.supportedProtocolVersion else {
             throw TransferQRCodePayloadError.unsupportedVersion(protocolVersion)
         }
-        guard !host.isEmpty, !host.contains(" ") else {
+        guard Self.isValidHost(host) else {
             throw TransferQRCodePayloadError.invalidHost
         }
         guard (1...65_535).contains(port) else {
@@ -51,9 +51,7 @@ struct TransferQRCodePayload: Codable, Equatable, Sendable {
 
     func validate(now: Date = Date()) throws {
         try validateStructure()
-        guard expiresAt > now else {
-            throw TransferQRCodePayloadError.expired
-        }
+        guard expiresAt > now else { throw TransferQRCodePayloadError.expired }
     }
 
     init(from decoder: Decoder) throws {
@@ -72,8 +70,6 @@ struct TransferQRCodePayload: Codable, Equatable, Sendable {
         case protocolVersion, sessionID, host, port, macEphemeralPublicKey, expiresAt, connectionCode
     }
 
-    /// A compact URI intended for QR encoding. It contains only the seven
-    /// fields in this payload; transfer packages and secrets are never added.
     func encodedString() throws -> String {
         try validate()
         var components = URLComponents()
@@ -94,31 +90,57 @@ struct TransferQRCodePayload: Codable, Equatable, Sendable {
     static func decode(_ string: String) throws -> TransferQRCodePayload {
         guard let components = URLComponents(string: string),
               components.scheme == Self.scheme,
-              let host = components.host,
-              host.hasPrefix("v"),
-              let version = Int(host.dropFirst()),
-              version == Self.supportedProtocolVersion,
-              let queryItems = components.queryItems else {
+              components.host == "v\(Self.supportedProtocolVersion)",
+              components.port == nil,
+              components.user == nil,
+              components.password == nil,
+              components.fragment == nil,
+              components.percentEncodedPath.isEmpty,
+              let queryItems = components.queryItems,
+              queryItems.count == 6 else {
+            throw TransferQRCodePayloadError.invalidEncoding
+        }
+        let expectedKeys: Set<String> = ["session", "host", "port", "publicKey", "expiry", "code"]
+        let names = queryItems.map(\.name)
+        guard Set(names) == expectedKeys, Set(names).count == names.count else {
             throw TransferQRCodePayloadError.invalidEncoding
         }
         let values = Dictionary(queryItems.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { first, _ in first })
-        guard values.count == 6,
-              let session = values["session"], let sessionID = UUID(uuidString: session),
+        guard let session = values["session"], let sessionID = UUID(uuidString: session),
               let address = values["host"], let portString = values["port"], let port = Int(portString),
               let publicKeyString = values["publicKey"], let publicKey = Data(base64URL: publicKeyString),
               let expiryString = values["expiry"], let expiresAt = ISO8601DateFormatter.transfer.date(from: expiryString),
               let code = values["code"] else {
             throw TransferQRCodePayloadError.invalidEncoding
         }
-        return try TransferQRCodePayload(
-            protocolVersion: version, sessionID: sessionID, host: address, port: port,
-            macEphemeralPublicKey: publicKey, expiresAt: expiresAt, connectionCode: code
-        )
+        let payload = try TransferQRCodePayload(protocolVersion: 1, sessionID: sessionID, host: address, port: port, macEphemeralPublicKey: publicKey, expiresAt: expiresAt, connectionCode: code)
+        try payload.validate()
+        return payload
+    }
+
+    private static func isValidHost(_ value: String) -> Bool {
+        guard !value.isEmpty, value.utf8.count <= 253,
+              value.unicodeScalars.allSatisfy({ scalar in
+                  scalar.value >= 0x21 && scalar.value <= 0x7E && !"/\\?#@:[]".unicodeScalars.contains(scalar)
+              }) else { return false }
+        if value == "localhost" { return true }
+        let labels = value.split(separator: ".", omittingEmptySubsequences: false)
+        guard !labels.isEmpty else { return false }
+        let looksNumeric = value.allSatisfy { $0.isNumber || $0 == "." }
+        if looksNumeric {
+            guard labels.count == 4 else { return false }
+            return labels.allSatisfy { !$0.isEmpty && Int($0).map { (0...255).contains($0) } == true }
+        }
+        return labels.allSatisfy { label in
+            guard !label.isEmpty, label.count <= 63,
+                  label.first!.isLetter || label.first!.isNumber,
+                  label.last!.isLetter || label.last!.isNumber else { return false }
+            return label.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" }
+        }
     }
 
     private static func base64URL(_ data: Data) -> String {
-        data.base64EncodedString().replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+        data.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
     }
 }
 

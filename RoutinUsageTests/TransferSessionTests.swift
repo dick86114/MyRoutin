@@ -60,10 +60,24 @@ final class TransferSessionTests: XCTestCase {
         let key = await session.macEphemeralPublicKey
         let code = await session.connectionCode
 
-        await assertThrowsAsync { try await session.acceptConnection(sessionID: UUID(), connectionCode: code, macEphemeralPublicKey: key, now: now) }
-        await assertThrowsAsync { try await session.acceptConnection(sessionID: id, connectionCode: "000000", macEphemeralPublicKey: key, now: now) }
-        await assertThrowsAsync { try await session.acceptConnection(sessionID: id, connectionCode: code, macEphemeralPublicKey: Data([1, 2]), now: now) }
-
+        do {
+            try await session.acceptConnection(sessionID: UUID(), connectionCode: code, macEphemeralPublicKey: key, now: now)
+            XCTFail("session mismatch must throw")
+        } catch let error as TransferSessionError {
+            XCTAssertEqual(error, .sessionMismatch)
+        }
+        do {
+            try await session.acceptConnection(sessionID: id, connectionCode: "000000", macEphemeralPublicKey: key, now: now)
+            XCTFail("code mismatch must throw")
+        } catch let error as TransferSessionError {
+            XCTAssertEqual(error, .connectionCodeMismatch)
+        }
+        do {
+            try await session.acceptConnection(sessionID: id, connectionCode: code, macEphemeralPublicKey: Data(repeating: 9, count: 32), now: now)
+            XCTFail("public key mismatch must throw")
+        } catch let error as TransferSessionError {
+            XCTAssertEqual(error, .publicKeyMismatch)
+        }
         let expired = await session.expireIfNeeded(now: now.addingTimeInterval(301))
         let state = await session.state
         let hasKey = await session.hasEphemeralPrivateKey

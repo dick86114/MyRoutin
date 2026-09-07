@@ -1,3 +1,4 @@
+import Network
 import XCTest
 @testable import RoutinUsage
 
@@ -53,5 +54,92 @@ final class TransferServerTests: XCTestCase {
         XCTAssertGreaterThan(payload.port, 0)
         await server.stop()
         await server.stop()
+    }
+
+    func testConcurrentStartIsRejectedAndFirstCallIsReleasedByStop() async throws {
+        let server = TransferServer(host: "127.0.0.1")
+        let first = Task { try? await server.start() }
+        try await Task.sleep(nanoseconds: 20_000_000)
+        do {
+            _ = try await server.start()
+        } catch let error as TransferServerError {
+            XCTAssertEqual(error, .alreadyStarting)
+        }
+        await server.stop()
+        _ = await first.value
+    }
+
+    func testRealLocalHandshakeAndDisconnectTerminatesSession() async throws {
+        let server = TransferServer(host: "127.0.0.1")
+        let payload = try await server.start()
+        let connection = NWConnection(host: "127.0.0.1", port: try XCTUnwrap(NWEndpoint.Port(rawValue: UInt16(payload.port))), using: .tcp)
+        connection.start(queue: DispatchQueue(label: "transfer-test-client"))
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let request = TransferConnectionRequest(sessionID: payload.sessionID, connectionCode: payload.connectionCode, macEphemeralPublicKey: payload.macEphemeralPublicKey)
+        connection.send(content: try JSONEncoder().encode(request) + Data([10]), completion: .contentProcessed { _ in })
+        for _ in 0..<20 {
+            if await server.session.state == .connected { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let connectedState = await server.session.state
+        XCTAssertEqual(connectedState, .connected)
+        connection.cancel()
+        for _ in 0..<20 {
+            if await server.session.state == .cancelled { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let cancelledState = await server.session.state
+        XCTAssertEqual(cancelledState, .cancelled)
+        await server.stop()
+    }
+
+    func testExpiredCachedPayloadCannotBeReturned() async throws {
+        let server = TransferServer(host: "127.0.0.1", timeout: 0.02)
+        _ = try await server.start()
+        try await Task.sleep(nanoseconds: 100_000_000)
+        do {
+            _ = try await server.start()
+            XCTFail("expired server must not return cached payload")
+        } catch let error as TransferServerError {
+            XCTAssertEqual(error, .sessionExpired)
+        }
+        let hasKey = await server.session.hasEphemeralPrivateKey
+        XCTAssertFalse(hasKey)
+    }
+
+    func testInvalidHostFailsStartAndCleansSessionForSubsequentStart() async throws {
+        let server = TransferServer(host: "bad/host")
+        do {
+            _ = try await server.start()
+            XCTFail("invalid host must fail")
+        } catch let error as TransferQRCodePayloadError {
+            XCTAssertEqual(error, .invalidHost)
+        }
+        let hasKey = await server.session.hasEphemeralPrivateKey
+        XCTAssertFalse(hasKey)
+        do {
+            _ = try await server.start()
+            XCTFail("failed one-shot server must not start again")
+        } catch let error as TransferServerError {
+            XCTAssertEqual(error, .sessionExpired)
+        }
+    }
+
+    func testQRCodeRejectsHostInjectionDuplicateKeysAndUnexpectedAuthority() throws {
+        let payload = try TransferQRCodePayload(protocolVersion: 1, sessionID: UUID(), host: "localhost", port: 1234, macEphemeralPublicKey: Data(repeating: 1, count: 32), expiresAt: Date().addingTimeInterval(300), connectionCode: "123456")
+        let encoded = try payload.encodedString()
+        for invalidHost in ["bad/host", "bad?host", "bad#host", "bad\\host", "bad\u{0000}host", "256.1.1.1", "1.2.3", "-bad.example", "bad-.example", "bad..example"] {
+            XCTAssertThrowsError(try TransferQRCodePayload(protocolVersion: 1, sessionID: UUID(), host: invalidHost, port: 1234, macEphemeralPublicKey: Data(repeating: 1, count: 32), expiresAt: Date().addingTimeInterval(300), connectionCode: "123456"), invalidHost)
+        }
+        XCTAssertNoThrow(try TransferQRCodePayload(protocolVersion: 1, sessionID: UUID(), host: "example-host.local", port: 1234, macEphemeralPublicKey: Data(repeating: 1, count: 32), expiresAt: Date().addingTimeInterval(300), connectionCode: "123456"))
+        XCTAssertThrowsError(try TransferQRCodePayload.decode(encoded + "&code=accessKey"))
+        XCTAssertThrowsError(try TransferQRCodePayload.decode(encoded + "&cookie=secret"))
+        XCTAssertThrowsError(try TransferQRCodePayload.decode(encoded.replacingOccurrences(of: "mytoken-transfer://v1", with: "mytoken-transfer://v1:443")))
+        XCTAssertThrowsError(try TransferQRCodePayload.decode(encoded.replacingOccurrences(of: "mytoken-transfer://v1", with: "mytoken-transfer://v1/path")))
+        XCTAssertFalse(encoded.contains("accessKey"))
+        XCTAssertFalse(encoded.contains("cookie"))
+        XCTAssertFalse(encoded.contains("password"))
+        XCTAssertFalse(encoded.contains("config"))
+        XCTAssertFalse(encoded.contains("snapshot"))
     }
 }
