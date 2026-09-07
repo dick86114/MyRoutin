@@ -3,6 +3,24 @@ import XCTest
 @testable import RoutinUsage
 
 final class TransferServerTests: XCTestCase {
+    private enum TestTimeout: Error { case timedOut }
+
+    private func withTimeout<T>(seconds: Double, operation: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw TestTimeout.timedOut
+            }
+            defer { group.cancelAll() }
+            return try await group.next()!
+        }
+    }
+
+    private func withTimeoutResult<T>(seconds: Double, operation: @escaping @Sendable () async -> T) async -> T? {
+        try? await withTimeout(seconds: seconds, operation: operation)
+    }
+
     func testQRCodeContainsOnlyTransferMetadataAndRoundTrips() throws {
         let now = Date()
         let payload = try TransferQRCodePayload(
@@ -59,22 +77,30 @@ final class TransferServerTests: XCTestCase {
     func testConcurrentStartIsRejectedAndFirstCallIsReleasedByStop() async throws {
         let server = TransferServer(host: "127.0.0.1")
         let first = Task { try? await server.start() }
-        try await Task.sleep(nanoseconds: 20_000_000)
-        do {
-            _ = try await server.start()
-        } catch let error as TransferServerError {
-            XCTAssertEqual(error, .alreadyStarting)
+        let second = Task { () -> TransferServerError? in
+            do {
+                _ = try await withTimeout(seconds: 1) { try await server.start() }
+                return nil
+            } catch let error as TransferServerError {
+                return error
+            } catch {
+                return nil
+            }
         }
+        let secondResult = try await withTimeout(seconds: 1) { await second.value }
+        XCTAssertEqual(secondResult, .alreadyStarting, "second start must be rejected")
         await server.stop()
-        _ = await first.value
+        _ = await withTimeoutResult(seconds: 1) { await first.value }
     }
 
     func testRealLocalHandshakeAndDisconnectTerminatesSession() async throws {
         let server = TransferServer(host: "127.0.0.1")
-        let payload = try await server.start()
+        let payload = try await withTimeout(seconds: 2) { try await server.start() }
         let connection = NWConnection(host: "127.0.0.1", port: try XCTUnwrap(NWEndpoint.Port(rawValue: UInt16(payload.port))), using: .tcp)
         connection.start(queue: DispatchQueue(label: "transfer-test-client"))
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await withTimeout(seconds: 1) {
+            while connection.state != .ready { try await Task.sleep(nanoseconds: 10_000_000) }
+        }
         let request = TransferConnectionRequest(sessionID: payload.sessionID, connectionCode: payload.connectionCode, macEphemeralPublicKey: payload.macEphemeralPublicKey)
         connection.send(content: try JSONEncoder().encode(request) + Data([10]), completion: .contentProcessed { _ in })
         for _ in 0..<20 {
@@ -90,6 +116,32 @@ final class TransferServerTests: XCTestCase {
         }
         let cancelledState = await server.session.state
         XCTAssertEqual(cancelledState, .cancelled)
+        await server.stop()
+    }
+
+    func testExpiredHandshakeTerminatesServerAndClosesOneShotSession() async throws {
+        let session = TransferSession()
+        let server = TransferServer(host: "127.0.0.1", session: session)
+        let payload = try await withTimeout(seconds: 2) { try await server.start() }
+        let didExpire = await session.expireIfNeeded(now: Date().addingTimeInterval(301))
+        XCTAssertTrue(didExpire)
+        let connection = NWConnection(host: "127.0.0.1", port: try XCTUnwrap(NWEndpoint.Port(rawValue: UInt16(payload.port))), using: .tcp)
+        connection.start(queue: DispatchQueue(label: "transfer-expired-test-client"))
+        try await withTimeout(seconds: 1) {
+            while connection.state != .ready { try await Task.sleep(nanoseconds: 10_000_000) }
+        }
+        let request = TransferConnectionRequest(sessionID: payload.sessionID, connectionCode: payload.connectionCode, macEphemeralPublicKey: payload.macEphemeralPublicKey)
+        connection.send(content: try JSONEncoder().encode(request) + Data([10]), completion: .contentProcessed { _ in })
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let state = await session.state
+        XCTAssertEqual(state, .expired)
+        do {
+            _ = try await withTimeout(seconds: 1) { try await server.start() }
+            XCTFail("expired handshake must terminate server")
+        } catch let error as TransferServerError {
+            XCTAssertEqual(error, .sessionExpired)
+        }
+        connection.cancel()
         await server.stop()
     }
 

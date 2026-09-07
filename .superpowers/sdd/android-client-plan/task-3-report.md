@@ -86,3 +86,43 @@
 
 - 尚未在 CI 指定的 Xcode 26.3 环境验证；本机为 Xcode 26.6 / macOS 26.5 SDK。
 - listener failure 通过非法 host/start 清理路径覆盖；底层端口占用等系统级 listener failure 仍依赖 Network.framework 状态回调。
+
+---
+
+# Scoped Re-review Fix Report
+
+## Result
+
+已修复剩余两项 review finding。接收握手在 session 已过期或进入终止状态时，现在会立即关闭 listener、pending/accepted connections、buffers、timeout task 并终止 server lifecycle；ready 后 listener cancelled 也会进入同一清理路径。并发 start 测试现在明确断言第二次调用返回 `.alreadyStarting`，且首次 start、第二次 start、任务 value、TCP start 和握手等待均有有界超时。
+
+## Changes made with file paths
+
+- `RoutinUsage/Transfer/TransferServer.swift`
+  - handshake catch 检测 terminal session 并执行完整 server cleanup。
+  - ready 状态后的 listener `.cancelled` 触发终止与资源清理。
+  - 保持并发 start 显式拒绝策略。
+- `RoutinUsageTests/TransferServerTests.swift`
+  - 增加过期 handshake 清理测试。
+  - 并发 start 第二调用显式 `XCTAssertEqual(.alreadyStarting)`；所有异步等待使用 1–2 秒 timeout helper。
+  - 真实 TCP 握手/断开测试的 listener start 和 client ready 等待均有 timeout。
+- `RoutinUsageTests/TransferSessionTests.swift`
+  - 保留具体 session mismatch/code/public key error 断言。
+
+## Validation command and observed output
+
+- `xcodegen generate && xcodebuild test -project RoutinUsage.xcodeproj -scheme RoutinUsage -only-testing:RoutinUsageTests/TransferSessionTests -only-testing:RoutinUsageTests/TransferServerTests CODE_SIGNING_ALLOWED=NO`
+  - PASS: 13 tests，0 failures。
+- `scripts/test.sh`
+  - PASS: 499 tests，0 failures。
+- `git diff --check`
+  - PASS: no whitespace errors。
+
+## Assumptions
+
+- 并发 start 继续采用显式拒绝；测试通过两个并发 Task 和 bounded timeout 验证，不依赖固定 sleep 时序。
+- 未实现 Task 4 AEAD、Mac UI、Android 或二维码图像渲染。
+
+## Blockers/remaining risks
+
+- 本机为 Xcode 26.6 / macOS 26.5 SDK，尚未在 CI 要求的 Xcode 26.3 环境运行。
+- listener 底层系统 failure 的具体 errno 仍由 Network.framework 提供；代码已统一处理 `.failed` 回调。

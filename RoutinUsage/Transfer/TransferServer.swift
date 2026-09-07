@@ -21,6 +21,7 @@ enum TransferServerError: Error, Equatable {
     case listenerFailed(String)
     case notRunning
     case alreadyStarting
+    case alreadyStarted
     case sessionExpired
     case invalidRequest
 }
@@ -61,6 +62,7 @@ actor TransferServer: TransferServing {
             throw TransferServerError.notRunning
         }
         if let payload {
+            guard !isStarting else { throw TransferServerError.alreadyStarting }
             let expired = await session.expireIfNeeded()
             let state = await session.state
             if expired || state.isTerminal {
@@ -133,7 +135,7 @@ actor TransferServer: TransferServing {
         case .failed(let error):
             await failStart(with: TransferServerError.listenerFailed(error.localizedDescription))
         case .cancelled:
-            if isStarting { await failStart(with: CancellationError()) }
+            if !isStopped { await failStart(with: isStarting ? CancellationError() : TransferServerError.sessionExpired) }
         case .setup, .waiting:
             break
         @unknown default:
@@ -252,6 +254,14 @@ actor TransferServer: TransferServing {
             connection.cancel()
             pendingConnections.removeAll { $0 === connection }
             receiveBuffers.removeValue(forKey: identifier)
+            let state = await session.state
+            if state.isTerminal {
+                isStopped = true
+                timeoutTask?.cancel()
+                timeoutTask = nil
+                await closeTransport()
+                resumeStart(with: TransferServerError.sessionExpired)
+            }
         }
     }
 
