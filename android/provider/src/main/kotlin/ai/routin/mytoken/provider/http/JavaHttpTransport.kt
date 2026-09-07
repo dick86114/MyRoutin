@@ -1,36 +1,54 @@
 package ai.routin.mytoken.provider.http
 
+import java.net.HttpURLConnection
 import java.net.URI
-import java.net.http.HttpClient
-import java.time.Duration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 
-/** Production [HttpTransport] over the JDK built-in HTTP client (15s timeout, like the macOS client). */
+/**
+ * Production [HttpTransport] over Android's built-in [HttpURLConnection]
+ * (15s timeouts, like the macOS client). Deliberately avoids
+ * `java.net.http.HttpClient`, which does not exist on Android.
+ */
 class JavaHttpTransport(
-    private val client: HttpClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(15))
-        .build(),
-    private val requestTimeout: Duration = Duration.ofSeconds(15),
+    private val connectTimeoutMillis: Int = DEFAULT_TIMEOUT_MILLIS,
+    private val requestTimeoutMillis: Int = DEFAULT_TIMEOUT_MILLIS,
 ) : HttpTransport {
 
     override suspend fun execute(request: ProviderHttpRequest): ProviderHttpResponse =
         runInterruptible(Dispatchers.IO) {
-            val builder = java.net.http.HttpRequest.newBuilder(URI.create(request.url))
-                .timeout(requestTimeout)
-            when (request.method.uppercase()) {
-                "POST" -> builder.POST(
-                    java.net.http.HttpRequest.BodyPublishers.ofByteArray(request.body ?: ByteArray(0))
-                )
-                "PUT" -> builder.PUT(
-                    java.net.http.HttpRequest.BodyPublishers.ofByteArray(request.body ?: ByteArray(0))
-                )
-                else -> builder.GET()
+            val method = when (request.method.uppercase()) {
+                "POST" -> "POST"
+                "PUT" -> "PUT"
+                else -> "GET"
             }
-            for ((name, value) in request.headers) {
-                builder.header(name, value)
+            val connection = URI.create(request.url).toURL().openConnection() as HttpURLConnection
+            try {
+                connection.apply {
+                    connectTimeout = connectTimeoutMillis
+                    readTimeout = requestTimeoutMillis
+                    requestMethod = method
+                    for ((name, value) in request.headers) {
+                        addRequestProperty(name, value)
+                    }
+                    if (request.body != null && method != "GET") {
+                        doOutput = true
+                        setFixedLengthStreamingMode(request.body.size)
+                    }
+                }
+                if (request.body != null && method != "GET") {
+                    connection.outputStream.use { it.write(request.body) }
+                }
+                val statusCode = connection.responseCode
+                val body = (connection.inputStream.takeIf { statusCode in 200..299 }
+                    ?: connection.errorStream)?.use { it.readBytes() } ?: ByteArray(0)
+                ProviderHttpResponse(statusCode, body)
+            } finally {
+                connection.disconnect()
             }
-            val response = client.send(builder.build(), java.net.http.HttpResponse.BodyHandlers.ofByteArray())
-            ProviderHttpResponse(response.statusCode(), response.body())
         }
+
+    private companion object {
+        const val DEFAULT_TIMEOUT_MILLIS = 15_000
+    }
 }

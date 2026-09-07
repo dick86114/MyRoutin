@@ -9,9 +9,9 @@ import ai.routin.mytoken.provider.routin.RoutinUsageProvider
 import ai.routin.mytoken.provider.volcengine.VolcengineUsageProvider
 
 /**
- * Builds the production provider registry with a shared JDK HTTP transport.
+ * Builds the production provider registry with a shared Android HTTP transport.
  * Kept inside :provider so callers (e.g. the app module) never need to touch
- * [JavaHttpTransport]'s java.net.http-based default arguments directly.
+ * [JavaHttpTransport]'s constructor default arguments directly.
  */
 fun defaultUsageProviders(): Map<ProviderId, UsageProvider> {
     val transport = JavaHttpTransport()

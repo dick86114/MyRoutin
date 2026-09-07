@@ -2,8 +2,8 @@ package ai.routin.mytoken.provider.http
 
 /**
  * Minimal transport abstraction so provider adapters can be tested without a real
- * network. The production implementation wraps `java.net.http.HttpClient` (JDK built-in,
- * no extra dependency).
+ * network. The production implementation wraps Android's built-in `HttpURLConnection`
+ * (no extra dependency; `java.net.http.HttpClient` does not exist on Android).
  */
 fun interface HttpTransport {
     suspend fun execute(request: ProviderHttpRequest): ProviderHttpResponse
