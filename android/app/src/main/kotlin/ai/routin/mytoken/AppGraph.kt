@@ -2,14 +2,15 @@ package ai.routin.mytoken
 
 import ai.routin.mytoken.core.security.AndroidKeystoreSecretStore
 import ai.routin.mytoken.data.local.MyTokenDatabase
+import ai.routin.mytoken.data.preferences.AppPreferencesRepository
 import ai.routin.mytoken.data.repository.CredentialRepositoryImpl
 import ai.routin.mytoken.domain.usage.RefreshCredentialsUseCase
-import ai.routin.mytoken.provider.defaultUsageProviders
 import ai.routin.mytoken.feature.credentials.DataStoreCredentialOrderStore
+import ai.routin.mytoken.feature.settings.AppPreferencesRefreshSettingsStore
 import ai.routin.mytoken.feature.settings.DataStoreDisplaySettingsStore
-import ai.routin.mytoken.feature.settings.DataStoreRefreshSettingsStore
 import ai.routin.mytoken.feature.transfer.TransferClient
 import ai.routin.mytoken.feature.transfer.TransferRepositoryImpl
+import ai.routin.mytoken.provider.defaultUsageProviders
 import android.content.Context
 import androidx.room.Room
 
@@ -45,8 +46,8 @@ class AppGraph(context: Context) {
         DataStoreDisplaySettingsStore(appContext)
     }
 
-    val refreshSettingsStore: DataStoreRefreshSettingsStore by lazy {
-        DataStoreRefreshSettingsStore(appContext)
+    val refreshSettingsStore: AppPreferencesRefreshSettingsStore by lazy {
+        AppPreferencesRefreshSettingsStore(AppPreferencesRepository(appContext))
     }
 
     val transferRepository: TransferRepositoryImpl by lazy {

@@ -1,12 +1,6 @@
 package ai.routin.mytoken.feature.settings
 
-import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.intPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import ai.routin.mytoken.data.preferences.AppPreferencesRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -33,49 +27,47 @@ interface RefreshSettingsStore {
     suspend fun setRetryOnFailure(enabled: Boolean)
 }
 
-private val Context.refreshSettingsDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "mytoken_refresh_settings"
-)
+/**
+ * Single-source-of-truth adapter over the Task 5 [AppPreferencesRepository] DataStore
+ * (`mytoken_settings`). Refresh settings have exactly one persisted key per semantic:
+ * refreshIntervalMinutes / wifiOnly / openAppRefresh reuse the existing Task 5 keys, and
+ * autoRefreshEnabled / retryOnFailure live as new keys in the same store — there is no
+ * second refresh-settings DataStore.
+ */
+class AppPreferencesRefreshSettingsStore(
+    private val preferencesRepository: AppPreferencesRepository,
+) : RefreshSettingsStore {
 
-/** Android-local DataStore store; Task 10's background scheduler should read these values. */
-class DataStoreRefreshSettingsStore(private val context: Context) : RefreshSettingsStore {
-
-    override val settings: Flow<RefreshSettings> = context.refreshSettingsDataStore.data.map { prefs ->
+    override val settings: Flow<RefreshSettings> = preferencesRepository.preferences.map { prefs ->
         RefreshSettings(
-            autoRefreshEnabled = prefs[AUTO_REFRESH] ?: true,
-            refreshIntervalMinutes = prefs[REFRESH_INTERVAL]
-                ?: RefreshSettings.DEFAULT_REFRESH_INTERVAL_MINUTES,
-            wifiOnly = prefs[WIFI_ONLY] ?: false,
-            openAppRefresh = prefs[OPEN_APP_REFRESH] ?: true,
-            retryOnFailure = prefs[RETRY_ON_FAILURE] ?: true,
+            autoRefreshEnabled = prefs.autoRefreshEnabled,
+            refreshIntervalMinutes = prefs.refreshIntervalMinutes,
+            wifiOnly = prefs.wifiOnly,
+            openAppRefresh = prefs.openAppRefresh,
+            retryOnFailure = prefs.retryOnFailure,
         )
     }
 
-    override suspend fun setAutoRefreshEnabled(enabled: Boolean) =
-        edit { it[AUTO_REFRESH] = enabled }
+    override suspend fun setAutoRefreshEnabled(enabled: Boolean) {
+        preferencesRepository.setAutoRefreshEnabled(enabled)
+    }
 
     override suspend fun setRefreshIntervalMinutes(minutes: Int) {
         require(minutes in RefreshSettings.ALLOWED_REFRESH_INTERVAL_MINUTES) {
             "refreshIntervalMinutes must be one of ${RefreshSettings.ALLOWED_REFRESH_INTERVAL_MINUTES}"
         }
-        edit { it[REFRESH_INTERVAL] = minutes }
+        preferencesRepository.setRefreshIntervalMinutes(minutes)
     }
 
-    override suspend fun setWifiOnly(enabled: Boolean) = edit { it[WIFI_ONLY] = enabled }
-
-    override suspend fun setOpenAppRefresh(enabled: Boolean) = edit { it[OPEN_APP_REFRESH] = enabled }
-
-    override suspend fun setRetryOnFailure(enabled: Boolean) = edit { it[RETRY_ON_FAILURE] = enabled }
-
-    private suspend fun edit(transform: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
-        context.refreshSettingsDataStore.edit(transform)
+    override suspend fun setWifiOnly(enabled: Boolean) {
+        preferencesRepository.setWifiOnly(enabled)
     }
 
-    private companion object {
-        val AUTO_REFRESH = booleanPreferencesKey("autoRefreshEnabled")
-        val REFRESH_INTERVAL = intPreferencesKey("refreshIntervalMinutes")
-        val WIFI_ONLY = booleanPreferencesKey("wifiOnly")
-        val OPEN_APP_REFRESH = booleanPreferencesKey("openAppRefresh")
-        val RETRY_ON_FAILURE = booleanPreferencesKey("retryOnFailure")
+    override suspend fun setOpenAppRefresh(enabled: Boolean) {
+        preferencesRepository.setOpenAppRefresh(enabled)
+    }
+
+    override suspend fun setRetryOnFailure(enabled: Boolean) {
+        preferencesRepository.setRetryOnFailure(enabled)
     }
 }

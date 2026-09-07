@@ -212,8 +212,36 @@ class CredentialListViewModelTest {
     }
 
     @Test
-    fun invalidMoveIndicesAreIgnored() = runTest(dispatcher) {
-        val a = credential("00000001", "A")
+    fun moveWithinGroupDuringSearchPersistsFullOrderKeepingHiddenCredentialsRelativeOrder() =
+        runTest(dispatcher) {
+            val a = credential("00000001", "Alpha 主力")
+            val b = credential("00000002", "Beta 备用")
+            val c = credential("00000003", "Gamma 主力")
+            repository.credentials.value = listOf(a, b, c)
+            val vm = viewModel()
+            advanceUntilIdle()
+
+            vm.setSearchQuery("备用")
+            advanceUntilIdle()
+            assertEquals(listOf("Beta 备用"), rows(vm.state.value, ProviderId.Routin))
+
+            // Drag the single visible row one position down within the FULL group
+            // (fromRow=0 → toRow=1 swaps the first two entries of the full group).
+            vm.moveWithinGroup(ProviderId.Routin, fromRow = 0, toRow = 1)
+            advanceUntilIdle()
+
+            val persisted = orderStore.orderState.value
+            // The persisted list is a permutation of ALL credentials, not just the
+            // visible ones: hidden credentials keep their original relative order.
+            assertEquals(listOf(b.id, a.id, c.id).map { it.toString() }, persisted)
+
+            vm.setSearchQuery("")
+            advanceUntilIdle()
+            assertEquals(listOf("Beta 备用", "Alpha 主力", "Gamma 主力"), rows(vm.state.value, ProviderId.Routin))
+        }
+
+    @Test
+    fun invalidMoveIndicesAreIgnored() = runTest(dispatcher) {        val a = credential("00000001", "A")
         val b = credential("00000002", "B")
         repository.credentials.value = listOf(a, b)
         val vm = viewModel()

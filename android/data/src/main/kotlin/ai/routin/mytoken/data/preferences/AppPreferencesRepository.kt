@@ -12,9 +12,11 @@ import kotlinx.coroutines.flow.map
 
 /** App settings, mirroring the preferences block of transfer-schema-v1.json (subset). */
 data class AppPreferences(
+    val autoRefreshEnabled: Boolean = true,
     val refreshIntervalMinutes: Int = DEFAULT_REFRESH_INTERVAL_MINUTES,
     val wifiOnly: Boolean = false,
     val openAppRefresh: Boolean = true,
+    val retryOnFailure: Boolean = true,
     val notificationsEnabled: Boolean = true
 ) {
     companion object {
@@ -31,12 +33,18 @@ class AppPreferencesRepository(private val context: Context) {
 
     val preferences: Flow<AppPreferences> = context.preferencesDataStore.data.map { prefs ->
         AppPreferences(
+            autoRefreshEnabled = prefs[AUTO_REFRESH_ENABLED] ?: true,
             refreshIntervalMinutes = prefs[REFRESH_INTERVAL_MINUTES]
                 ?: AppPreferences.DEFAULT_REFRESH_INTERVAL_MINUTES,
             wifiOnly = prefs[WIFI_ONLY] ?: false,
             openAppRefresh = prefs[OPEN_APP_REFRESH] ?: true,
+            retryOnFailure = prefs[RETRY_ON_FAILURE] ?: true,
             notificationsEnabled = prefs[NOTIFICATIONS_ENABLED] ?: true
         )
+    }
+
+    suspend fun setAutoRefreshEnabled(enabled: Boolean) {
+        context.preferencesDataStore.edit { it[AUTO_REFRESH_ENABLED] = enabled }
     }
 
     suspend fun setRefreshIntervalMinutes(minutes: Int) {
@@ -54,14 +62,20 @@ class AppPreferencesRepository(private val context: Context) {
         context.preferencesDataStore.edit { it[OPEN_APP_REFRESH] = enabled }
     }
 
+    suspend fun setRetryOnFailure(enabled: Boolean) {
+        context.preferencesDataStore.edit { it[RETRY_ON_FAILURE] = enabled }
+    }
+
     suspend fun setNotificationsEnabled(enabled: Boolean) {
         context.preferencesDataStore.edit { it[NOTIFICATIONS_ENABLED] = enabled }
     }
 
     private companion object {
+        val AUTO_REFRESH_ENABLED = booleanPreferencesKey("autoRefreshEnabled")
         val REFRESH_INTERVAL_MINUTES = intPreferencesKey("refreshIntervalMinutes")
         val WIFI_ONLY = booleanPreferencesKey("wifiOnly")
         val OPEN_APP_REFRESH = booleanPreferencesKey("openAppRefresh")
+        val RETRY_ON_FAILURE = booleanPreferencesKey("retryOnFailure")
         val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notificationsEnabled")
     }
 }

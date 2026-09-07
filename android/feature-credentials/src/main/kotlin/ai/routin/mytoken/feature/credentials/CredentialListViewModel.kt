@@ -61,7 +61,7 @@ class CredentialListViewModel(
         searchQuery,
     ) { credentials, order, pinned, query ->
         CoreState(credentials, order, pinned, query)
-    }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, CoreState())
 
     val state: StateFlow<CredentialListUiState> = combine(
         core,
@@ -139,20 +139,30 @@ class CredentialListViewModel(
 
     /**
      * Long-press drag reorder within one provider group. Index shift is computed by the
-     * caller from the drag distance; invalid shifts are ignored. The result is persisted
-     * to [CredentialOrderStore] only — never to the credential's Mac-sourced sortOrder.
+     * caller from the drag distance; invalid shifts are ignored.
+     *
+     * The move is applied to the FULL (unfiltered) credential list, so credentials hidden
+     * by an active search filter keep their relative positions in the persisted order —
+     * the persisted list is always a permutation of every credential ID. The UI keeps the
+     * drag handle disabled while a search filter is active (see [CredentialListScreen]).
      */
     fun moveWithinGroup(providerId: ProviderId, fromRow: Int, toRow: Int) {
-        val groups = state.value.groups
-        val group = groups.firstOrNull { it.providerId == providerId } ?: return
-        val rows = group.rows
-        if (fromRow !in rows.indices || toRow !in rows.indices || fromRow == toRow) return
-        val reordered = rows.toMutableList().apply {
+        val core = core.value
+        val ordered = orderedCredentials(core)
+        val groupRows = ordered.filter { it.providerId == providerId }
+        if (fromRow !in groupRows.indices || toRow !in groupRows.indices || fromRow == toRow) return
+        val reordered = groupRows.toMutableList().apply {
             add(toRow, removeAt(fromRow))
         }
-        val newIds = groups.flatMap { current ->
-            if (current.providerId == providerId) reordered else current.rows
-        }.map { it.credential.id.toString() }
+        val newIds = mutableListOf<String>()
+        var groupIndex = 0
+        for (credential in ordered) {
+            if (credential.providerId == providerId) {
+                newIds.add(reordered[groupIndex++].id.toString())
+            } else {
+                newIds.add(credential.id.toString())
+            }
+        }
         viewModelScope.launch {
             orderStore.saveOrder(newIds)
         }

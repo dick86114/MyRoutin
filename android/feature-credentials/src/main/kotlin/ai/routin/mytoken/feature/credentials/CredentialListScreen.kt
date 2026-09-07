@@ -140,6 +140,7 @@ fun CredentialListScreen(
                             CredentialRow(
                                 row = row,
                                 providerName = group.displayName,
+                                dragEnabled = state.searchQuery.isBlank(),
                                 onToggleEnabled = { onToggleEnabled(row.credential) },
                                 onTogglePinned = onTogglePinned,
                                 onMove = { from, to -> onMoveWithinGroup(group.providerId, from, to) },
@@ -183,6 +184,7 @@ private fun CredentialRow(
     row: CredentialRowUi,
     providerName: String,
     rowIndex: Int,
+    dragEnabled: Boolean,
     onToggleEnabled: () -> Unit,
     onTogglePinned: (Credential, Boolean) -> Unit,
     onMove: (Int, Int) -> Unit,
@@ -192,22 +194,31 @@ private fun CredentialRow(
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var rowHeight by remember { mutableStateOf(1f) }
 
+    // Drag reorder is disabled while a search filter is active: row indices refer to the
+    // full (unfiltered) group membership, so a drag under a filtered view would be
+    // ambiguous. moveWithinGroup itself persists against the full list.
+    val dragModifier = if (dragEnabled) {
+        Modifier.pointerInput(row.credential.id) {
+            detectDragGesturesAfterLongPress(
+                onDragStart = { dragOffset = 0f },
+                onDrag = { _, amount -> dragOffset += amount.y },
+                onDragEnd = {
+                    val shift = (dragOffset / rowHeight).roundToInt()
+                    if (shift != 0) onMove(rowIndex, rowIndex + shift)
+                    dragOffset = 0f
+                },
+                onDragCancel = { dragOffset = 0f },
+            )
+        }
+    } else {
+        Modifier
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .onSizeChanged { rowHeight = it.height.toFloat().coerceAtLeast(1f) }
-            .pointerInput(row.credential.id) {
-                detectDragGesturesAfterLongPress(
-                    onDragStart = { dragOffset = 0f },
-                    onDrag = { _, amount -> dragOffset += amount.y },
-                    onDragEnd = {
-                        val shift = (dragOffset / rowHeight).roundToInt()
-                        if (shift != 0) onMove(rowIndex, rowIndex + shift)
-                        dragOffset = 0f
-                    },
-                    onDragCancel = { dragOffset = 0f },
-                )
-            },
+            .then(dragModifier),
     ) {
         Row(
             modifier = Modifier
