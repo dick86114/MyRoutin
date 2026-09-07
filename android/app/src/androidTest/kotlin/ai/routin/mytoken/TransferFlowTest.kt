@@ -159,4 +159,8 @@ private class InMemoryCredentialStore : ai.routin.mytoken.domain.repository.Cred
     }
 
     override suspend fun readSecret(id: UUID): CredentialSecret? = secrets[id]
+
+    override suspend fun cacheSnapshot(snapshot: ai.routin.mytoken.domain.model.UsageSnapshot) = Unit
+
+    override suspend fun cachedSnapshot(id: UUID): ai.routin.mytoken.domain.model.UsageSnapshot? = null
 }
