@@ -2,10 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Permission minimisation: the app only needs notifications (usage
-         alerts). Network access is implicit (INTERNET is a normal permission
-         granted at install); camera access is requested at scan time via the
-         system picker flow, not declared here. -->
+         alerts) and network access to call provider APIs. INTERNET is a normal
+         permission granted at install and is declared explicitly so it does
+         not rely on transitive dependencies; camera access is declared in the
+         manifest and authorised at scan time via the system dialog. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <application
         android:name=".MyTokenApplication"

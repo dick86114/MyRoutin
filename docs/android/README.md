@@ -48,8 +48,8 @@ cd android
 
 ## 发布配置审计
 
-- 权限最小化：仅声明 `POST_NOTIFICATIONS`；相机权限在扫码时由系统弹窗申请，
-  不在 manifest 声明。
+- 权限最小化：声明 `POST_NOTIFICATIONS`、`INTERNET`（正常权限，安装时授予）
+  与 `CAMERA`；相机权限在 manifest 声明，扫码时经系统对话框授权。
 - 云备份：`android:allowBackup="false"`，并以 `backup_rules.xml`
   （Android 11-）与 `data_extraction_rules.xml`（Android 12+）排除数据库、
   DataStore 与 `noBackupFilesDir` 作为纵深防御。Keystore 包裹的密文
