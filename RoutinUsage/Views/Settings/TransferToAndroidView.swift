@@ -10,10 +10,17 @@ struct TransferProviderSummary: Equatable, Identifiable {
     let credentialCount: Int
 }
 
-/// Builds the metadata-only transfer package that is handed to the transfer
-/// server for AEAD sealing. Secrets never enter the package here; the
-/// per-credential secret envelope is populated by the secure export data
-/// layer in a later task.
+/// Builds the transfer package handed to the transfer server for AEAD sealing.
+///
+/// Secrets leave the app exactly once: the builder reads each credential's
+/// stored secret through a caller-provided reader (the app's credential secret
+/// store, i.e. the `CredentialStoring` path that backs `UsageStore`), maps it
+/// to the typed `EncryptedSecretEntry` fields required by transfer schema v1,
+/// and the whole package JSON is then sealed by `TransferSession.sealMessage`.
+/// The envelope-level `nonce`/`ciphertext`/`tag`/`ephemeralPublicKey` fields
+/// stay at their inert placeholder values: confidentiality is provided by the
+/// outer session AEAD, and the Android importer validates those fields
+/// lexically only (see shared/transfer-schema/wire-contract.md).
 enum TransferPackageBuilder {
     // Mirrors the allowlist enforced by TransferCredential decoding; keep in
     // sync with the transfer schema v1 metadata contract.
@@ -21,8 +28,18 @@ enum TransferPackageBuilder {
         "baseURL", "userID", "region", "planType", "usageKind", "websiteURL"
     ]
 
+    /// Unpadded URL-safe Base64 (RFC 4648 §5): the lexical contract shared by
+    /// transfer-schema-v1.json `base64url` and the Android secret-entry decoder.
+    static func base64URLEncode(_ value: String) -> String {
+        Data(value.utf8).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
     static func makePackage(
         credentials: [KeyConfiguration],
+        secretReader: (UUID) -> String? = { _ in nil },
         exportedAt: Date = Date()
     ) throws -> TransferPackageV1 {
         let transferCredentials = credentials.enumerated().map { index, configuration in
@@ -36,12 +53,61 @@ enum TransferPackageBuilder {
                 metadata: configuration.metadata.filter { metadataAllowlist.contains($0.key) }
             )
         }
+        let secretEntries = secretEntries(for: credentials, secretReader: secretReader)
+        let envelope = try EncryptedSecretEnvelope(
+            algorithm: "AES-256-GCM",
+            keyAgreement: "X25519-HKDF-SHA256",
+            nonce: EncryptedSecretEnvelope.empty.nonce,
+            ciphertext: EncryptedSecretEnvelope.empty.ciphertext,
+            tag: EncryptedSecretEnvelope.empty.tag,
+            ephemeralPublicKey: EncryptedSecretEnvelope.empty.ephemeralPublicKey,
+            associatedData: nil,
+            entries: secretEntries
+        )
         return TransferPackageV1(
             credentials: transferCredentials,
             preferences: TransferPreferences(),
-            secretEnvelope: .empty,
+            secretEnvelope: envelope,
             exportedAt: exportedAt
         )
+    }
+
+    /// Builds one typed secret entry per credential whose secret is readable.
+    /// Field mapping follows the credential kind: `bearerAPIKey` → `bearerToken`,
+    /// `apiKey` → `apiKey`, `accessKeyPair` → `accessKeyID` + `secretAccessKey`
+    /// (the access key ID lives in metadata; only the secret access key is a
+    /// stored secret). Credentials with a missing/unreadable secret are omitted,
+    /// so Android reports them as "skipped without secret" instead of failing.
+    static func secretEntries(
+        for credentials: [KeyConfiguration],
+        secretReader: (UUID) -> String?
+    ) -> [EncryptedSecretEntry] {
+        credentials.compactMap { configuration in
+            let secret = secretReader(configuration.id).flatMap { $0.isEmpty ? nil : $0 }
+            switch configuration.credentialKind {
+            case .bearerAPIKey:
+                guard let secret else { return nil }
+                return try? EncryptedSecretEntry(
+                    credentialId: configuration.id,
+                    bearerToken: base64URLEncode(secret)
+                )
+            case .apiKey:
+                guard let secret else { return nil }
+                return try? EncryptedSecretEntry(
+                    credentialId: configuration.id,
+                    apiKey: base64URLEncode(secret)
+                )
+            case .accessKeyPair:
+                guard let secret,
+                      let accessKeyID = configuration.metadata["accessKeyID"],
+                      !accessKeyID.isEmpty else { return nil }
+                return try? EncryptedSecretEntry(
+                    credentialId: configuration.id,
+                    accessKeyID: base64URLEncode(accessKeyID),
+                    secretAccessKey: base64URLEncode(secret)
+                )
+            }
+        }
     }
 }
 
@@ -88,6 +154,31 @@ final class TransferToAndroidModel {
 
     var hasCredentials: Bool {
         !currentConfigurations.isEmpty
+    }
+
+    /// Number of credentials whose secret can actually be exported right now.
+    /// Shown on the summary so the user knows how many sensitive items will
+    /// travel; credentials without a readable secret are reported separately.
+    var exportableSecretCount: Int {
+        TransferPackageBuilder.secretEntries(
+            for: currentConfigurations,
+            secretReader: { [store] keyID in store.secretForExport(for: keyID) }
+        ).count
+    }
+
+    /// Summary line describing what will travel. The "encrypted" claim is now
+    /// backed by real secret export: every listed key travels only inside the
+    /// session-sealed package (previously the envelope was always empty).
+    var migrationSummaryText: String {
+        let total = currentConfigurations.count
+        let exportable = exportableSecretCount
+        if exportable == total {
+            return "将迁移以下配置（\(total) 项密钥将以密文传输）"
+        }
+        if exportable == 0 {
+            return "将迁移以下配置（未读取到任何密钥，这些配置将无法完成迁移）"
+        }
+        return "将迁移以下配置（\(exportable) 项密钥以密文传输，\(total - exportable) 个凭据缺少密钥将被跳过）"
     }
 
     func remainingSeconds(now: Date = Date()) -> Int {
@@ -142,7 +233,10 @@ final class TransferToAndroidModel {
     }
 
     func makeTransferPackage() throws -> TransferPackageV1 {
-        try TransferPackageBuilder.makePackage(credentials: currentConfigurations)
+        try TransferPackageBuilder.makePackage(
+            credentials: currentConfigurations,
+            secretReader: { [store] keyID in store.secretForExport(for: keyID) }
+        )
     }
 
     private var currentConfigurations: [KeyConfiguration] {
@@ -267,7 +361,7 @@ struct TransferToAndroidView: View {
 
     private var credentialSummary: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("将迁移以下配置（密钥仅在密文内传输）")
+            Text(model.migrationSummaryText)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             HStack(spacing: 10) {

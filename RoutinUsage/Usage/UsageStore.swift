@@ -593,6 +593,19 @@ final class UsageStore {
         return credentialFingerprint(for: keyID) == failedFingerprint
     }
 
+    /// Reads the stored secret for a credential on behalf of the secure export
+    /// path (transfer to Android). This is the same `CredentialStoring` store
+    /// that backs refreshes; the secret is returned to the caller and never
+    /// logged or cached. Missing or unreadable secrets yield nil so the export
+    /// path can skip the credential instead of failing the whole migration.
+    func secretForExport(for keyID: UUID) -> String? {
+        do {
+            return try localStore.read(for: keyID)
+        } catch {
+            return nil
+        }
+    }
+
     private func credentialFingerprint(for keyID: UUID) -> CredentialFingerprint? {
         do {
             guard let secret = try localStore.read(for: keyID) else {

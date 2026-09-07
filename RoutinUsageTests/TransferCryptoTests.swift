@@ -409,26 +409,99 @@ final class TransferCryptoTests: XCTestCase {
 
     // MARK: - Package builder and model
 
-    func testPackageBuilderProducesMetadataOnlyPackage() throws {
+    func testPackageBuilderExportsRealTypedSecretEntries() throws {
         let context = TransferCryptoTestContext()
         defer { context.cleanUp() }
-        let secret = "sk-secret-\(UUID().uuidString)"
-        _ = try context.addCredential(
-            name: "秘密账号",
-            providerID: .deepseek,
-            secret: secret,
-            metadata: ["baseURL": "https://api.example.com", "unexpected": "dropped"]
+
+        let bearerSecret = "plan-\(UUID().uuidString)"
+        let bearer = try context.addCredential(name: "签名版", providerID: .routin, secret: bearerSecret)
+        let apiKeySecret = "sk-secret-\(UUID().uuidString)"
+        _ = try context.addCredential(name: "秘密账号", providerID: .deepseek, secret: apiKeySecret)
+        let accessKeyID = "AKLT\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
+        let accessSecret = "volc-secret-\(UUID().uuidString)"
+        _ = try context.addVolcengineCredential(
+            name: "火山账号",
+            accessKeyID: accessKeyID,
+            secretAccessKey: accessSecret
         )
 
         let package = try context.makeModel().makeTransferPackage()
-        XCTAssertEqual(package.credentials.count, 1)
-        XCTAssertEqual(package.credentials.first?.metadata["baseURL"], "https://api.example.com")
-        XCTAssertNil(package.credentials.first?.metadata["unexpected"])
-        XCTAssertEqual(package.secretEnvelope, EncryptedSecretEnvelope.empty)
+        XCTAssertEqual(package.credentials.count, 3)
+        XCTAssertEqual(package.secretEnvelope.entries.count, 3)
 
+        let entriesById = Dictionary(uniqueKeysWithValues: package.secretEnvelope.entries.map { ($0.credentialId, $0) })
+        XCTAssertEqual(entriesById[bearer.id.uuidString]?.bearerToken, TransferPackageBuilder.base64URLEncode(bearerSecret))
+        XCTAssertNil(entriesById[bearer.id.uuidString]?.apiKey)
+        let apiKeyID = try XCTUnwrap(package.credentials.first { $0.name == "秘密账号" }?.credentialId)
+        XCTAssertEqual(entriesById[apiKeyID]?.apiKey, TransferPackageBuilder.base64URLEncode(apiKeySecret))
+        let volcID = try XCTUnwrap(package.credentials.first { $0.name == "火山账号" }?.credentialId)
+        XCTAssertEqual(entriesById[volcID]?.accessKeyID, TransferPackageBuilder.base64URLEncode(accessKeyID))
+        XCTAssertEqual(entriesById[volcID]?.secretAccessKey, TransferPackageBuilder.base64URLEncode(accessSecret))
+    }
+
+    func testPackageBuilderSkipsCredentialsWithoutReadableSecret() throws {
+        let context = TransferCryptoTestContext()
+        defer { context.cleanUp() }
+
+        let known = try context.addCredential(name: "有密钥", providerID: .deepseek)
+        // A credential whose configuration exists but whose secret was removed
+        // (or was never readable): the entry must be omitted, not fabricated.
+        let orphan = try context.addCredential(name: "无密钥", providerID: .glm)
+        context.removeStoredSecret(for: orphan.id)
+        context.store.reloadConfigurations()
+
+        let package = try context.makeModel().makeTransferPackage()
+        XCTAssertEqual(package.credentials.count, 2)
+        XCTAssertEqual(package.secretEnvelope.entries.count, 1)
+        XCTAssertEqual(package.secretEnvelope.entries.first?.credentialId, known.id.uuidString)
+        XCTAssertEqual(package.secretEnvelope.entries.first?.apiKey, TransferPackageBuilder.base64URLEncode(context.storedSecret(for: known.id)))
+    }
+
+    func testPackageBuilderOmitsAccessKeyPairWithoutAccessKeyID() throws {
+        let context = TransferCryptoTestContext()
+        defer { context.cleanUp() }
+
+        let secret = "volc-secret-\(UUID().uuidString)"
+        _ = try context.addVolcengineCredential(name: "缺 AK", accessKeyID: nil, secretAccessKey: secret)
+
+        let package = try context.makeModel().makeTransferPackage()
+        XCTAssertEqual(package.credentials.count, 1)
+        XCTAssertTrue(package.secretEnvelope.entries.isEmpty)
+    }
+
+    func testPackageJSONCarriesOnlyBase64URLEncodedSecrets() throws {
+        let context = TransferCryptoTestContext()
+        defer { context.cleanUp() }
+
+        let secret = "sk-very-secret-value-/\(UUID().uuidString)"
+        _ = try context.addCredential(name: "秘密账号", providerID: .deepseek, secret: secret)
+
+        let package = try context.makeModel().makeTransferPackage()
         let encoded = String(data: try JSONEncoder().encode(package), encoding: .utf8)!
+        // The raw secret never appears on the wire; only its unpadded base64url
+        // form inside the session-sealed package does.
         XCTAssertFalse(encoded.contains(secret))
-        XCTAssertFalse(encoded.lowercased().contains("sk-secret"))
+        XCTAssertTrue(encoded.contains(TransferPackageBuilder.base64URLEncode(secret)))
+        XCTAssertTrue(TransferPackageBuilder.base64URLEncode(secret).allSatisfy { char in
+            char.isLetter || char.isNumber || char == "-" || char == "_"
+        })
+    }
+
+    func testModelSummaryReflectsRealSensitiveItemCount() throws {
+        let context = TransferCryptoTestContext()
+        defer { context.cleanUp() }
+
+        _ = try context.addCredential(name: "A", providerID: .routin)
+        _ = try context.addCredential(name: "B", providerID: .deepseek)
+        let model = context.makeModel()
+
+        XCTAssertEqual(model.exportableSecretCount, 2)
+        XCTAssertEqual(model.migrationSummaryText, "将迁移以下配置（2 项密钥将以密文传输）")
+        XCTAssertTrue(model.migrationSummaryText.contains("密文"))
+
+        context.removeStoredSecret(for: context.store.orderedKeyIDs[1])
+        XCTAssertEqual(model.exportableSecretCount, 1)
+        XCTAssertEqual(model.migrationSummaryText, "将迁移以下配置（1 项密钥以密文传输，1 个凭据缺少密钥将被跳过）")
     }
 
     func testModelSummarizesProvidersAndCountdown() throws {
@@ -530,6 +603,32 @@ private struct TransferCryptoTestContext {
         settings.appendCredential(configuration.id)
         store.reloadConfigurations()
         return configuration
+    }
+
+    func addVolcengineCredential(
+        name: String,
+        accessKeyID: String?,
+        secretAccessKey: String
+    ) throws -> KeyConfiguration {
+        let metadata = accessKeyID.map { ["accessKeyID": $0, "region": "cn-beijing"] } ?? [:]
+        let configuration = try repository.add(
+            name: name,
+            secret: secretAccessKey,
+            providerID: .volcengine,
+            credentialKind: .accessKeyPair,
+            metadata: metadata
+        )
+        settings.appendCredential(configuration.id)
+        store.reloadConfigurations()
+        return configuration
+    }
+
+    func storedSecret(for id: UUID) -> String {
+        try! keychain.read(for: id)!
+    }
+
+    func removeStoredSecret(for id: UUID) {
+        try? keychain.delete(for: id)
     }
 
     func makeModel() -> TransferToAndroidModel {
