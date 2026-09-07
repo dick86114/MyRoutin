@@ -14,15 +14,19 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -85,11 +89,27 @@ class HomeViewModel(
     private val clock: Clock = Clock.systemUTC(),
     refreshOnStart: Boolean = true,
     private val nowTickIntervalMillis: Long? = DEFAULT_NOW_TICK_MILLIS,
+    // Ticking happens off the main dispatcher: an infinite delay loop on the
+    // main looper keeps Robolectric/Compose idle detection from ever settling.
+    nowTickDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
 
     private val collapsedGroups = MutableStateFlow<Set<ProviderId>>(emptySet())
     private val isRefreshingAll = MutableStateFlow(false)
-    private val nowTick = MutableStateFlow(0L)
+    private val nowTickCounter = MutableStateFlow(0L)
+
+    /** Relative-time re-render tick counter; exposed for tests. */
+    internal val nowTick: StateFlow<Long> = nowTickCounter.asStateFlow()
+
+    private val nowTickEnabled = MutableStateFlow(true)
+
+    /**
+     * Lifecycle-aware ticker switch: the app layer pauses ticking while the
+     * activity is not resumed so backgrounded windows do no re-render work.
+     */
+    fun setNowTickEnabled(enabled: Boolean) {
+        nowTickEnabled.value = enabled
+    }
 
     /** Credential IDs whose refresh is currently in flight (guarded by [inFlightMutex]). */
     private val inFlight = mutableSetOf<UUID>()
@@ -105,17 +125,25 @@ class HomeViewModel(
     }
 
     init {
-        // Re-render relative freshness labels periodically; disabled in tests via null interval.
+        // Re-render relative freshness labels periodically (when resumed);
+        // disabled in tests via null interval.
         if (nowTickIntervalMillis != null) {
-            viewModelScope.launch {
-                while (true) {
+            viewModelScope.launch(nowTickDispatcher) {
+                while (isActive) {
                     delay(nowTickIntervalMillis)
-                    nowTick.update { it + 1 }
+                    if (nowTickEnabled.value) {
+                        nowTickCounter.update { it + 1 }
+                    }
                 }
             }
         }
         if (refreshOnStart) {
-            refreshAll()
+            viewModelScope.launch {
+                // Show last-known data (Ready + stale) before the network round
+                // trips complete; the refreshes below keep the seeded snapshots.
+                refreshUseCase.restoreFromCache()
+                refreshAll()
+            }
         }
     }
 

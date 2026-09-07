@@ -64,6 +64,42 @@ class RefreshCredentialsUseCase(
         }
     }
 
+    /**
+     * Fills per-credential states from the repository's cached snapshots so the
+     * UI shows last-known data (Ready + stale) right after process start instead
+     * of a wall of "刷新中" placeholders. Never overwrites a state that already
+     * carries a snapshot (e.g. an in-flight refresh result); a missing or
+     * unreadable cache entry is silently skipped.
+     */
+    suspend fun restoreFromCache() {
+        val credentials = try {
+            repository.observeCredentials().first()
+        } catch (cause: Throwable) {
+            if (cause is CancellationException) throw cause
+            return
+        }
+        credentials.forEach { credential ->
+            if (!credential.isEnabled) return@forEach
+            val cached = try {
+                repository.cachedSnapshot(credential.id)
+            } catch (cause: Throwable) {
+                if (cause is CancellationException) throw cause
+                null
+            } ?: return@forEach
+            update(credential.id) { previous ->
+                if (previous.snapshot == null) {
+                    CredentialUsageState(
+                        status = RefreshStatus.Ready,
+                        snapshot = cached,
+                        isStale = true
+                    )
+                } else {
+                    previous
+                }
+            }
+        }
+    }
+
     /** Refreshes a single credential, preserving the previous snapshot on failure. */
     suspend fun refresh(credential: Credential) {
         if (!credential.isEnabled) {
@@ -86,6 +122,14 @@ class RefreshCredentialsUseCase(
                 val secret = repository.readSecret(credential.id)
                     ?: throw AppError.Storage("凭证密钥缺失，请重新导入")
                 val snapshot = provider.fetchUsage(credential, secret).getOrThrow()
+                // Best-effort cache write: a failed cache write must not turn a
+                // successful provider fetch into a refresh failure.
+                try {
+                    repository.cacheSnapshot(snapshot)
+                } catch (cacheError: Throwable) {
+                    if (cacheError is CancellationException) throw cacheError
+                    println("MyToken: failed to cache usage snapshot: ${cacheError.message}")
+                }
                 update(credential.id) { previous ->
                     CredentialUsageState(
                         status = RefreshStatus.Ready,

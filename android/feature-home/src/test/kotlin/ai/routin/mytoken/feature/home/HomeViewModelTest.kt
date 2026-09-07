@@ -30,8 +30,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -123,6 +125,38 @@ class HomeViewModelTest {
 
     private fun snapshot(credentialId: UUID, vararg metrics: UsageMetric) =
         UsageSnapshot(credentialId, now, metrics.toList())
+
+    @Test
+    fun `now tick advances periodically pauses when disabled and resumes`() = runTest {
+        val vm = HomeViewModel(
+            repository = repository,
+            refreshUseCase = RefreshCredentialsUseCase(repository, providers, clock),
+            clock = clock,
+            refreshOnStart = false,
+            nowTickIntervalMillis = 30_000,
+            nowTickDispatcher = StandardTestDispatcher(testScheduler),
+        )
+        backgroundScope.launch { vm.state.collect {} }
+
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertEquals(1, vm.nowTick.value)
+
+        vm.setNowTickEnabled(false)
+        advanceTimeBy(90_000)
+        runCurrent()
+        assertEquals("paused ticker must not advance", 1, vm.nowTick.value)
+
+        vm.setNowTickEnabled(true)
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertEquals(2, vm.nowTick.value)
+
+        // The tick loop lives in viewModelScope (not a child of TestScope);
+        // cancel it so runTest's quiescence check can terminate.
+        vm.viewModelScope.cancel()
+        advanceUntilIdle()
+    }
 
     @Test
     fun `groups credentials by provider in provider order`() = runTest {
@@ -240,6 +274,32 @@ class HomeViewModelTest {
 
         assertEquals(1, fake.fetchCalls)
         assertEquals(RefreshStatus.Ready, vm.state.value.groups.single().cards.single().status)
+    }
+
+    @Test
+    fun `startup seeds cached snapshot so card shows data instead of an empty refreshing placeholder`() = runTest {
+        val credential = credential("RT-1", ProviderId.Routin)
+        addCredential(credential)
+        val cached = UsageSnapshot(credential.id, now.minus(Duration.ofHours(3)), listOf(balanceMetric(20.0)))
+        repository.cachedSnapshots[credential.id] = cached
+        // The startup refresh is gated mid-flight: the seeded snapshot must stay
+        // visible on the card while the network round trip is pending.
+        val gate = CompletableDeferred<Unit>()
+        providers[ProviderId.Routin] = GatedUsageProvider(ProviderId.Routin, gate, now)
+
+        val vm = viewModel(refreshOnStart = true)
+        backgroundScope.launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        val card = vm.state.value.groups.single().cards.single()
+        assertEquals(cached, card.snapshot)
+        assertTrue(card.isStale)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        val refreshedCard = vm.state.value.groups.single().cards.single()
+        assertEquals(RefreshStatus.Ready, refreshedCard.status)
+        assertFalse(refreshedCard.isStale)
     }
 
     @Test
@@ -460,6 +520,7 @@ class HomeViewModelTest {
 class FakeHomeCredentialRepository : CredentialRepository {
     val credentials = LinkedHashMap<UUID, Credential>()
     val secrets = LinkedHashMap<UUID, CredentialSecret>()
+    val cachedSnapshots = LinkedHashMap<UUID, UsageSnapshot>()
     private val flow = MutableStateFlow<List<Credential>>(emptyList())
 
     fun emit() {
@@ -473,6 +534,12 @@ class FakeHomeCredentialRepository : CredentialRepository {
     override suspend fun delete(id: UUID) = throw UnsupportedOperationException()
 
     override suspend fun readSecret(id: UUID): CredentialSecret? = secrets[id]
+
+    override suspend fun cacheSnapshot(snapshot: UsageSnapshot) {
+        cachedSnapshots[snapshot.credentialId] = snapshot
+    }
+
+    override suspend fun cachedSnapshot(id: UUID): UsageSnapshot? = cachedSnapshots[id]
 }
 
 /** Usage provider fake returning a fixed result, with failure injection. */

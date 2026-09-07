@@ -222,14 +222,14 @@ class CredentialRepositoryContractTest {
     }
 
     @Test
-    fun cacheSnapshot_andLatestSnapshot_roundTrip() = runTest {
+    fun cacheSnapshot_andCachedSnapshot_roundTrip() = runTest {
         repository.cacheSnapshot(snapshot())
-        assertEquals(snapshot(), repository.latestSnapshot(credentialId))
+        assertEquals(snapshot(), repository.cachedSnapshot(credentialId))
     }
 
     @Test
-    fun latestSnapshot_returnsNullForUnknownId() = runTest {
-        assertNull(repository.latestSnapshot(UUID.randomUUID()))
+    fun cachedSnapshot_returnsNullForUnknownId() = runTest {
+        assertNull(repository.cachedSnapshot(UUID.randomUUID()))
     }
 
     @Test

@@ -7,6 +7,7 @@ import ai.routin.mytoken.feature.credentials.CredentialEditorViewModel
 import ai.routin.mytoken.feature.credentials.CredentialListScreen
 import ai.routin.mytoken.feature.credentials.CredentialListViewModel
 import ai.routin.mytoken.feature.credentials.RoutinCheckInLauncher
+import ai.routin.mytoken.feature.credentials.pruneCredential
 import ai.routin.mytoken.feature.home.HomeScreen
 import ai.routin.mytoken.feature.home.HomeViewModel
 import ai.routin.mytoken.feature.home.CredentialDetailScreen
@@ -38,6 +39,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -49,6 +51,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.util.UUID
 import kotlinx.coroutines.launch
 
@@ -88,16 +93,30 @@ fun MyTokenApp(
 
     BackHandler(enabled = backStack.isNotEmpty()) { goBack() }
 
-    // nowTickIntervalMillis = null: the 30s freshness ticker keeps the main looper
-    // permanently busy, which deadlocks Compose test idle detection (Task 11 will
-    // wire a lifecycle-aware ticker instead of an unconditional ViewModel loop).
     val homeViewModel = remember {
         HomeViewModel(
             repository = graph.credentialRepository,
             refreshUseCase = graph.refreshUseCase,
-            nowTickIntervalMillis = null,
         )
     }
+
+    // Lifecycle-aware freshness ticker: relative-time labels re-render every
+    // 30s while the activity is resumed, and the ticker is paused while the
+    // app is in the background. The tick loop itself runs off the main
+    // dispatcher so it never keeps the main looper (or test idle detection) busy.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(homeViewModel, lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> homeViewModel.setNowTickEnabled(true)
+                Lifecycle.Event.ON_PAUSE -> homeViewModel.setNowTickEnabled(false)
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val credentialListViewModel = remember {
         CredentialListViewModel(graph.credentialRepository, graph.credentialOrderStore)
     }
@@ -232,6 +251,9 @@ fun MyTokenApp(
                                     deletionTarget = null
                                     scope.launch {
                                         runCatching { graph.credentialRepository.delete(target.id) }
+                                        // Keep the Android-local order/pinned sets clean
+                                        // (same contract as the credential list delete path).
+                                        runCatching { graph.credentialOrderStore.pruneCredential(target.id) }
                                         homeViewModel.refreshAll()
                                         screen = AppScreen.Home
                                         backStack.clear()

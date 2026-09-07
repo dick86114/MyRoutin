@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 open class FakeCredentialRepository : CredentialRepository {
     val credentials = LinkedHashMap<UUID, Credential>()
     val secrets = LinkedHashMap<UUID, CredentialSecret>()
+    val cachedSnapshots = LinkedHashMap<UUID, ai.routin.mytoken.domain.model.UsageSnapshot>()
     val savedCalls = mutableListOf<UUID>()
 
     /** When set, the Nth (0-based) [save] call throws; subsequent calls also throw. */
@@ -47,4 +48,11 @@ open class FakeCredentialRepository : CredentialRepository {
     }
 
     override suspend fun readSecret(id: UUID): CredentialSecret? = secrets[id]
+
+    override suspend fun cacheSnapshot(snapshot: ai.routin.mytoken.domain.model.UsageSnapshot) {
+        cachedSnapshots[snapshot.credentialId] = snapshot
+    }
+
+    override suspend fun cachedSnapshot(id: UUID): ai.routin.mytoken.domain.model.UsageSnapshot? =
+        cachedSnapshots[id]
 }

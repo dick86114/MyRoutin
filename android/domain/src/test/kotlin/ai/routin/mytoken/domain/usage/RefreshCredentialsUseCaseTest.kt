@@ -41,10 +41,22 @@ class RefreshCredentialsUseCaseTest {
         private val secrets: Map<UUID, CredentialSecret> = emptyMap(),
     ) : CredentialRepository {
         private val flow = MutableStateFlow(credentials)
+        val cachedSnapshots = LinkedHashMap<UUID, UsageSnapshot>()
+        var cacheCalls = 0
+        var failCacheWrites = false
+
         override fun observeCredentials(): Flow<List<Credential>> = flow
         override suspend fun save(credential: Credential, secret: CredentialSecret) = Unit
         override suspend fun delete(id: UUID) = Unit
         override suspend fun readSecret(id: UUID): CredentialSecret? = secrets[id]
+
+        override suspend fun cacheSnapshot(snapshot: UsageSnapshot) {
+            cacheCalls++
+            if (failCacheWrites) throw AppError.Storage("injected cache failure")
+            cachedSnapshots[snapshot.credentialId] = snapshot
+        }
+
+        override suspend fun cachedSnapshot(id: UUID): UsageSnapshot? = cachedSnapshots[id]
     }
 
     private class FakeProvider(
@@ -367,5 +379,107 @@ class RefreshCredentialsUseCaseTest {
             nonReady.isEmpty(),
             "credentials stuck in non-Ready state after concurrent refresh: $nonReady"
         )
+    }
+
+    @Test
+    fun refresh_successCachesSnapshotForRestore() = runTest {
+        val cred = credential("11111111-1111-4111-8111-111111111111", ProviderId.Routin)
+        val repository = FakeCredentialRepository(
+            listOf(cred),
+            mapOf(cred.id to CredentialSecret.BearerToken("token"))
+        )
+        val useCase = RefreshCredentialsUseCase(
+            repository = repository,
+            providers = mapOf(
+                ProviderId.Routin to FakeProvider(ProviderId.Routin) { Result.success(snapshot(cred.id)) }
+            )
+        )
+
+        useCase.refreshAll()
+
+        assertEquals(1, repository.cacheCalls)
+        assertEquals(snapshot(cred.id), repository.cachedSnapshots[cred.id])
+        assertEquals(
+            snapshot(cred.id),
+            useCase.states.value.getValue(cred.id).snapshot
+        )
+    }
+
+    @Test
+    fun refresh_cacheWriteFailureDoesNotFailTheRefresh() = runTest {
+        val cred = credential("11111111-1111-4111-8111-111111111111", ProviderId.Routin)
+        val repository = FakeCredentialRepository(
+            listOf(cred),
+            mapOf(cred.id to CredentialSecret.BearerToken("token"))
+        ).apply { failCacheWrites = true }
+        val useCase = RefreshCredentialsUseCase(
+            repository = repository,
+            providers = mapOf(
+                ProviderId.Routin to FakeProvider(ProviderId.Routin) { Result.success(snapshot(cred.id)) }
+            )
+        )
+
+        useCase.refreshAll()
+
+        val state = useCase.states.value.getValue(cred.id)
+        assertEquals(RefreshStatus.Ready, state.status)
+        assertNull(state.error)
+        assertEquals(snapshot(cred.id), state.snapshot)
+    }
+
+    @Test
+    fun restoreFromCache_fillsReadyStaleStatesFromCachedSnapshots() = runTest {
+        val cachedCred = credential("11111111-1111-4111-8111-111111111111", ProviderId.Routin)
+        val noCacheCred = credential("22222222-2222-4222-8222-222222222222", ProviderId.DeepSeek)
+        val repository = FakeCredentialRepository(listOf(cachedCred, noCacheCred))
+        repository.cachedSnapshots[cachedCred.id] = snapshot(cachedCred.id)
+        val useCase = RefreshCredentialsUseCase(repository = repository, providers = emptyMap())
+
+        useCase.restoreFromCache()
+
+        val cachedState = useCase.states.value.getValue(cachedCred.id)
+        assertEquals(RefreshStatus.Ready, cachedState.status)
+        assertTrue(cachedState.isStale)
+        assertEquals(snapshot(cachedCred.id), cachedState.snapshot)
+        assertNull(cachedState.error)
+        assertFalse(
+            noCacheCred.id in useCase.states.value,
+            "credentials without a cache entry must not be fabricated"
+        )
+    }
+
+    @Test
+    fun restoreFromCache_neverOverwritesExistingStateSnapshot() = runTest {
+        val cred = credential("11111111-1111-4111-8111-111111111111", ProviderId.Routin)
+        val repository = FakeCredentialRepository(
+            listOf(cred),
+            mapOf(cred.id to CredentialSecret.BearerToken("token"))
+        )
+        val useCase = RefreshCredentialsUseCase(
+            repository = repository,
+            providers = mapOf(
+                ProviderId.Routin to FakeProvider(ProviderId.Routin) { Result.success(snapshot(cred.id, used = 9)) }
+            )
+        )
+        // A completed refresh leaves a fresh snapshot in the state; the cache
+        // also holds it now. Restore must not clobber it with anything older.
+        useCase.refresh(cred)
+
+        useCase.restoreFromCache()
+
+        val state = useCase.states.value.getValue(cred.id)
+        assertEquals(snapshot(cred.id, used = 9), state.snapshot)
+        assertFalse(state.isStale)
+    }
+
+    @Test
+    fun restoreFromCache_skipsCredentialsWithoutAnyCacheEntry() = runTest {
+        val cred = credential("11111111-1111-4111-8111-111111111111", ProviderId.Routin)
+        val repository = FakeCredentialRepository(listOf(cred))
+        val useCase = RefreshCredentialsUseCase(repository = repository, providers = emptyMap())
+
+        useCase.restoreFromCache()
+
+        assertTrue(useCase.states.value.isEmpty())
     }
 }

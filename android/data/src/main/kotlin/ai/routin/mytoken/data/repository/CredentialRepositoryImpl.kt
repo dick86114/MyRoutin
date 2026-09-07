@@ -106,7 +106,7 @@ class CredentialRepositoryImpl(
     }
 
     /** Caches the latest usage snapshot for a credential (removed automatically on delete). */
-    suspend fun cacheSnapshot(snapshot: UsageSnapshot) {
+    override suspend fun cacheSnapshot(snapshot: UsageSnapshot) {
         try {
             snapshotDao.upsert(
                 UsageSnapshotEntity(
@@ -120,7 +120,7 @@ class CredentialRepositoryImpl(
         }
     }
 
-    suspend fun latestSnapshot(credentialId: UUID): UsageSnapshot? {
+    override suspend fun cachedSnapshot(credentialId: UUID): UsageSnapshot? {
         val entity = try {
             snapshotDao.findById(credentialId.toString())
         } catch (cause: Throwable) {

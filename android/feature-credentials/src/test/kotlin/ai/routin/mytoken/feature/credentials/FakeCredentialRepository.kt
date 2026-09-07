@@ -38,4 +38,8 @@ class FakeCredentialRepository : CredentialRepository {
         readSecretError?.let { throw it }
         return secrets.value[id]
     }
+
+    override suspend fun cacheSnapshot(snapshot: ai.routin.mytoken.domain.model.UsageSnapshot) = Unit
+
+    override suspend fun cachedSnapshot(id: UUID): ai.routin.mytoken.domain.model.UsageSnapshot? = null
 }

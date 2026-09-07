@@ -97,9 +97,7 @@ class CredentialListViewModel(
             try {
                 repository.delete(target.id)
                 // Keep the persisted order clean so IDs of deleted credentials never pile up.
-                val pruned = orderStore.order.first().filter { it != target.id.toString() }
-                orderStore.saveOrder(pruned)
-                orderStore.setPinned(target.id.toString(), false)
+                orderStore.pruneCredential(target.id)
             } catch (error: kotlinx.coroutines.CancellationException) {
                 throw error
             } catch (_: Throwable) {

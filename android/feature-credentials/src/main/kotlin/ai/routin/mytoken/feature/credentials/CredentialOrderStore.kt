@@ -7,7 +7,9 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import java.util.UUID
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 /**
@@ -61,4 +63,15 @@ class DataStoreCredentialOrderStore(private val context: Context) : CredentialOr
         val ORDER_KEY = stringPreferencesKey("credentialOrder")
         val PINNED_KEY = stringSetPreferencesKey("pinnedCredentialIds")
     }
+}
+
+/**
+ * Removes a deleted credential from the persisted order and pinned sets so IDs
+ * of deleted credentials never pile up. Every delete path (credential list and
+ * home detail) must go through this helper.
+ */
+suspend fun CredentialOrderStore.pruneCredential(id: UUID) {
+    val idString = id.toString()
+    saveOrder(order.first().filter { it != idString })
+    setPinned(idString, false)
 }
