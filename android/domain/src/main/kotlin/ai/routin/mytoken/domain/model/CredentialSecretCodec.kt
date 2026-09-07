@@ -29,21 +29,32 @@ object CredentialSecretCodec {
         }
     }
 
+    /**
+     * Decodes an opaque encoded secret. Never throws for malformed input: any structural
+     * mismatch, invalid Base64url, or empty segment yields null so callers can surface a
+     * decode error instead of crashing on corrupted stored data.
+     */
     fun decode(encoded: String): CredentialSecret? {
         val parts = encoded.split("|")
-        if (parts.isEmpty() || parts[0] != VERSION) return null
-        val unb64: (String) -> String = {
-            String(Base64.getUrlDecoder().decode(it), Charsets.UTF_8)
+        if (parts.firstOrNull() != VERSION) return null
+        val unb64: (String) -> String? = { value ->
+            runCatching {
+                if (value.isEmpty()) return@runCatching null
+                String(Base64.getUrlDecoder().decode(value), Charsets.UTF_8)
+            }.getOrNull()
         }
         return when (parts.getOrNull(1)) {
             CredentialKind.BearerApiKey.rawValue ->
-                parts.getOrNull(2)?.let { CredentialSecret.BearerToken(unb64(it)) }
+                if (parts.size != 3) return null
+                else unb64(parts[2])?.let { CredentialSecret.BearerToken(it) }
             CredentialKind.ApiKey.rawValue ->
-                parts.getOrNull(2)?.let { CredentialSecret.ApiKey(unb64(it)) }
+                if (parts.size != 3) return null
+                else unb64(parts[2])?.let { CredentialSecret.ApiKey(it) }
             CredentialKind.AccessKeyPair.rawValue -> {
-                val id = parts.getOrNull(2) ?: return null
-                val key = parts.getOrNull(3) ?: return null
-                CredentialSecret.AccessKeyPair(unb64(id), unb64(key))
+                if (parts.size != 4) return null
+                val id = unb64(parts[2]) ?: return null
+                val key = unb64(parts[3]) ?: return null
+                CredentialSecret.AccessKeyPair(id, key)
             }
             else -> null
         }
