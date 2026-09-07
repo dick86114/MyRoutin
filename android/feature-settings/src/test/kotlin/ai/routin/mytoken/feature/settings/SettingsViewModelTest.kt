@@ -21,12 +21,14 @@ class SettingsViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private lateinit var refreshStore: FakeRefreshSettingsStore
     private lateinit var displayStore: FakeDisplaySettingsStore
+    private lateinit var notificationStore: FakeNotificationSettingsStore
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         refreshStore = FakeRefreshSettingsStore()
         displayStore = FakeDisplaySettingsStore()
+        notificationStore = FakeNotificationSettingsStore()
     }
 
     @After
@@ -34,7 +36,7 @@ class SettingsViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel() = SettingsViewModel(refreshStore, displayStore)
+    private fun viewModel() = SettingsViewModel(refreshStore, displayStore, notificationStore)
 
     @Test
     fun initialStateLoadsDefaults() = runTest(dispatcher) {
@@ -112,5 +114,64 @@ class SettingsViewModelTest {
         assertFalse(display.showUsageProgress)
         assertFalse(display.showBalance)
         assertFalse(display.showResetTime)
+    }
+
+    @Test
+    fun initialStateLoadsNotificationDefaults() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        val notifications = vm.state.value.notifications
+        assertTrue(notifications.notificationsEnabled)
+        assertEquals(50, notifications.lowThresholdPercent)
+        assertEquals(80, notifications.highThresholdPercent)
+        assertTrue(notifications.credentialFailureAlertsEnabled)
+    }
+
+    @Test
+    fun notificationTogglesPersistToStore() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        vm.setNotificationsEnabled(false)
+        vm.setCredentialFailureAlertsEnabled(false)
+        advanceUntilIdle()
+
+        assertFalse(notificationStore.state.value.notificationsEnabled)
+        assertFalse(notificationStore.state.value.credentialFailureAlertsEnabled)
+    }
+
+    @Test
+    fun thresholdChangesPersistToStore() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        vm.setLowAlertThreshold(30)
+        advanceUntilIdle()
+
+        assertEquals(30, notificationStore.state.value.lowThresholdPercent)
+        assertEquals(80, notificationStore.state.value.highThresholdPercent)
+        assertEquals(30, vm.state.value.notifications.lowThresholdPercent)
+
+        vm.setHighAlertThreshold(90)
+        advanceUntilIdle()
+        assertEquals(90, notificationStore.state.value.highThresholdPercent)
+    }
+
+    @Test
+    fun invalidThresholdChangesAreIgnored() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        vm.setLowAlertThreshold(0)
+        vm.setLowAlertThreshold(100)
+        vm.setLowAlertThreshold(80) // >= high (80) → ignored
+        vm.setHighAlertThreshold(20) // <= low (50) → ignored
+        vm.setHighAlertThreshold(101)
+        advanceUntilIdle()
+
+        val notifications = notificationStore.state.value
+        assertEquals(50, notifications.lowThresholdPercent)
+        assertEquals(80, notifications.highThresholdPercent)
     }
 }

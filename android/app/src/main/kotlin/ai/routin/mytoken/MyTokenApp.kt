@@ -1,10 +1,12 @@
 package ai.routin.mytoken
 
 import ai.routin.mytoken.domain.model.Credential
+import ai.routin.mytoken.domain.model.ProviderId
 import ai.routin.mytoken.feature.credentials.CredentialEditorScreen
 import ai.routin.mytoken.feature.credentials.CredentialEditorViewModel
 import ai.routin.mytoken.feature.credentials.CredentialListScreen
 import ai.routin.mytoken.feature.credentials.CredentialListViewModel
+import ai.routin.mytoken.feature.credentials.RoutinCheckInLauncher
 import ai.routin.mytoken.feature.home.HomeScreen
 import ai.routin.mytoken.feature.home.HomeViewModel
 import ai.routin.mytoken.feature.home.CredentialDetailScreen
@@ -46,6 +48,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import java.util.UUID
 import kotlinx.coroutines.launch
 
@@ -64,7 +67,12 @@ sealed interface AppScreen {
  * edit/delete placeholders to the credential editor and delete-confirmation flows.
  */
 @Composable
-fun MyTokenApp(graph: AppGraph, appVersion: String) {
+fun MyTokenApp(
+    graph: AppGraph,
+    appVersion: String,
+    notificationPermissionGranted: Boolean = true,
+    onRequestNotificationPermission: () -> Unit = {},
+) {
     var screen by remember { mutableStateOf<AppScreen>(AppScreen.Home) }
     val backStack = remember { mutableStateListOf<AppScreen>() }
     val scope = rememberCoroutineScope()
@@ -94,7 +102,7 @@ fun MyTokenApp(graph: AppGraph, appVersion: String) {
         CredentialListViewModel(graph.credentialRepository, graph.credentialOrderStore)
     }
     val settingsViewModel = remember {
-        SettingsViewModel(graph.refreshSettingsStore, graph.displaySettingsStore)
+        SettingsViewModel(graph.refreshSettingsStore, graph.displaySettingsStore, graph.notificationSettingsStore)
     }
 
     Scaffold(
@@ -177,6 +185,12 @@ fun MyTokenApp(graph: AppGraph, appVersion: String) {
                         onShowBalanceChange = settingsViewModel::setShowBalance,
                         onShowResetTimeChange = settingsViewModel::setShowResetTime,
                         onOpenTransfer = { navigate(AppScreen.Transfer) },
+                        onNotificationsEnabledChange = settingsViewModel::setNotificationsEnabled,
+                        onCredentialFailureAlertsChange = settingsViewModel::setCredentialFailureAlertsEnabled,
+                        onLowThresholdChange = settingsViewModel::setLowAlertThreshold,
+                        onHighThresholdChange = settingsViewModel::setHighAlertThreshold,
+                        notificationPermissionGranted = notificationPermissionGranted,
+                        onRequestNotificationPermission = onRequestNotificationPermission,
                     )
                 }
                 is AppScreen.Detail -> {
@@ -187,12 +201,24 @@ fun MyTokenApp(graph: AppGraph, appVersion: String) {
                     var deletionTarget by remember(current.credentialId) {
                         mutableStateOf<Credential?>(null)
                     }
+                    // Routin credentials get a check-in entry that opens the official
+                    // page in a Custom Tab (no DOM/cookie/password access, no logging).
+                    val context = LocalContext.current
+                    val onCheckIn = card?.credential
+                        ?.takeIf { it.providerId == ProviderId.Routin }
+                        ?.let { credential ->
+                            {
+                                RoutinCheckInLauncher.launch(context, credential)
+                                Unit
+                            }
+                        }
                     CredentialDetailScreen(
                         card = card,
                         onBack = { goBack() },
                         onRefresh = { card?.let { homeViewModel.refreshCredential(it.credential) } },
                         onEdit = { navigate(AppScreen.Editor(current.credentialId)) },
                         onDelete = { deletionTarget = card?.credential },
+                        onCheckIn = onCheckIn,
                     )
                     deletionTarget?.let { target ->
                         AlertDialog(

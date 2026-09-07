@@ -53,6 +53,7 @@ fun CredentialDetailScreen(
     onRefresh: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onCheckIn: (() -> Unit)? = null,
 ) {
     Scaffold(
         topBar = {
@@ -81,6 +82,14 @@ fun CredentialDetailScreen(
                         modifier = Modifier.weight(1f),
                     ) {
                         Text(text = "刷新")
+                    }
+                    if (onCheckIn != null) {
+                        OutlinedButton(
+                            onClick = onCheckIn,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(text = "签到")
+                        }
                     }
                     OutlinedButton(
                         onClick = onEdit,

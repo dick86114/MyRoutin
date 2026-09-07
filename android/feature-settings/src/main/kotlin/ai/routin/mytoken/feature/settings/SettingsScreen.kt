@@ -25,7 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /**
- * Top-level settings page: 刷新 / 首页显示 / 数据迁移 / 关于.
+ * Top-level settings page: 刷新 / 通知 / 首页显示 / 数据迁移 / 关于.
  * Deliberately excludes macOS-specific options (menu bar style, login item, window
  * behavior); the mobile equivalents are card density, metric visibility and defaults.
  */
@@ -47,6 +47,12 @@ fun SettingsScreen(
     onShowBalanceChange: (Boolean) -> Unit,
     onShowResetTimeChange: (Boolean) -> Unit,
     onOpenTransfer: () -> Unit,
+    onNotificationsEnabledChange: (Boolean) -> Unit = {},
+    onCredentialFailureAlertsChange: (Boolean) -> Unit = {},
+    onLowThresholdChange: (Int) -> Unit = {},
+    onHighThresholdChange: (Int) -> Unit = {},
+    notificationPermissionGranted: Boolean = true,
+    onRequestNotificationPermission: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -79,6 +85,17 @@ fun SettingsScreen(
                     onWifiOnlyChange = onWifiOnlyChange,
                     onOpenAppRefreshChange = onOpenAppRefreshChange,
                     onRetryOnFailureChange = onRetryOnFailureChange,
+                )
+            }
+            item(key = "notification") {
+                NotificationSettingsSection(
+                    settings = state.notifications,
+                    permissionGranted = notificationPermissionGranted,
+                    onRequestPermission = onRequestNotificationPermission,
+                    onNotificationsEnabledChange = onNotificationsEnabledChange,
+                    onCredentialFailureAlertsChange = onCredentialFailureAlertsChange,
+                    onLowThresholdChange = onLowThresholdChange,
+                    onHighThresholdChange = onHighThresholdChange,
                 )
             }
             item(key = "display") {

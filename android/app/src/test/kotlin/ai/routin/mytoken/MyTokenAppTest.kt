@@ -2,9 +2,12 @@ package ai.routin.mytoken
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -38,7 +41,12 @@ class MyTokenAppTest {
         composeRule.onNodeWithText("设置").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("刷新").assertIsDisplayed()
-        composeRule.onNodeWithText("从 Mac 导入").performScrollTo()
+
+        // The 通知 section (Task 10) pushed 数据迁移 below the fold; scroll to it.
+        repeat(4) {
+            composeRule.onNodeWithTag("settings_list").performTouchInput { swipeUp() }
+            composeRule.waitForIdle()
+        }
         composeRule.onNodeWithText("从 Mac 导入").assertIsDisplayed()
     }
 }

@@ -1,11 +1,14 @@
 package ai.routin.mytoken
 
 import ai.routin.mytoken.core.security.AndroidKeystoreSecretStore
+import ai.routin.mytoken.data.alerts.DataStoreAlertStateStore
 import ai.routin.mytoken.data.local.MyTokenDatabase
 import ai.routin.mytoken.data.preferences.AppPreferencesRepository
+import ai.routin.mytoken.data.refresh.DataStoreRefreshStatusStore
 import ai.routin.mytoken.data.repository.CredentialRepositoryImpl
 import ai.routin.mytoken.domain.usage.RefreshCredentialsUseCase
 import ai.routin.mytoken.feature.credentials.DataStoreCredentialOrderStore
+import ai.routin.mytoken.feature.settings.AppPreferencesNotificationSettingsStore
 import ai.routin.mytoken.feature.settings.AppPreferencesRefreshSettingsStore
 import ai.routin.mytoken.feature.settings.DataStoreDisplaySettingsStore
 import ai.routin.mytoken.feature.transfer.TransferClient
@@ -48,6 +51,28 @@ class AppGraph(context: Context) {
 
     val refreshSettingsStore: AppPreferencesRefreshSettingsStore by lazy {
         AppPreferencesRefreshSettingsStore(AppPreferencesRepository(appContext))
+    }
+
+    val notificationSettingsStore: AppPreferencesNotificationSettingsStore by lazy {
+        AppPreferencesNotificationSettingsStore(AppPreferencesRepository(appContext))
+    }
+
+    val refreshStatusStore: DataStoreRefreshStatusStore by lazy {
+        DataStoreRefreshStatusStore(appContext)
+    }
+
+    val alertStateStore: DataStoreAlertStateStore by lazy {
+        DataStoreAlertStateStore(appContext)
+    }
+
+    val usageAlertDispatcher: UsageAlertDispatcher by lazy {
+        UsageAlertDispatcher(
+            context = appContext,
+            repository = credentialRepository,
+            states = refreshUseCase.states,
+            alertStateStore = alertStateStore,
+            notificationSettingsStore = notificationSettingsStore,
+        )
     }
 
     val transferRepository: TransferRepositoryImpl by lazy {

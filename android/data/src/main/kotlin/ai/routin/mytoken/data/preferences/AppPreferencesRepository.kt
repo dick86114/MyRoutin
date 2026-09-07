@@ -17,11 +17,16 @@ data class AppPreferences(
     val wifiOnly: Boolean = false,
     val openAppRefresh: Boolean = true,
     val retryOnFailure: Boolean = true,
-    val notificationsEnabled: Boolean = true
+    val notificationsEnabled: Boolean = true,
+    val alertLowThresholdPercent: Int = 50,
+    val alertHighThresholdPercent: Int = 80,
+    val credentialFailureAlertsEnabled: Boolean = true
 ) {
     companion object {
         const val DEFAULT_REFRESH_INTERVAL_MINUTES = 15
         val ALLOWED_REFRESH_INTERVAL_MINUTES = setOf(1, 5, 15, 30)
+        const val DEFAULT_ALERT_LOW_THRESHOLD_PERCENT = 50
+        const val DEFAULT_ALERT_HIGH_THRESHOLD_PERCENT = 80
     }
 }
 
@@ -39,7 +44,12 @@ class AppPreferencesRepository(private val context: Context) {
             wifiOnly = prefs[WIFI_ONLY] ?: false,
             openAppRefresh = prefs[OPEN_APP_REFRESH] ?: true,
             retryOnFailure = prefs[RETRY_ON_FAILURE] ?: true,
-            notificationsEnabled = prefs[NOTIFICATIONS_ENABLED] ?: true
+            notificationsEnabled = prefs[NOTIFICATIONS_ENABLED] ?: true,
+            alertLowThresholdPercent = prefs[ALERT_LOW_THRESHOLD_PERCENT]
+                ?: AppPreferences.DEFAULT_ALERT_LOW_THRESHOLD_PERCENT,
+            alertHighThresholdPercent = prefs[ALERT_HIGH_THRESHOLD_PERCENT]
+                ?: AppPreferences.DEFAULT_ALERT_HIGH_THRESHOLD_PERCENT,
+            credentialFailureAlertsEnabled = prefs[CREDENTIAL_FAILURE_ALERTS_ENABLED] ?: true
         )
     }
 
@@ -70,6 +80,21 @@ class AppPreferencesRepository(private val context: Context) {
         context.preferencesDataStore.edit { it[NOTIFICATIONS_ENABLED] = enabled }
     }
 
+    /** Usage alert thresholds; low must be lower than high (macOS parity). */
+    suspend fun setAlertThresholds(lowPercent: Int, highPercent: Int) {
+        require(lowPercent in 1..99 && highPercent in 1..99 && lowPercent < highPercent) {
+            "alert thresholds must satisfy 0 < low < high <= 99"
+        }
+        context.preferencesDataStore.edit {
+            it[ALERT_LOW_THRESHOLD_PERCENT] = lowPercent
+            it[ALERT_HIGH_THRESHOLD_PERCENT] = highPercent
+        }
+    }
+
+    suspend fun setCredentialFailureAlertsEnabled(enabled: Boolean) {
+        context.preferencesDataStore.edit { it[CREDENTIAL_FAILURE_ALERTS_ENABLED] = enabled }
+    }
+
     private companion object {
         val AUTO_REFRESH_ENABLED = booleanPreferencesKey("autoRefreshEnabled")
         val REFRESH_INTERVAL_MINUTES = intPreferencesKey("refreshIntervalMinutes")
@@ -77,5 +102,8 @@ class AppPreferencesRepository(private val context: Context) {
         val OPEN_APP_REFRESH = booleanPreferencesKey("openAppRefresh")
         val RETRY_ON_FAILURE = booleanPreferencesKey("retryOnFailure")
         val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notificationsEnabled")
+        val ALERT_LOW_THRESHOLD_PERCENT = intPreferencesKey("alertLowThresholdPercent")
+        val ALERT_HIGH_THRESHOLD_PERCENT = intPreferencesKey("alertHighThresholdPercent")
+        val CREDENTIAL_FAILURE_ALERTS_ENABLED = booleanPreferencesKey("credentialFailureAlertsEnabled")
     }
 }

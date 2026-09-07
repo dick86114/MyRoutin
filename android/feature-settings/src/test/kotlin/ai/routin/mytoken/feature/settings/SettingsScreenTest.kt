@@ -104,6 +104,11 @@ class SettingsScreenTest {
     fun displaySectionRendersDensityAndMetricOptions() {
         setContent()
 
+        // Pre-scroll: the 通知 section (Task 10) sits between 刷新 and 首页显示.
+        repeat(2) {
+            composeRule.onNodeWithTag("settings_list").performTouchInput { swipeUp() }
+            composeRule.waitForIdle()
+        }
         composeRule.onNodeWithText("首页显示").performScrollTo()
         composeRule.onNodeWithText("卡片密度").performScrollTo()
         composeRule.onNodeWithText("紧凑").performScrollTo()
@@ -118,7 +123,12 @@ class SettingsScreenTest {
         var opened = 0
         setContent(onOpenTransfer = { opened++ })
 
-        composeRule.onNodeWithText("从 Mac 导入").performScrollTo()
+        // The 通知 section (Task 10) pushed 数据迁移 below the fold; scroll to it.
+        repeat(4) {
+            composeRule.onNodeWithTag("settings_list").performTouchInput { swipeUp() }
+            composeRule.waitForIdle()
+        }
+        composeRule.onNodeWithText("从 Mac 导入").assertIsDisplayed()
         composeRule.onNodeWithText("从 Mac 导入").performClick()
 
         assertEquals(1, opened)

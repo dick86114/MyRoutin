@@ -47,3 +47,27 @@ class FakeDisplaySettingsStore(initial: DisplaySettings = DisplaySettings()) : D
     override suspend fun setShowResetTime(enabled: Boolean) =
         state.update { it.copy(showResetTime = enabled) }
 }
+
+class FakeNotificationSettingsStore(
+    initial: NotificationSettings = NotificationSettings(),
+) : NotificationSettingsStore {
+    val state = MutableStateFlow(initial)
+    override val settings: Flow<NotificationSettings> = state
+
+    override suspend fun setNotificationsEnabled(enabled: Boolean) =
+        state.update { it.copy(notificationsEnabled = enabled) }
+
+    override suspend fun setAlertThresholds(lowPercent: Int, highPercent: Int) {
+        require(
+            lowPercent in NotificationSettings.MIN_THRESHOLD_PERCENT..NotificationSettings.MAX_THRESHOLD_PERCENT &&
+                highPercent in NotificationSettings.MIN_THRESHOLD_PERCENT..NotificationSettings.MAX_THRESHOLD_PERCENT &&
+                lowPercent < highPercent,
+        )
+        state.update {
+            it.copy(lowThresholdPercent = lowPercent, highThresholdPercent = highPercent)
+        }
+    }
+
+    override suspend fun setCredentialFailureAlertsEnabled(enabled: Boolean) =
+        state.update { it.copy(credentialFailureAlertsEnabled = enabled) }
+}
