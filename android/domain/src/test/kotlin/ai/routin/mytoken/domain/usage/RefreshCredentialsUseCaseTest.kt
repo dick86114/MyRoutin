@@ -14,15 +14,24 @@ import ai.routin.mytoken.domain.repository.CredentialRepository
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class RefreshCredentialsUseCaseTest {
@@ -41,7 +50,7 @@ class RefreshCredentialsUseCaseTest {
     private class FakeProvider(
         override val providerId: ProviderId,
         private val delayMs: Long = 0,
-        private val behavior: (Credential) -> Result<UsageSnapshot>,
+        private val behavior: suspend (Credential) -> Result<UsageSnapshot>,
     ) : UsageProvider {
         val calls = AtomicInteger(0)
         private val active = AtomicInteger(0)
@@ -265,5 +274,98 @@ class RefreshCredentialsUseCaseTest {
         val noProviderState = useCase.states.value.getValue(noProvider.id)
         assertEquals(RefreshStatus.Failed, noProviderState.status)
         assertTrue(noProviderState.error is AppError.Unknown)
+    }
+
+    @Test
+    fun refresh_cancellationFromProviderPropagatesAndDoesNotMarkFailed() = runTest {
+        val cred = credential("11111111-1111-4111-8111-111111111111", ProviderId.Routin)
+        val secret = CredentialSecret.BearerToken("token")
+        val provider = FakeProvider(ProviderId.Routin) {
+            throw CancellationException("refresh cancelled")
+        }
+        val useCase = RefreshCredentialsUseCase(
+            repository = FakeCredentialRepository(listOf(cred), mapOf(cred.id to secret)),
+            providers = mapOf(ProviderId.Routin to provider),
+            maxConcurrency = 2
+        )
+
+        assertFailsWith<CancellationException> {
+            useCase.refresh(cred)
+        }
+
+        val state = useCase.states.value.getValue(cred.id)
+        assertEquals(RefreshStatus.Loading, state.status)
+        assertNull(state.error)
+    }
+
+    @Test
+    fun refresh_cancellationMidFetchPropagatesAndDoesNotMarkFailed() = runTest {
+        val cred = credential("11111111-1111-4111-8111-111111111111", ProviderId.Routin)
+        val secret = CredentialSecret.BearerToken("token")
+        val provider = FakeProvider(ProviderId.Routin, delayMs = 1_000_000) {
+            Result.success(snapshot(cred.id))
+        }
+        val useCase = RefreshCredentialsUseCase(
+            repository = FakeCredentialRepository(listOf(cred), mapOf(cred.id to secret)),
+            providers = mapOf(ProviderId.Routin to provider),
+            maxConcurrency = 2
+        )
+
+        val job = launch { useCase.refresh(cred) }
+        runCurrent()
+        job.cancelAndJoin()
+
+        val state = useCase.states.value.getValue(cred.id)
+        assertEquals(RefreshStatus.Loading, state.status)
+        assertNull(state.error)
+    }
+
+    /**
+     * Lost-update regression: releases [maxConcurrency] fetches simultaneously on real
+     * worker threads (Dispatchers.Default) so their Ready-state writes collide. With the
+     * non-atomic read-modify-write `update()`, whole credentials could stay stuck in
+     * Loading after a wave; with the atomic `MutableStateFlow.update {}` CAS loop, every
+     * credential must end Ready. Repeated rounds make any lost update surface reliably.
+     */
+    @Test
+    fun refreshAll_concurrentStateUpdatesDoNotLoseCredentials() {
+        val credentials = (0 until 32).map { index ->
+            credential(
+                "%08d-1111-4111-8111-111111111111".format(index),
+                ProviderId.Routin
+            )
+        }
+        val secrets = credentials.associate { it.id to CredentialSecret.BearerToken("t") }
+        val maxConcurrency = 8
+        val inFlight = AtomicInteger(0)
+        var release = CompletableDeferred<Unit>()
+        val provider = FakeProvider(ProviderId.Routin) { cred ->
+            if (inFlight.incrementAndGet() >= maxConcurrency) {
+                release.complete(Unit)
+            }
+            release.await()
+            Result.success(snapshot(cred.id))
+        }
+        val useCase = RefreshCredentialsUseCase(
+            repository = FakeCredentialRepository(credentials, secrets),
+            providers = mapOf(ProviderId.Routin to provider),
+            maxConcurrency = maxConcurrency
+        )
+
+        runBlocking {
+            withContext(Dispatchers.Default) {
+                repeat(20) {
+                    release = CompletableDeferred()
+                    inFlight.set(0)
+                    useCase.refreshAll()
+                }
+            }
+        }
+
+        val nonReady = useCase.states.value.filterValues { it.status != RefreshStatus.Ready }
+        assertTrue(
+            nonReady.isEmpty(),
+            "credentials stuck in non-Ready state after concurrent refresh: $nonReady"
+        )
     }
 }

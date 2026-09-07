@@ -7,11 +7,13 @@ import ai.routin.mytoken.domain.model.UsageSnapshot
 import ai.routin.mytoken.domain.repository.CredentialRepository
 import java.time.Clock
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -76,33 +78,33 @@ class RefreshCredentialsUseCase(
             )
         }
         semaphore.withPermit {
-            val result = runCatching {
+            try {
                 val provider = providers[credential.providerId]
                     ?: throw UsageProviderException.InvalidCredential(
                         "暂不支持该供应商的用量查询"
                     )
                 val secret = repository.readSecret(credential.id)
                     ?: throw AppError.Storage("凭证密钥缺失，请重新导入")
-                provider.fetchUsage(credential, secret).getOrThrow()
-            }
-            update(credential.id) { previous ->
-                result.fold(
-                    onSuccess = { snapshot ->
-                        CredentialUsageState(
-                            status = RefreshStatus.Ready,
-                            snapshot = snapshot,
-                            isStale = false
-                        )
-                    },
-                    onFailure = { error ->
-                        CredentialUsageState(
-                            status = RefreshStatus.Failed,
-                            snapshot = previous.snapshot,
-                            isStale = previous.snapshot != null,
-                            error = mapError(error)
-                        )
-                    }
-                )
+                val snapshot = provider.fetchUsage(credential, secret).getOrThrow()
+                update(credential.id) { previous ->
+                    CredentialUsageState(
+                        status = RefreshStatus.Ready,
+                        snapshot = snapshot,
+                        isStale = false
+                    )
+                }
+            } catch (error: CancellationException) {
+                // 取消不是失败：保持 Loading 状态并向上传播取消。
+                throw error
+            } catch (error: Throwable) {
+                update(credential.id) { previous ->
+                    CredentialUsageState(
+                        status = RefreshStatus.Failed,
+                        snapshot = previous.snapshot,
+                        isStale = previous.snapshot != null,
+                        error = mapError(error)
+                    )
+                }
             }
         }
     }
@@ -112,8 +114,11 @@ class RefreshCredentialsUseCase(
     }
 
     private fun update(id: UUID, transform: (CredentialUsageState) -> CredentialUsageState) {
-        val current = _states.value
-        _states.value = current + (id to transform(current[id] ?: CredentialUsageState(RefreshStatus.Loading)))
+        // Atomic CAS loop: concurrent refreshes of different credentials must not
+        // lose each other's state writes (read-modify-write on `.value` is not safe here).
+        _states.update { current ->
+            current + (id to transform(current[id] ?: CredentialUsageState(RefreshStatus.Loading)))
+        }
     }
 
     private fun mapError(error: Throwable): AppError = when (error) {
