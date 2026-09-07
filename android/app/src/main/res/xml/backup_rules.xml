@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Legacy (Android 11 and below) cloud-backup rules. The app sets
+    android:allowBackup="false", so nothing is backed up anyway; these
+    exclusions are defense in depth in case allowBackup is ever re-enabled.
+    Secret material never enters a controllable cloud backup:
+    - Keystore-wrapped credential ciphertext lives in noBackupFilesDir
+      (cred-*.bin), which Android never backs up by OS rule.
+    - The Room database and DataStore files hold metadata only, but are
+      excluded too so credential names and endpoints stay device-local.
+-->
+<full-backup-content>
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="file" path="datastore" />
+</full-backup-content>

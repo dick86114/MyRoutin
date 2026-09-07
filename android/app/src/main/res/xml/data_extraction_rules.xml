@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 12+ data extraction rules. Mirrors backup_rules.xml: cloud backup
+    and device-to-device transfer are both disabled while allowBackup="false"
+    holds; the excludes are defense in depth. Keystore-wrapped credential
+    ciphertext (cred-*.bin in noBackupFilesDir) cannot be restored on another
+    device in any case because the wrapping keys are non-exportable.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path="datastore" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path="datastore" />
+    </device-transfer>
+</data-extraction-rules>
