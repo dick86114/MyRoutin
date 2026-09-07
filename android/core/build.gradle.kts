@@ -23,5 +23,6 @@ android {
 
 dependencies {
     api(project(":domain"))
+    implementation("com.google.crypto.tink:tink-android:1.15.0")
     testImplementation("junit:junit:4.13.2")
 }
