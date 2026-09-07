@@ -406,6 +406,39 @@ class MetricAlertEvaluatorTest {
     }
 
     @Test
+    fun failureWhileSwitchOffAlertsOnceTheSwitchIsTurnedOn() {
+        // Switch off: no alert emitted and no notify-once marker written.
+        val off = evaluator.evaluate(
+            credential(),
+            failedState(AppError.Authentication("凭证已失效")),
+            MetricAlertSettings(),
+            emptyState,
+            credentialFailureAlertsEnabled = false,
+        )
+        assertTrue(off.invalidCredentialAlerts.isEmpty())
+        assertTrue(off.state.invalidNotifiedCredentials.isEmpty())
+
+        // Still failing, switch now on: the alert fires (exactly once).
+        val on = evaluator.evaluate(
+            credential(),
+            failedState(AppError.Authentication("凭证已失效")),
+            MetricAlertSettings(),
+            off.state,
+            credentialFailureAlertsEnabled = true,
+        )
+        assertEquals(1, on.invalidCredentialAlerts.size)
+
+        val repeat = evaluator.evaluate(
+            credential(),
+            failedState(AppError.Authentication("凭证已失效")),
+            MetricAlertSettings(),
+            on.state,
+            credentialFailureAlertsEnabled = true,
+        )
+        assertTrue(repeat.invalidCredentialAlerts.isEmpty())
+    }
+
+    @Test
     fun successfulRefreshReArmsInvalidCredentialAlert() {
         var state = emptyState
         state = evaluator.evaluate(

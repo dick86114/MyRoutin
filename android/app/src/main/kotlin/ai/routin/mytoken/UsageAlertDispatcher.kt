@@ -58,15 +58,19 @@ class UsageAlertDispatcher(
 
         var state = alertStateStore.load()
         credentials.forEach { credential ->
-            val evaluation = evaluator.evaluate(credential, states.value[credential.id], alertSettings, state)
+            val evaluation = evaluator.evaluate(
+                credential = credential,
+                usageState = states.value[credential.id],
+                settings = alertSettings,
+                previousState = state,
+                credentialFailureAlertsEnabled = settings.credentialFailureAlertsEnabled,
+            )
             state = evaluation.state
             evaluation.usageAlerts.forEach { alert ->
                 post(notifier, usageNotification(credential, alert), notificationId(credential.id, alert.metricId))
             }
             evaluation.invalidCredentialAlerts.forEach { invalid ->
-                if (settings.credentialFailureAlertsEnabled) {
-                    post(notifier, invalidNotification(invalid), notificationId(credential.id, INVALID_METRIC_KEY))
-                }
+                post(notifier, invalidNotification(invalid), notificationId(credential.id, INVALID_METRIC_KEY))
             }
         }
         alertStateStore.save(state)

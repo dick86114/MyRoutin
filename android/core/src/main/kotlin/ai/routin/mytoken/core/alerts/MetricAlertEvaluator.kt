@@ -149,7 +149,10 @@ data class MetricAlertEvaluation(
  * - usedQuota → percent ≥ 50/80 (or custom / per-credential override)
  * - remainingQuota → mirrored percent ≤ (100 − 50)/(100 − 80)
  * - balance / status metrics → health-state (warning/critical/unavailable) alerts
- * - authentication failures → invalid-credential alerts (once, re-armed on recovery)
+ * - authentication failures → invalid-credential alerts (once, re-armed on recovery);
+ *   the notify-once marker is only written when the user's
+ *   [MetricAlertEvaluator.evaluate] `credentialFailureAlertsEnabled` switch allows
+ *   delivery, so a failure while the switch is off still alerts after it is enabled
  *
  * "Notify once" is tracked per [AlertWindowKey]: a crossing notifies once per window
  * (windowed metrics re-arm on the next window); windowless percent metrics re-arm
@@ -162,6 +165,7 @@ class MetricAlertEvaluator {
         usageState: CredentialUsageState?,
         settings: MetricAlertSettings,
         previousState: AlertNotificationState,
+        credentialFailureAlertsEnabled: Boolean = true,
     ): MetricAlertEvaluation {
         val triggered = previousState.triggeredWindows.toMutableSet()
         var invalidNotified = previousState.invalidNotifiedCredentials
@@ -178,7 +182,13 @@ class MetricAlertEvaluator {
 
         val error = usageState?.error
         when {
-            usageState?.status == RefreshStatus.Failed && error is AppError.Authentication -> {
+            // The notify-once marker is only written when the alert can actually be
+            // delivered: a failure while the switch is off must not be swallowed once
+            // the user later enables the switch (they still get the next evaluation's
+            // alert while the credential is still failing).
+            usageState?.status == RefreshStatus.Failed &&
+                error is AppError.Authentication &&
+                credentialFailureAlertsEnabled -> {
                 if (credential.id !in invalidNotified) {
                     invalidNotified = invalidNotified + credential.id
                     invalidAlerts += InvalidCredentialAlert(

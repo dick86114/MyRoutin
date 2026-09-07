@@ -75,6 +75,7 @@ data class RefreshWorkPlan(
     val intervalMinutes: Long,
     val requireUnmetered: Boolean,
     val retryOnFailure: Boolean,
+    val requireBatteryNotLow: Boolean,
 )
 
 /**
@@ -88,6 +89,12 @@ object RefreshScheduling {
 
     /** WorkManager refuses periodic intervals below 15 minutes; shorter settings clamp up. */
     const val MIN_PERIODIC_INTERVAL_MINUTES = 15L
+
+    /**
+     * Settings intervals at/above this value also wait for a battery that is not low;
+     * shorter intervals skip the constraint (explicit low-battery policy, see [plan]).
+     */
+    const val BATTERY_CONSTRAINT_MIN_INTERVAL_MINUTES = 15
 
     /**
      * Returns the plan for the given settings, or `null` when background refresh is
@@ -104,6 +111,11 @@ object RefreshScheduling {
             intervalMinutes = maxOf(MIN_PERIODIC_INTERVAL_MINUTES, refreshIntervalMinutes.toLong()),
             requireUnmetered = wifiOnly,
             retryOnFailure = retryOnFailure,
+            // Low-battery policy: at the standard 15/30-minute cadence the refresh waits
+            // for a battery that is not low; short intervals (1/5 min, already clamped to
+            // 15 for scheduling) keep refreshing on low battery so users who explicitly
+            // asked for near-real-time monitoring are not silently starved.
+            requireBatteryNotLow = refreshIntervalMinutes >= BATTERY_CONSTRAINT_MIN_INTERVAL_MINUTES,
         )
     }
 
@@ -112,6 +124,7 @@ object RefreshScheduling {
             .setRequiredNetworkType(
                 if (plan.requireUnmetered) NetworkType.UNMETERED else NetworkType.CONNECTED,
             )
+            .setRequiresBatteryNotLow(plan.requireBatteryNotLow)
             .build()
         return PeriodicWorkRequestBuilder<RefreshWorker>(plan.intervalMinutes, TimeUnit.MINUTES)
             .setConstraints(constraints)
