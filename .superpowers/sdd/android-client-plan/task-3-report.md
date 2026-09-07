@@ -126,3 +126,41 @@
 
 - 本机为 Xcode 26.6 / macOS 26.5 SDK，尚未在 CI 要求的 Xcode 26.3 环境运行。
 - listener 底层系统 failure 的具体 errno 仍由 Network.framework 提供；代码已统一处理 `.failed` 回调。
+
+---
+
+# Concurrent Start Reliability Fix Report (Round 4)
+
+## Result
+
+已修复并发 start 测试的可靠性缺陷。上一版通过「外部 Task 的 value + timeout」和等待 `.waitingForAndroid` 后再调用第二次 start 的 latch 方案都不可靠：latch 与 listener `.ready` 之间存在竞态，第二次 start 会合法地返回缓存 payload 而非 `.alreadyStarting`。新实现将两次 start 调用背靠背并发地提交到同一 throwing task group 中：actor 的 `isStarting` 保证恰好一个调用被拒绝；先完成的一个必然是被拒调用（pending 的调用在 `stop()` 释放前无法完成），断言其为 `.alreadyStarting`，成功则明确 XCTFail；另一个调用在 `stop()` 与 3 秒 watchdog 的双重有界内结束（成功或 cancellation/error 均可）。所有 await 均在结构化 task group 内，超时会级联取消 pending 的 start（生产端 `start()` 带 `onCancel` → `stop()` → resume CancellationError），不会留下等待的非结构化任务。保留了上一代理写入的有效改动（各关键 await 的 `withTimeout` 包装等），未修改生产代码。
+
+## Changes made with file paths
+
+- `RoutinUsageTests/TransferServerTests.swift`
+  - 重写并发 start 测试：移除外部 Task + timeout 吞错方案与不可靠的 `.waitingForAndroid` latch，改为背靠背并发两次 `start()` + 动态标注（先完成者必须是被拒调用）。
+  - 第二个 start 成功返回 payload 时明确 `XCTFail`，失败时断言具体为 `.alreadyStarting`（含非 `TransferServerError` 的失败路径）。
+  - 首个（pending）start 的完成由 `stop()` 和 group watchdog 双重有界，超时抛错前会取消全部子任务；被取消的 watchdog 静默退出，不污染结果。
+  - 保留上一轮对 `testServerCanStartOnLoopbackAndStopOnce`、`testExpiredCachedPayloadCannotBeReturned` 等关键 await 的有界 timeout 改动。
+
+## Validation command and observed output
+
+- `xcodebuild test ... -only-testing:RoutinUsageTests/TransferServerTests/testConcurrentStartIsRejectedAndFirstCallIsReleasedByStop -test-iterations 20 CODE_SIGNING_ALLOWED=NO`
+  - PASS: 20/20 iterations passed（单次 ≤10ms，验证拒绝路径确定性成立）。
+- `xcodebuild test ... -only-testing:RoutinUsageTests/TransferSessionTests -only-testing:RoutinUsageTests/TransferServerTests CODE_SIGNING_ALLOWED=NO`
+  - PASS: 13 tests（9 TransferServerTests + 4 TransferSessionTests），0 failures。
+- `scripts/test.sh`
+  - PASS: 499 tests，0 failures（运行两次均通过）。
+- `git diff --check`
+  - PASS: no whitespace errors。
+
+## Assumptions
+
+- 「第二个 start」按动态语义标注：并发两次调用中先完成、被 actor 以 `isStarting` 拒绝的那个即第二个调用；其成功（返回缓存 payload）视为违反并发拒绝约定并 XCTFail。
+- listener `.ready` 先于第二次调用触发的场景（缓存 payload 返回）属于正确的生产行为，不属于并发拒绝路径；测试通过背靠背调用使该竞态窗口不再影响断言。
+- Task 4 AEAD、Mac UI、Android 或二维码图像渲染仍不在本次修复范围。
+
+## Blockers/remaining risks
+
+- 生产端 `TransferServer.start()` 在 `listener.start` 与 continuation 存储之间存在极窄窗口：若 `stop()` 恰好在其间完成，continuation 将永不被 resume，调用方即使取消也会挂起（`onCancel` 的 `stop()` 因 `isStopped` guard 直接返回）。本次范围禁止修改生产代码，测试与既有版本一样未覆盖该窗口；建议后续生产修复（如 stop 时兜底 resume 或 start 结尾检查 isStopped）。
+- 本机为 Xcode 26.6 / macOS 26.5 SDK，尚未在 CI 要求的 Xcode 26.3 环境运行。

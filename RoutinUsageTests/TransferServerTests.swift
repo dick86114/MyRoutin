@@ -2,8 +2,28 @@ import Network
 import XCTest
 @testable import RoutinUsage
 
+/// Outcome of one `TransferServer.start()` call. Recorded inside structured
+/// group children only, so no unstructured task outlives a test timeout.
+private enum TransferStartOutcome: Sendable {
+    case returned(TransferQRCodePayload)
+    case failed(String)
+}
+
+private func transferServerStartOutcome(for server: TransferServer) async -> TransferStartOutcome {
+    do {
+        return .returned(try await server.start())
+    } catch {
+        return .failed(String(describing: error))
+    }
+}
+
 final class TransferServerTests: XCTestCase {
     private enum TestTimeout: Error { case timedOut }
+
+    private struct ConcurrentStartOutcome: Sendable {
+        var rejected: TransferStartOutcome?
+        var released: TransferStartOutcome?
+    }
 
     private func withTimeout<T>(seconds: Double, operation: @escaping @Sendable () async throws -> T) async throws -> T {
         try await withThrowingTaskGroup(of: T.self) { group in
@@ -17,8 +37,47 @@ final class TransferServerTests: XCTestCase {
         }
     }
 
-    private func withTimeoutResult<T>(seconds: Double, operation: @escaping @Sendable () async -> T) async -> T? {
-        try? await withTimeout(seconds: seconds, operation: operation)
+    private func concurrentStartOutcome(for server: TransferServer) async throws -> ConcurrentStartOutcome {
+        try await withThrowingTaskGroup(of: (Int, TransferStartOutcome).self) { group in
+            var rejected: TransferStartOutcome?
+            var released: TransferStartOutcome?
+            // Two back-to-back concurrent start() calls. The actor serializes
+            // them: the call that runs second observes isStarting and must be
+            // rejected, while the other stays pending on its continuation.
+            group.addTask { (1, await transferServerStartOutcome(for: server)) }
+            group.addTask { (2, await transferServerStartOutcome(for: server)) }
+            // Bounded watchdog: cancelling this group reaches a pending start
+            // via start()'s cancellation handler, so no task is left waiting.
+            group.addTask { () -> (Int, TransferStartOutcome) in
+                do {
+                    try await Task.sleep(nanoseconds: 3_000_000_000)
+                    throw TestTimeout.timedOut
+                } catch is CancellationError {
+                    return (0, .failed("cancelled watchdog"))
+                }
+            }
+            for try await (label, outcome) in group {
+                switch label {
+                case 1, 2:
+                    if rejected == nil {
+                        // First call to finish must be the rejected one: the
+                        // pending call cannot complete before stop() releases it.
+                        rejected = outcome
+                        await server.stop()
+                    } else {
+                        released = outcome
+                    }
+                default:
+                    break
+                }
+                if rejected != nil, released != nil {
+                    group.cancelAll()
+                    break
+                }
+            }
+            guard let rejected, let released else { throw TestTimeout.timedOut }
+            return ConcurrentStartOutcome(rejected: rejected, released: released)
+        }
     }
 
     func testQRCodeContainsOnlyTransferMetadataAndRoundTrips() throws {
@@ -32,7 +91,6 @@ final class TransferServerTests: XCTestCase {
             expiresAt: now.addingTimeInterval(300),
             connectionCode: "123456"
         )
-
         let encoded = try payload.encodedString()
         XCTAssertTrue(encoded.hasPrefix("mytoken-transfer://v1"))
         XCTAssertFalse(encoded.contains("apiKey"))
@@ -51,23 +109,15 @@ final class TransferServerTests: XCTestCase {
     func testPayloadRejectsInvalidPortOrExpiredDate() {
         let values = [0, 65536]
         for port in values {
-            XCTAssertThrowsError(try TransferQRCodePayload(
-                protocolVersion: 1, sessionID: UUID(), host: "127.0.0.1", port: port,
-                macEphemeralPublicKey: Data(repeating: 1, count: 32),
-                expiresAt: Date().addingTimeInterval(300), connectionCode: "123456"
-            ))
+            XCTAssertThrowsError(try TransferQRCodePayload(protocolVersion: 1, sessionID: UUID(), host: "127.0.0.1", port: port, macEphemeralPublicKey: Data(repeating: 1, count: 32), expiresAt: Date().addingTimeInterval(300), connectionCode: "123456"))
         }
-        let expiredPayload = try! TransferQRCodePayload(
-            protocolVersion: 1, sessionID: UUID(), host: "127.0.0.1", port: 1234,
-            macEphemeralPublicKey: Data(repeating: 1, count: 32),
-            expiresAt: Date(timeIntervalSince1970: 1), connectionCode: "123456"
-        )
+        let expiredPayload = try! TransferQRCodePayload(protocolVersion: 1, sessionID: UUID(), host: "127.0.0.1", port: 1234, macEphemeralPublicKey: Data(repeating: 1, count: 32), expiresAt: Date(timeIntervalSince1970: 1), connectionCode: "123456")
         XCTAssertThrowsError(try expiredPayload.validate())
     }
 
     func testServerCanStartOnLoopbackAndStopOnce() async throws {
         let server = TransferServer(host: "127.0.0.1")
-        let payload = try await server.start()
+        let payload = try await withTimeout(seconds: 2) { try await server.start() }
         XCTAssertEqual(payload.host, "127.0.0.1")
         XCTAssertGreaterThan(payload.port, 0)
         await server.stop()
@@ -76,21 +126,17 @@ final class TransferServerTests: XCTestCase {
 
     func testConcurrentStartIsRejectedAndFirstCallIsReleasedByStop() async throws {
         let server = TransferServer(host: "127.0.0.1")
-        let first = Task { try? await server.start() }
-        let second = Task { () -> TransferServerError? in
-            do {
-                _ = try await withTimeout(seconds: 1) { try await server.start() }
-                return nil
-            } catch let error as TransferServerError {
-                return error
-            } catch {
-                return nil
-            }
+        let outcome = try await concurrentStartOutcome(for: server)
+        guard let rejected = outcome.rejected else { throw TestTimeout.timedOut }
+        switch rejected {
+        case .returned(let payload):
+            XCTFail("second start must be rejected, but returned cached payload for port \(payload.port)")
+        case .failed(let message):
+            XCTAssertEqual(message, String(describing: TransferServerError.alreadyStarting), "second start must fail with .alreadyStarting, got: \(message)")
         }
-        let secondResult = try await withTimeout(seconds: 1) { await second.value }
-        XCTAssertEqual(secondResult, .alreadyStarting, "second start must be rejected")
-        await server.stop()
-        _ = await withTimeoutResult(seconds: 1) { await first.value }
+        // The helper's watchdog and stop() bound the released call: reaching
+        // this line means it ended within the limit, with success or cancellation.
+        XCTAssertNotNil(outcome.released, "pending start must complete within the bounded timeout")
     }
 
     func testRealLocalHandshakeAndDisconnectTerminatesSession() async throws {
@@ -147,7 +193,7 @@ final class TransferServerTests: XCTestCase {
 
     func testExpiredCachedPayloadCannotBeReturned() async throws {
         let server = TransferServer(host: "127.0.0.1", timeout: 0.02)
-        _ = try await server.start()
+        _ = try await withTimeout(seconds: 2) { try await server.start() }
         try await Task.sleep(nanoseconds: 100_000_000)
         do {
             _ = try await server.start()
