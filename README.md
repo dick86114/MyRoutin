@@ -25,6 +25,25 @@ MyToken 是一个 macOS 菜单栏用量监控工具，用于在本地查看多�
 brew install xcodegen
 ```
 
+## Android 客户端
+
+MyToken 提供 Android 伴侣应用（**要求 Android 10+**）：通过"迁移到 Android"
+扫码把 Mac 上的供应商凭证端到端加密迁移到手机，即可在 Android 上查看用量、
+余额与重置时间，接收用量提醒并完成 Routin 每日签到。
+
+- 构建与模块结构：见 `docs/android/README.md`。
+- 迁移前置条件与失败排查：见 `docs/android/transfer-troubleshooting.md`。
+- 跨端迁移协议：见 `shared/transfer-schema/wire-contract.md`。
+
+```bash
+cd android
+./gradlew test                 # 全模块 JVM 单元测试
+./gradlew :app:assembleDebug   # 构建 Debug APK
+```
+
+Android 端凭证密钥经 Android Keystore 加密保存在本机（不进入云备份）；
+迁移过程密钥仅以密文经局域网点对点传输。
+
 ## 安装使用
 
 1. 下载对应版本的安装包（例如 `MyToken-1.2.0-arm64.dmg`），或从 GitHub Release 下载正式版本。
@@ -95,15 +114,21 @@ scripts/build-dmg.sh
 
 每次 push 和 Pull Request 都会运行 `.github/workflows/ci.yml`，使用 Xcode 26.3，执行完整测试并上传 DMG 构建产物。
 
+`android/` 目录的变更会触发 `.github/workflows/android-ci.yml`：全模块 JVM
+单元测试与 instrumented 测试编译验证；`connectedAndroidTest` 需要配置
+self-hosted runner（带 KVM 或真机）。
+
 发布版本时，在 GitHub Actions 中手动运行“发布版本”工作流，填写三段式版本号（例如 `1.2.0`）和 Markdown 发布说明。工作流会创建 `v1.2.0` 标签、生成 GitHub Release 并上传 DMG。
 
 ## 项目结构
 
 ```text
-RoutinUsage/       应用源码
-RoutinUsageTests/  单元测试
+RoutinUsage/       macOS 应用源码
+RoutinUsageTests/  macOS 单元测试
+android/           Android 客户端（多模块，见 docs/android/README.md）
+shared/            跨端共享 schema 与 fixture
 scripts/           测试、DMG 构建和 Xcode 版本校验脚本
-docs/              首次运行说明
+docs/              首次运行说明与 Android 文档
 project.yml        XcodeGen 工程配置
 ```
 
