@@ -46,6 +46,19 @@ dependencies {
     implementation(project(":core"))
     implementation(project(":data"))
     implementation(project(":domain"))
+    implementation(project(":provider"))
+    implementation(project(":feature-home"))
+    implementation(project(":feature-credentials"))
+    implementation(project(":feature-settings"))
+    implementation(project(":feature-transfer"))
+
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation(project(":feature-home"))
+    implementation(project(":feature-credentials"))
+    implementation(project(":feature-settings"))
+    implementation(project(":feature-transfer"))
+
+    implementation("androidx.room:room-runtime:2.6.1")
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
@@ -57,6 +70,10 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.13")
     testImplementation("androidx.test:core-ktx:1.6.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.compose.ui:ui-test-manifest")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.compose.ui:ui-test-manifest")
 
     androidTestImplementation(project(":feature-transfer"))
     androidTestImplementation(project(":core"))
