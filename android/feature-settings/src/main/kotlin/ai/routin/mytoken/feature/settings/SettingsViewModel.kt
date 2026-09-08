@@ -2,8 +2,9 @@ package ai.routin.mytoken.feature.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -24,6 +25,7 @@ class SettingsViewModel(
     private val refreshStore: RefreshSettingsStore,
     private val displayStore: DisplaySettingsStore,
     private val notificationStore: NotificationSettingsStore,
+    private val updateController: AppUpdateController,
 ) : ViewModel() {
 
     val state: StateFlow<SettingsUiState> = combine(
@@ -34,6 +36,17 @@ class SettingsViewModel(
         currentNotifications = notifications
         SettingsUiState(isLoading = false, refresh = refresh, display = display, notifications = notifications)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUiState())
+
+    val updateState: StateFlow<AppUpdateUiState> = updateController.state
+
+    fun checkForUpdates() = updateController.checkForUpdates()
+
+    fun downloadAndInstall(version: String, downloadUrl: String) =
+        updateController.downloadAndInstall(version, downloadUrl)
+
+    fun openInstallPermissionSettings() = updateController.openInstallPermissionSettings()
+
+    fun installDownloadedUpdate() = updateController.installDownloadedUpdate()
 
     @Volatile
     private var currentNotifications: NotificationSettings = NotificationSettings()

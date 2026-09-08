@@ -6,15 +6,18 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import ai.routin.mytoken.core.ui.SectionCard
@@ -28,6 +31,7 @@ import androidx.compose.ui.unit.dp
 fun SettingsScreen(
     state: SettingsUiState,
     appVersion: String,
+    updateState: AppUpdateUiState = AppUpdateUiState.Idle,
     onAutoRefreshChange: (Boolean) -> Unit,
     onIntervalChange: (Int) -> Unit,
     onWifiOnlyChange: (Boolean) -> Unit,
@@ -41,6 +45,10 @@ fun SettingsScreen(
     onHighThresholdChange: (Int) -> Unit = {},
     notificationPermissionGranted: Boolean = true,
     onRequestNotificationPermission: () -> Unit = {},
+    onCheckForUpdates: () -> Unit = {},
+    onDownloadAndInstall: (String, String) -> Unit = { _, _ -> },
+    onOpenInstallPermissionSettings: () -> Unit = {},
+    onInstallDownloadedUpdate: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -109,7 +117,15 @@ fun SettingsScreen(
             item(key = "about") {
                 SectionCard(title = "关于") {
                     Text(text = "MyToken $appVersion", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    UpdateSection(
+                        state = updateState,
+                        currentVersion = appVersion,
+                        onCheckForUpdates = onCheckForUpdates,
+                        onDownloadAndInstall = onDownloadAndInstall,
+                        onOpenInstallPermissionSettings = onOpenInstallPermissionSettings,
+                        onInstallDownloadedUpdate = onInstallDownloadedUpdate,
+                    )
                     Text(
                         text = "在手机上查看多家大模型供应商的用量、余额、剩余额度与重置时间。凭证只保存在本机。",
                         style = MaterialTheme.typography.bodySmall,
@@ -118,6 +134,99 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun UpdateSection(
+    state: AppUpdateUiState,
+    currentVersion: String,
+    onCheckForUpdates: () -> Unit,
+    onDownloadAndInstall: (String, String) -> Unit,
+    onOpenInstallPermissionSettings: () -> Unit,
+    onInstallDownloadedUpdate: () -> Unit,
+) {
+    when (state) {
+        is AppUpdateUiState.Checking -> {
+            Text(
+                text = "正在检查更新...",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(onClick = onCheckForUpdates, enabled = false) { Text(text = "检测更新") }
+        }
+
+        is AppUpdateUiState.Downloading -> {
+            val progress = state.progress
+            Text(
+                text = if (progress == null) "正在下载更新..." else "正在下载更新 ${(progress * 100).toInt()}%",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            LinearProgressIndicator(
+                progress = { ((progress ?: 0f).coerceIn(0f, 1f)) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        is AppUpdateUiState.Available -> {
+            Text(
+                text = "发现新版本 v${state.version}",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (state.releaseNotes.isNotBlank()) {
+                MarkdownText(
+                    markdown = state.releaseNotes,
+                )
+            }
+            Button(onClick = { onDownloadAndInstall(state.version, state.downloadUrl) }) {
+                Text(text = "下载并安装")
+            }
+        }
+
+        is AppUpdateUiState.NeedsInstallPermission -> {
+            Text(
+                text = "安装更新前，需要允许 MyToken 安装未知来源应用。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = onOpenInstallPermissionSettings) {
+                Text(text = "打开安装权限设置")
+            }
+            TextButton(onClick = onInstallDownloadedUpdate) { Text(text = "授权后继续安装") }
+        }
+
+        is AppUpdateUiState.ReadyToInstall -> {
+            Text(
+                text = "v${state.version} 已下载完成。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(onClick = onInstallDownloadedUpdate) { Text(text = "安装更新") }
+        }
+
+        is AppUpdateUiState.Error -> {
+            Text(
+                text = state.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Button(onClick = onCheckForUpdates) { Text(text = "重试") }
+        }
+
+        is AppUpdateUiState.UpToDate -> {
+            Text(
+                text = "v$currentVersion 已是最新版本。"
+                    .takeIf { state.currentVersion == currentVersion }
+                    ?: "当前已是最新版本。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(onClick = onCheckForUpdates) { Text(text = "检测更新") }
+        }
+
+        AppUpdateUiState.Idle -> Button(onClick = onCheckForUpdates) { Text(text = "检测更新") }
     }
 }
 

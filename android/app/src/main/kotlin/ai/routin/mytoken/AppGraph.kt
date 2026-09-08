@@ -14,6 +14,7 @@ import ai.routin.mytoken.feature.settings.DataStoreDisplaySettingsStore
 import ai.routin.mytoken.feature.transfer.TransferClient
 import ai.routin.mytoken.feature.transfer.TransferRepositoryImpl
 import ai.routin.mytoken.provider.defaultUsageProviders
+import ai.routin.mytoken.update.GitHubAppUpdateController
 import android.content.Context
 import androidx.room.Room
 
@@ -77,5 +78,18 @@ class AppGraph(context: Context) {
 
     val transferRepository: TransferRepositoryImpl by lazy {
         TransferRepositoryImpl(TransferClient(), credentialRepository)
+    }
+
+    val appUpdateController: GitHubAppUpdateController by lazy {
+        val versionName = runCatching {
+            appContext.packageManager
+                .getPackageInfo(appContext.packageName, 0)
+                .versionName
+        }.getOrNull() ?: "0.1.0"
+
+        GitHubAppUpdateController(
+            context = appContext,
+            currentVersionName = versionName,
+        )
     }
 }

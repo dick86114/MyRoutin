@@ -128,7 +128,12 @@ fun MyTokenApp(
         CredentialListViewModel(graph.credentialRepository, graph.credentialOrderStore)
     }
     val settingsViewModel = remember {
-        SettingsViewModel(graph.refreshSettingsStore, graph.displaySettingsStore, graph.notificationSettingsStore)
+        SettingsViewModel(
+            refreshStore = graph.refreshSettingsStore,
+            displayStore = graph.displaySettingsStore,
+            notificationStore = graph.notificationSettingsStore,
+            updateController = graph.appUpdateController,
+        )
     }
 
     val pagerState = rememberPagerState(initialPage = selectedTab, pageCount = { 3 })
@@ -226,9 +231,11 @@ fun MyTokenApp(
                         }
                         else -> {
                             val settingsState by settingsViewModel.state.collectAsState()
+                            val updateState by settingsViewModel.updateState.collectAsState()
                             SettingsScreen(
                                 state = settingsState,
                                 appVersion = appVersion,
+                                updateState = updateState,
                                 onAutoRefreshChange = settingsViewModel::setAutoRefreshEnabled,
                                 onIntervalChange = settingsViewModel::setRefreshIntervalMinutes,
                                 onWifiOnlyChange = settingsViewModel::setWifiOnly,
@@ -242,6 +249,10 @@ fun MyTokenApp(
                                 onHighThresholdChange = settingsViewModel::setHighAlertThreshold,
                                 notificationPermissionGranted = notificationPermissionGranted,
                                 onRequestNotificationPermission = onRequestNotificationPermission,
+                                onCheckForUpdates = settingsViewModel::checkForUpdates,
+                                onDownloadAndInstall = settingsViewModel::downloadAndInstall,
+                                onOpenInstallPermissionSettings = settingsViewModel::openInstallPermissionSettings,
+                                onInstallDownloadedUpdate = settingsViewModel::installDownloadedUpdate,
                             )
                         }
                     }
