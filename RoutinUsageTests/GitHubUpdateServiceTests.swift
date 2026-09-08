@@ -61,6 +61,30 @@ final class GitHubUpdateServiceTests: XCTestCase {
         XCTAssertNil(update)
     }
 
+    func test主版本Tag发布也能被检测到() async throws {
+        // 真实发布形态：主 CI 发 v 前缀 tag（带 DMG），平台发布走 macos-v / android-v。
+        let body = """
+        [
+          {"tag_name":"v5.1.14","html_url":"https://github.com/dick86114/MyToken/releases/tag/v5.1.14","assets":[{"name":"MyToken-5.1.14-arm64.dmg","browser_download_url":"https://github.com/dick86114/MyToken/releases/download/v5.1.14/MyToken-5.1.14-arm64.dmg"}],"body":"5.1.14"},
+          {"tag_name":"android-v5.1.14","assets":[{"name":"MyToken-5.1.14-android.apk","browser_download_url":"https://github.com/dick86114/MyToken/releases/download/android-v5.1.14/MyToken-5.1.14-android.apk"}]},
+          {"tag_name":"macos-v5.1.9","assets":[{"name":"MyToken-5.1.9-arm64.dmg","browser_download_url":"https://github.com/dick86114/MyToken/releases/download/macos-v5.1.9/MyToken-5.1.9-arm64.dmg"}]}
+        ]
+        """
+        let stub = URLProtocolStub.makeSession { request in
+            let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (response, Data(body.utf8))
+        }
+        let service = GitHubUpdateService(session: stub.session, currentVersion: "5.1.13")
+
+        let update = try await service.checkForUpdate()
+
+        XCTAssertEqual(update?.version, "5.1.14")
+        XCTAssertEqual(
+            update?.downloadURL.absoluteString,
+            "https://github.com/dick86114/MyToken/releases/download/v5.1.14/MyToken-5.1.14-arm64.dmg"
+        )
+    }
+
     func testGitHubAPI限流时回退到AtomFeed() async throws {
         let atom = """
         <?xml version="1.0" encoding="UTF-8"?>

@@ -163,8 +163,16 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
             let decoder = JSONDecoder()
             if data.first == 91 { // 兼容历史测试与旧服务返回的单个 Release 对象。
                 let releases = try decoder.decode([ReleaseDTO].self, from: data)
-                guard let platformRelease = releases.first(where: {
-                    $0.tagName.hasPrefix("macos-v")
+                // 主发布走 `v` 前缀、平台发布走 `macos-v` 前缀，两种都可能是最新
+                // macOS 包；按版本号取最大，不依赖列表顺序。
+                let macOSCandidates = releases
+                    .filter { Self.isMacOSRelease(tagName: $0.tagName) }
+                    .filter { $0.assets.contains { $0.name.hasSuffix(".dmg") } }
+                guard let platformRelease = macOSCandidates.max(by: {
+                    Self.compare(
+                        Self.normalize($0.tagName),
+                        Self.normalize($1.tagName)
+                    ) == .orderedAscending
                 }) else {
                     await logWriter.log(level: .info, event: "update_check_succeeded", details: "result=no_macos_release")
                     return nil
@@ -191,7 +199,7 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
             await logWriter.log(level: .error, event: "update_check_asset_missing", details: "version=\(version)")
             throw UpdateServiceError.invalidResponse
         }
-        guard let releaseURL = URL(string: rewrittenString(release.htmlURL, mirror: mirror)) else {
+        guard let releaseURL = URL(string: rewrittenString(release.htmlURL ?? "", mirror: mirror)) else {
             await logWriter.log(level: .error, event: "update_check_release_url_invalid", details: "version=\(version)")
             throw UpdateServiceError.invalidResponse
         }
@@ -408,7 +416,7 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
 
     private struct ReleaseDTO: Decodable {
         let tagName: String
-        let htmlURL: String
+        let htmlURL: String?
         let body: String?
         let publishedAt: String?
         let assets: [AssetDTO]
@@ -428,6 +436,11 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
     private static func normalize(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "^(macos-|android-)?v", with: "", options: .regularExpression)
+    }
+
+    /// 主发布（vX.Y.Z）与平台发布（macos-vX.Y.Z）都算 macOS 更新候选。
+    static func isMacOSRelease(tagName: String) -> Bool {
+        tagName.range(of: "^(macos-)?v[0-9]+\\.[0-9]+\\.[0-9]+$", options: .regularExpression) != nil
     }
     private static func compare(_ lhs: String, _ rhs: String) -> ComparisonResult {
         let a = lhs.split(separator: ".").compactMap { Int($0) }
