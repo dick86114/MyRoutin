@@ -39,14 +39,32 @@ internal object CredentialWidgetUpdater {
                     credential = null,
                     snapshot = null,
                     statusText = "尚未选择凭证",
+                    items = emptyList(),
                 ),
             )
-            manager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_metrics)
             return
         }
         val credential = graph.credentialRepository.observeCredentials().first().firstOrNull { it.id == credentialId }
+        if (credential == null) {
+            manager.updateAppWidget(
+                appWidgetId,
+                CredentialWidgetRenderer.render(
+                    context = context,
+                    appWidgetId = appWidgetId,
+                    credential = null,
+                    snapshot = null,
+                    statusText = "凭证不存在，请重新选择",
+                    items = emptyList(),
+                ),
+            )
+            return
+        }
         val snapshot = runCatching { graph.credentialRepository.cachedSnapshot(credentialId) }.getOrNull()
         val usageState = graph.refreshUseCase.states.value[credentialId]
+        val items = CredentialWidgetRenderer.displayItems(
+            credential.providerId,
+            snapshot?.takeIf { it.credentialId == credential.id },
+        )
         val statusText = when {
             usageState?.status == RefreshStatus.Loading -> "正在加载"
             usageState?.status == RefreshStatus.Disabled -> "凭证已停用 · 显示缓存数据"
@@ -65,9 +83,9 @@ internal object CredentialWidgetUpdater {
             credential = credential,
             snapshot = snapshot,
             statusText = statusText,
+            items = items,
         )
         manager.updateAppWidget(appWidgetId, views)
-        manager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_metrics)
     }
 
     private fun formatTime(instant: java.time.Instant): String =

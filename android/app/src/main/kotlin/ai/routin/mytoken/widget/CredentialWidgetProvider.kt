@@ -17,7 +17,11 @@ class CredentialWidgetProvider : AppWidgetProvider() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 val graph = (context.applicationContext as MyTokenApplication).graph
-                CredentialWidgetUpdater.updateAll(context, graph)
+                kotlinx.coroutines.withTimeout(15_000L) {
+                    CredentialWidgetUpdater.updateAll(context, graph)
+                }
+            } catch (_: Exception) {
+                // 超时保护：系统会在下次 APPWIDGET_UPDATE 时重试
             } finally {
                 pendingResult.finish()
             }

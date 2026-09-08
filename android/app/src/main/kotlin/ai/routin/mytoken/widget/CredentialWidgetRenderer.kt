@@ -40,16 +40,21 @@ internal object CredentialWidgetRenderer {
         credential: Credential?,
         snapshot: UsageSnapshot?,
         statusText: String,
+        items: List<WidgetMetricDisplay>,
     ): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.credential_widget)
-        val serviceIntent = CredentialWidgetViewsService.bindIntent(context, appWidgetId)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            views.setRemoteAdapter(R.id.widget_metrics, serviceIntent)
+
+        views.removeAllViews(R.id.widget_metrics_container)
+        if (items.isEmpty()) {
+            views.setViewVisibility(R.id.widget_metrics_container, android.view.View.GONE)
+            views.setViewVisibility(R.id.widget_metrics_empty, android.view.View.VISIBLE)
         } else {
-            @Suppress("DEPRECATION")
-            views.setRemoteAdapter(appWidgetId, R.id.widget_metrics, serviceIntent)
+            views.setViewVisibility(R.id.widget_metrics_container, android.view.View.VISIBLE)
+            views.setViewVisibility(R.id.widget_metrics_empty, android.view.View.GONE)
+            items.take(MAX_WIDGET_ITEMS).forEach { item ->
+                views.addView(R.id.widget_metrics_container, metricItemViews(context, item))
+            }
         }
-        views.setEmptyView(R.id.widget_metrics, R.id.widget_metrics_empty)
 
         if (credential == null) {
             views.setTextViewText(R.id.widget_provider, context.getString(R.string.app_name))
@@ -76,13 +81,15 @@ internal object CredentialWidgetRenderer {
         )
         views.setOnClickPendingIntent(R.id.widget_name, configPendingIntent(context, appWidgetId))
         views.setOnClickPendingIntent(R.id.widget_refresh, WidgetRefresher.refreshPendingIntent(context, appWidgetId))
-        views.setPendingIntentTemplate(
-            R.id.widget_metrics,
+        views.setOnClickPendingIntent(
+            R.id.widget_metrics_container,
             detailPendingIntent(context, appWidgetId, credential.id),
         )
         views.setTextViewText(R.id.widget_status, statusText)
         return views
     }
+
+    private const val MAX_WIDGET_ITEMS = 6
 
     private fun renderSubscription(views: RemoteViews, snapshot: UsageSnapshot?) {
         val start = snapshot?.subscriptionStartAt

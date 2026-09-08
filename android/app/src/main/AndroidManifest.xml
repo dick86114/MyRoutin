@@ -52,11 +52,6 @@
                 android:resource="@xml/credential_widget_info" />
         </receiver>
 
-        <service
-            android:name=".widget.CredentialWidgetViewsService"
-            android:exported="false"
-            android:permission="android.permission.BIND_REMOTEVIEWS" />
-
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.update.fileprovider"
