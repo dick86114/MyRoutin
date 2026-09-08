@@ -38,7 +38,6 @@ class CredentialWidgetProvider : AppWidgetProvider() {
                                 credential = null,
                                 snapshot = null,
                                 statusText = "打开应用后重试",
-                                items = emptyList(),
                             ),
                         )
                     }
