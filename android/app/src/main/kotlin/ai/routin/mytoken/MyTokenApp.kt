@@ -51,8 +51,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -191,7 +196,7 @@ fun MyTokenApp(
         },
     ) { padding ->
         Box(modifier = Modifier
-            .padding(padding)
+            .padding(PaddingValues(start = padding.calculateStartPadding(LayoutDirection.Ltr), top = padding.calculateTopPadding(), end = padding.calculateEndPadding(LayoutDirection.Ltr)))
             .fillMaxSize()) {
             if (screen == AppScreen.Home || screen == AppScreen.Credentials || screen == AppScreen.Settings) {
                 HorizontalPager(
