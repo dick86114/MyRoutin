@@ -39,6 +39,14 @@ internal fun statusColor(metric: UsageMetric, percent: Double?, colors: StatusCo
         UsageMetricHealthState.Stale, UsageMetricHealthState.Unknown -> if (percent == null) colors.neutral else colors.secondaryFallback()
     }
 
+/** 百分比驱动变色：和 macOS UsageMetricPresentation.color(for:) 保持一致。 */
+internal fun progressColor(percent: Double?, colors: StatusColors): Color = when {
+    percent == null -> colors.neutral
+    percent >= 80 -> colors.critical
+    percent >= 50 -> colors.warning
+    else -> colors.normal
+}
+
 private fun StatusColors.secondaryFallback(): Color = neutral
 
 internal fun formatDecimal(value: BigDecimal?): String {
@@ -160,7 +168,7 @@ private fun MetricCell(metric: UsageMetric, colors: StatusColors, modifier: Modi
 @Composable
 private fun ProgressCell(metric: UsageMetric, colors: StatusColors, modifier: Modifier = Modifier) {
     val percent = progressPercent(metric)
-    val color = statusColor(metric, percent, colors)
+    val color = progressColor(percent, colors)
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(metric.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -223,7 +231,7 @@ internal fun GLMMetrics(metrics: List<UsageMetric>, modifier: Modifier = Modifie
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 row.forEach { metric ->
                     val percent = progressPercent(metric)
-                    val color = statusColor(metric, percent, statusColors())
+                    val color = progressColor(percent, statusColors())
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(metric.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
@@ -270,7 +278,7 @@ internal fun VolcengineMetrics(metrics: List<UsageMetric>, modifier: Modifier = 
         }
         monthly?.let {
             val percent = progressPercent(it)
-            val color = statusColor(it, percent, colors)
+            val color = progressColor(percent, colors)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(it.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
@@ -310,7 +318,7 @@ internal fun NewAPIMetrics(metrics: List<UsageMetric>, modifier: Modifier = Modi
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         quota?.let {
             val percent = progressPercent(it)
-            val color = statusColor(it, percent, colors)
+            val color = progressColor(percent, colors)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(it.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
