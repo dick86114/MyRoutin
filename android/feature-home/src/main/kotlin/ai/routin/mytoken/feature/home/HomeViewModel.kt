@@ -8,6 +8,7 @@ import ai.routin.mytoken.domain.repository.CredentialRepository
 import ai.routin.mytoken.domain.usage.CredentialUsageState
 import ai.routin.mytoken.domain.usage.RefreshCredentialsUseCase
 import ai.routin.mytoken.domain.usage.RefreshStatus
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import java.time.Clock
@@ -36,6 +37,7 @@ import kotlinx.coroutines.sync.withLock
 /** Data freshness buckets, mirroring the macOS popover freshness semantics. */
 enum class FreshnessLevel { NEVER, JUST_NOW, RECENT, OLD, EXPIRED }
 
+@Immutable
 data class Freshness(val level: FreshnessLevel, val text: String)
 
 /** Formats snapshot age into user-visible freshness labels (刚刚/相对时间/已过期/从未刷新). */
@@ -54,6 +56,7 @@ object FreshnessFormatter {
 }
 
 /** Presentation state of one credential card on the home screen. */
+@Immutable
 data class CredentialCardUi(
     val credential: Credential,
     val status: RefreshStatus,
@@ -64,6 +67,7 @@ data class CredentialCardUi(
 )
 
 /** One collapsible provider section on the home screen. */
+@Immutable
 data class ProviderGroupUi(
     val providerId: ProviderId,
     val displayName: String,
@@ -72,6 +76,7 @@ data class ProviderGroupUi(
 )
 
 /** Whole-screen state rendered by [HomeScreen]. Single source: [HomeViewModel.state]. */
+@Immutable
 data class HomeUiState(
     val isLoading: Boolean = true,
     val cards: List<CredentialCardUi> = emptyList(),
@@ -169,7 +174,7 @@ class HomeViewModel(
             buildState(credentials, usageStates, collapsed, refreshingAll)
         }.stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
+            started = SharingStarted.Eagerly,
             initialValue = HomeUiState(isLoading = true),
         )
 

@@ -44,7 +44,7 @@ import ai.routin.mytoken.core.ui.WalletCardsIcon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -141,6 +141,11 @@ fun MyTokenApp(
         )
     }
 
+    val homeState by homeViewModel.state.collectAsStateWithLifecycle()
+    val listState by credentialListViewModel.state.collectAsStateWithLifecycle()
+    val settingsState by settingsViewModel.state.collectAsStateWithLifecycle()
+    val updateState by settingsViewModel.updateState.collectAsStateWithLifecycle()
+
     val pagerState = rememberPagerState(initialPage = selectedTab, pageCount = { 3 })
     LaunchedEffect(pagerState) {
         androidx.compose.runtime.snapshotFlow { pagerState.currentPage }.collect { page ->
@@ -202,11 +207,11 @@ fun MyTokenApp(
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
-                    beyondViewportPageCount = 1,
+                    beyondViewportPageCount = 2,
+                    key = { it },
                 ) { page ->
                     when (page) {
                         0 -> {
-                            val homeState by homeViewModel.state.collectAsState()
                             HomeScreen(
                                 state = homeState,
                                 onRefreshAll = homeViewModel::refreshAll,
@@ -221,7 +226,6 @@ fun MyTokenApp(
                             )
                         }
                         1 -> {
-                            val listState by credentialListViewModel.state.collectAsState()
                             CredentialListScreen(
                                 state = listState,
                                 onToggleEnabled = credentialListViewModel::toggleEnabled,
@@ -235,8 +239,6 @@ fun MyTokenApp(
                             )
                         }
                         else -> {
-                            val settingsState by settingsViewModel.state.collectAsState()
-                            val updateState by settingsViewModel.updateState.collectAsState()
                             SettingsScreen(
                                 state = settingsState,
                                 appVersion = appVersion,
@@ -266,7 +268,6 @@ fun MyTokenApp(
                 val current = screen
                 when (current) {
                     is AppScreen.Detail -> {
-                    val homeState by homeViewModel.state.collectAsState()
                     val card = homeState.groups
                         .flatMap { it.cards }
                         .firstOrNull { it.credential.id == current.credentialId }
@@ -332,7 +333,7 @@ fun MyTokenApp(
                             credentialId = current.credentialId,
                         )
                     }
-                    val editorState by editorViewModel.state.collectAsState()
+                    val editorState by editorViewModel.state.collectAsStateWithLifecycle()
                     CredentialEditorScreen(
                         state = editorState,
                         onBack = { goBack() },
@@ -357,7 +358,7 @@ fun MyTokenApp(
                     val transferViewModel = remember {
                         TransferViewModel(graph.transferRepository)
                     }
-                    val transferState by transferViewModel.state.collectAsState()
+                    val transferState by transferViewModel.state.collectAsStateWithLifecycle()
                     when (val state = transferState) {
                         is TransferUiState.Idle -> TransferScannerScreen(
                             isActive = true,

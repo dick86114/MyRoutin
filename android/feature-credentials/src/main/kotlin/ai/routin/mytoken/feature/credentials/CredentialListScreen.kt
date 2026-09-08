@@ -180,13 +180,18 @@ private fun CredentialRow(
             .fillMaxWidth()
             .then(dragHandleModifier)
             .zIndex(if (isDragging) 1f else 0f)
-            .graphicsLayer {
-                scaleX = if (isDragging) 1.02f else 1f
-                scaleY = if (isDragging) 1.02f else 1f
-                shadowElevation = elevation.toPx()
-                shape = androidx.compose.ui.graphics.RectangleShape
-                clip = false
-            },
+            .then(
+                if (isDragging) {
+                    Modifier.graphicsLayer {
+                        scaleX = 1.02f
+                        scaleY = 1.02f
+                        shadowElevation = elevation.toPx()
+                        clip = false
+                    }
+                } else {
+                    Modifier
+                }
+            ),
         shape = RoundedCornerShape(16.dp),
     ) {
         Row(

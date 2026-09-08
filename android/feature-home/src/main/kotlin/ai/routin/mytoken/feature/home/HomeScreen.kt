@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -52,12 +53,16 @@ fun HomeScreen(
     onAddManually: () -> Unit,
 ) {
     var selectedProvider by remember { mutableStateOf<ProviderId?>(null) }
-    val allCards = state.cards
-        .filter { it.status != ai.routin.mytoken.domain.usage.RefreshStatus.Disabled }
-    val visibleProviders = state.groups.map { it.providerId }
-    val visibleCards = selectedProvider
-        ?.let { provider -> allCards.filter { it.credential.providerId == provider } }
-        ?: allCards
+    val listState = rememberLazyListState()
+    val allCards = remember(state.cards) {
+        state.cards.filter { it.status != ai.routin.mytoken.domain.usage.RefreshStatus.Disabled }
+    }
+    val visibleProviders = remember(state.groups) { state.groups.map { it.providerId } }
+    val visibleCards = remember(allCards, selectedProvider) {
+        selectedProvider
+            ?.let { provider -> allCards.filter { it.credential.providerId == provider } }
+            ?: allCards
+    }
 
     Scaffold(
         topBar = {
@@ -130,6 +135,7 @@ fun HomeScreen(
                     }
 
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 96.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),

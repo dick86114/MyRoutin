@@ -69,13 +69,6 @@ fun LiquidGlassSurface(
             )
         )
     }
-    val sheenBrush = remember(isDark) {
-        Brush.verticalGradient(
-            0f to Color.White.copy(alpha = if (isDark) 0.10f else 0.34f),
-            0.18f to Color.Transparent,
-            1f to Color.Black.copy(alpha = if (isDark) 0.10f else 0.03f),
-        )
-    }
     Box(
         modifier = modifier
             .clip(shape)
@@ -83,11 +76,6 @@ fun LiquidGlassSurface(
             .border(width = Dp.Hairline, brush = borderBrush, shape = shape),
         contentAlignment = contentAlignment,
     ) {
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(brush = sheenBrush)
-        )
         content()
     }
 }

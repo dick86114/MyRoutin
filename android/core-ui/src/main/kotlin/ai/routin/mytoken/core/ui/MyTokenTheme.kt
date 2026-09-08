@@ -1,10 +1,13 @@
 package ai.routin.mytoken.core.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 
 private val LightColors = lightColorScheme(
@@ -56,6 +59,7 @@ private val DarkColors = darkColorScheme(
 )
 
 /** 固定使用 MyToken 的 macOS 品牌层级，避免动态取色破坏供应商语义色。 */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MyTokenTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -63,6 +67,10 @@ fun MyTokenTheme(
 ) {
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColors else LightColors,
-        content = content,
-    )
+    ) {
+        // OriginOS 等机型上系统拉伸 overscroll 会额外走一层 RenderEffect，滑动容易掉帧。
+        CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+            content()
+        }
+    }
 }

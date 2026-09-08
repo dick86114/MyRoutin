@@ -2,20 +2,20 @@ package ai.routin.mytoken.feature.home
 
 import ai.routin.mytoken.domain.model.UsageMetric
 import ai.routin.mytoken.domain.model.UsageMetricHealthState
-import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -136,6 +136,28 @@ internal fun formatCurrency(value: BigDecimal?, currencyCode: String?): String {
     }
 }
 
+
+@Composable
+internal fun UsageProgressBar(
+    percent: Double?,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    val fraction = ((percent ?: 0.0).coerceIn(0.0, 100.0) / 100.0).toFloat()
+    val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+    Canvas(modifier = modifier.fillMaxWidth().height(6.dp)) {
+        val radius = CornerRadius(size.height / 2f, size.height / 2f)
+        drawRoundRect(color = track, cornerRadius = radius)
+        if (fraction > 0f) {
+            drawRoundRect(
+                color = color,
+                size = Size(size.width * fraction, size.height),
+                cornerRadius = radius,
+            )
+        }
+    }
+}
+
 @Composable
 fun UsageMetricGrid(
     metrics: List<UsageMetric>,
@@ -174,12 +196,7 @@ private fun ProgressCell(metric: UsageMetric, colors: StatusColors, modifier: Mo
             Text(metric.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
         }
-        androidx.compose.material3.LinearProgressIndicator(
-            progress = { ((percent ?: 0.0).coerceIn(0.0, 100.0) / 100.0).toFloat() },
-            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-            color = color,
-            trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-        )
+        UsageProgressBar(percent = percent, color = color)
         MetricText("已用 ${formatAmount(metric.used, metric)} / ${formatAmount(metric.limit, metric)}")
         metric.remaining?.let { MetricText("剩余 ${formatAmount(it, metric)}") }
         metric.windowEnd?.let {
@@ -231,21 +248,16 @@ internal fun GLMMetrics(metrics: List<UsageMetric>, modifier: Modifier = Modifie
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 row.forEach { metric ->
                     val percent = progressPercent(metric)
-                    val color = progressColor(percent, statusColors())
+                    val color = progressColor(percent, colors)
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(metric.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                             Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
                         }
-                        androidx.compose.material3.LinearProgressIndicator(
-                            progress = { ((percent ?: 0.0).coerceIn(0.0, 100.0) / 100.0).toFloat() },
-                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                            color = color,
-                            trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                        )
+                        UsageProgressBar(percent = percent, color = color)
                         metric.windowEnd?.let {
                             Text("重置 ${formatResetTime(it)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            RemainingDurationText(it, statusColors())
+                            RemainingDurationText(it, colors)
                         }
                     }
                 }
@@ -284,12 +296,7 @@ internal fun VolcengineMetrics(metrics: List<UsageMetric>, modifier: Modifier = 
                     Text(it.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                     Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
                 }
-                androidx.compose.material3.LinearProgressIndicator(
-                    progress = { ((percent ?: 0.0).coerceIn(0.0, 100.0) / 100.0).toFloat() },
-                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                    color = color,
-                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                )
+                UsageProgressBar(percent = percent, color = color)
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         MetricText("已用 ${formatAmount(it.used, it)} / ${formatAmount(it.limit, it)}")
@@ -324,12 +331,7 @@ internal fun NewAPIMetrics(metrics: List<UsageMetric>, modifier: Modifier = Modi
                     Text(it.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                     Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
                 }
-                androidx.compose.material3.LinearProgressIndicator(
-                    progress = { ((percent ?: 0.0).coerceIn(0.0, 100.0) / 100.0).toFloat() },
-                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                    color = color,
-                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                )
+                UsageProgressBar(percent = percent, color = color)
                 Row {
                     MetricText("已用 ${formatAmount(it.used, it)} / ${formatAmount(it.limit, it)}", Modifier.weight(1.2f))
                     it.remaining?.let { value -> MetricText("剩余 ${formatAmount(value, it)}", Modifier.weight(1f)) }
