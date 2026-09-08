@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+@preconcurrency import UserNotifications
 
 @MainActor
 protocol RefreshScheduling: AnyObject {
@@ -385,6 +386,37 @@ final class AppEnvironment {
         alert.runModal()
     }
 
+    /// 检测到新版本时发系统通知。同一版本只提醒一次（跨启动持久化）。
+    private func notifyUpdateAvailable(_ update: AppUpdate) {
+        let defaults = UserDefaults.standard
+        let deduplicationKey = "lastNotifiedUpdateVersion"
+        guard defaults.string(forKey: deduplicationKey) != update.version else {
+            return
+        }
+        defaults.set(update.version, forKey: deduplicationKey)
+
+        let notes = update.notes
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let content = UNMutableNotificationContent()
+        content.title = "MyToken 有新版本 v\(update.version)"
+        content.body = notes.isEmpty ? "打开 MyToken 查看更新内容。" : String(notes.prefix(100))
+
+        let request = UNNotificationRequest(
+            identifier: "update-available-\(update.version)",
+            content: content,
+            trigger: nil
+        )
+        Task {
+            let center = UNUserNotificationCenter.current()
+            let settings = await center.notificationSettings()
+            if settings.authorizationStatus == .notDetermined {
+                _ = try? await center.requestAuthorization(options: [.alert])
+            }
+            try? await center.add(request)
+        }
+    }
+
     func updateValidatedKey(
         id: UUID,
         name: String,
@@ -649,6 +681,9 @@ private extension AppEnvironment {
         switch outcome {
         case let .success(update):
             updateStatus = update.map(AppUpdateStatus.available) ?? .idle
+            if let update {
+                notifyUpdateAvailable(update)
+            }
         case .cancelled:
             updateStatus = previousStatus
         case .failed:

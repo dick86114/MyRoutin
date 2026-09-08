@@ -366,7 +366,7 @@ final class ProjectBootstrapTests: XCTestCase {
         XCTAssertTrue(popover.contains("WrappingFilterChips"))
         XCTAssertTrue(popover.contains("visibleProviderIDs"))
         XCTAssertTrue(popover.contains("updateReleaseOverlay"))
-        XCTAssertTrue(popover.contains("UpdateReleaseDetailView"))
+        XCTAssertTrue(popover.contains("UpdateReleasePopup"))
         XCTAssertTrue(popover.contains("var bottomBar: some View"))
         XCTAssertFalse(popover.contains(".liquidGlassButton()"))
         XCTAssertTrue(popover.contains(".liquidGlassWindowBackground()"))

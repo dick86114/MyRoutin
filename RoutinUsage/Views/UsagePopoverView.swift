@@ -329,15 +329,13 @@ private extension UsagePopoverView {
                 Color.black.opacity(0.34)
                     .ignoresSafeArea()
 
-                UpdateReleaseDetailView(
+                UpdateReleasePopup(
                     update: selectedUpdate,
+                    status: updateStatus,
                     onCancel: { self.selectedUpdate = nil },
-                    onConfirm: {
-                        self.selectedUpdate = nil
-                        Task { await installAvailableUpdate() }
-                    }
+                    onInstall: { Task { await installAvailableUpdate() } }
                 )
-                .padding(.horizontal, 22)
+                .padding(.horizontal, 28)
             }
             .transition(.opacity)
         }
@@ -735,10 +733,20 @@ private struct WrappingFilterChips: Layout {
     }
 }
 
-private struct UpdateReleaseDetailView: View {
+private struct UpdateReleasePopup: View {
     let update: AppUpdate
+    let status: AppUpdateStatus
     let onCancel: () -> Void
-    let onConfirm: () -> Void
+    let onInstall: () -> Void
+
+    @State private var isCancelHovered = false
+    @State private var isInstallHovered = false
+
+    private let titleColor = Color(red: 0.10, green: 0.11, blue: 0.13)
+    private let secondaryGray = Color(red: 0.45, green: 0.48, blue: 0.52)
+    private let notesBackground = Color(red: 0.96, green: 0.96, blue: 0.97)
+    private let cancelFill = Color(red: 0.94, green: 0.94, blue: 0.96)
+    private let installBlue = Color(red: 0.09, green: 0.36, blue: 0.83)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -746,11 +754,12 @@ private struct UpdateReleaseDetailView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("发现新版本")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(secondaryGray)
 
                     Text("v\(update.version)")
-                        .font(.title3.weight(.semibold))
+                        .font(.system(size: 22, weight: .bold))
                         .monospacedDigit()
+                        .foregroundStyle(titleColor)
                 }
 
                 Spacer(minLength: 8)
@@ -762,53 +771,125 @@ private struct UpdateReleaseDetailView: View {
                         .padding(.vertical, 4)
                         .background {
                             Capsule()
-                                .fill(Color.primary.opacity(0.06))
+                                .fill(Color.black.opacity(0.05))
                         }
                         .overlay {
                             Capsule()
-                                .strokeBorder(Color.primary.opacity(0.14))
+                                .strokeBorder(Color.black.opacity(0.10))
                         }
+                        .foregroundStyle(Color(red: 0.25, green: 0.27, blue: 0.30))
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    // Link 自带下划线悬停态之外，这里补一个指针提示可点击。
+                    if hovering {
+                        NSCursor.pointingHand.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
             }
 
             HStack(spacing: 6) {
                 Image(systemName: "clock")
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(secondaryGray)
 
                 Text("发布时间")
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(secondaryGray)
 
                 Spacer(minLength: 8)
 
                 Text(publishedText)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(secondaryGray)
                     .monospacedDigit()
             }
 
-            Divider()
+            Divider().overlay(Color.black.opacity(0.08))
 
+            phaseContent
+        }
+        .padding(16)
+        .frame(width: 320)
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(red: 0.99, green: 0.99, blue: 1.0))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.black.opacity(0.10))
+        }
+        .shadow(color: .black.opacity(0.30), radius: 22, y: 10)
+        .environment(\.colorScheme, .light)
+    }
+
+    @ViewBuilder
+    private var phaseContent: some View {
+        switch status {
+        case .downloading(let progress):
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("正在下载更新")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(titleColor)
+                    Spacer(minLength: 8)
+                    if let progress {
+                        Text("\(Int((progress * 100).rounded()))%")
+                            .font(.callout.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(installBlue)
+                    }
+                }
+                ProgressView(value: progress ?? 0, total: 1)
+                    .progressViewStyle(.linear)
+                    .tint(installBlue)
+                Text("下载完成后将自动安装并重启 MyToken")
+                    .font(.caption)
+                    .foregroundStyle(secondaryGray)
+            }
+
+        case .completed(let version):
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text("更新完成，v\(version) 正在重启")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(titleColor)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 8)
+
+        case .failed(let message):
+            VStack(alignment: .leading, spacing: 6) {
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                Text("可关闭后稍后在设置里重试。")
+                    .font(.caption)
+                    .foregroundStyle(secondaryGray)
+            }
+
+        default:
             VStack(alignment: .leading, spacing: 6) {
                 Text("更新日志")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(secondaryGray)
 
                 ScrollView(.vertical, showsIndicators: false) {
                     UpdateNotesView(notes: update.notes)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxHeight: 210)
+                .frame(height: 120)
                 .padding(10)
                 .background {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.primary.opacity(0.045))
+                        .fill(notesBackground)
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.10))
+                        .strokeBorder(Color.black.opacity(0.06))
                 }
             }
 
@@ -823,43 +904,36 @@ private struct UpdateReleaseDetailView: View {
                 .padding(.vertical, 7)
                 .background {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.primary.opacity(0.07))
+                        .fill(isCancelHovered ? Color.black.opacity(0.09) : cancelFill)
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.12))
+                        .strokeBorder(Color.black.opacity(isCancelHovered ? 0.16 : 0.08))
                 }
+                .foregroundStyle(titleColor)
+                .onHover { isCancelHovered = $0 }
 
                 Button {
-                    onConfirm()
+                    onInstall()
                 } label: {
-                    Text("确定")
+                    Text("立即更新")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.plain)
                 .padding(.vertical, 7)
                 .background {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.18))
+                        .fill(isInstallHovered ? installBlue.opacity(0.85) : installBlue)
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.accentColor.opacity(0.52))
+                        .strokeBorder(installBlue.opacity(isInstallHovered ? 0.9 : 0.6))
                 }
+                .foregroundStyle(Color.white)
+                .onHover { isInstallHovered = $0 }
             }
             .font(.callout.weight(.medium))
         }
-        .padding(14)
-        .frame(maxWidth: .infinity)
-        .background {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(.regularMaterial)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.16))
-        }
-        .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
     }
 
     private var publishedText: String {
