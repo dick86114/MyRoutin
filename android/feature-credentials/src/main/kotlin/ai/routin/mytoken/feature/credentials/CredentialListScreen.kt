@@ -27,15 +27,15 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import ai.routin.mytoken.core.ui.GlassButton
+import ai.routin.mytoken.core.ui.GlassButtonTone
+import ai.routin.mytoken.core.ui.GlassSwitch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -47,8 +47,6 @@ import android.view.View
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.zIndex
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -220,10 +218,10 @@ private fun CredentialRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Switch(
+            GlassSwitch(
                 checked = credential.isEnabled,
                 onCheckedChange = { onToggleEnabled() },
-                modifier = Modifier.semantics { contentDescription = "启用 ${credential.name}" },
+                contentDescription = "启用 ${credential.name}",
             )
             IconButton(onClick = onRequestDelete) {
                 Icon(
@@ -252,9 +250,16 @@ private fun EmptyState(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(modifier = Modifier.height(24.dp))
-            Button(onClick = onImportFromMac) { Text(text = "从 Mac 导入") }
-            Spacer(modifier = Modifier.height(8.dp))
-            FilledTonalButton(onClick = onAddManually) { Text(text = "手动添加") }
+        GlassButton(
+            onClick = onImportFromMac,
+            tone = GlassButtonTone.Primary,
+            text = "从 Mac 导入",
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        GlassButton(
+            onClick = onAddManually,
+            text = "手动添加",
+        )
         }
     }
 }

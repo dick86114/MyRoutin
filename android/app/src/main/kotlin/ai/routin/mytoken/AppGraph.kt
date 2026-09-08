@@ -18,6 +18,7 @@ import ai.routin.mytoken.provider.defaultUsageProviders
 import ai.routin.mytoken.update.GitHubAppUpdateController
 import android.content.Context
 import androidx.room.Room
+import kotlinx.coroutines.flow.first
 
 /**
  * Hand-rolled app graph (a full DI framework is out of scope for Task 9; Task 11 may
@@ -95,7 +96,13 @@ class AppGraph(context: Context) {
         GitHubAppUpdateController(
             context = appContext,
             currentVersionName = versionName,
-            preferences = AppPreferencesRepository(appContext),
+            mirrorBaseProvider = {
+                AppPreferencesRepository(appContext)
+                    .updatePreferences
+                    .first()
+                    .updateMirrorBase
+                    .takeIf { it.isNotBlank() }
+            },
         )
     }
 }

@@ -19,11 +19,13 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilledTonalButton
+import ai.routin.mytoken.core.ui.GlassButton
+import ai.routin.mytoken.core.ui.GlassButtonTone
+import ai.routin.mytoken.core.ui.glassFilterChipBorder
+import ai.routin.mytoken.core.ui.glassFilterChipColors
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -122,6 +124,8 @@ fun HomeScreen(
                             selected = selectedProvider == null,
                             onClick = { selectedProvider = null },
                             label = { Text(text = "全部") },
+                            colors = glassFilterChipColors(selected = selectedProvider == null),
+                            border = glassFilterChipBorder(selected = selectedProvider == null),
                         )
                         visibleProviders.forEach { provider ->
                             FilterChip(
@@ -130,6 +134,8 @@ fun HomeScreen(
                                     selectedProvider = if (selectedProvider == provider) null else provider
                                 },
                                 label = { Text(text = ProviderCatalog.displayName(provider)) },
+                                colors = glassFilterChipColors(selected = selectedProvider == provider),
+                                border = glassFilterChipBorder(selected = selectedProvider == provider),
                             )
                         }
                     }
@@ -182,12 +188,15 @@ private fun EmptyState(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = onImportFromMac) {
-            Text(text = "从 Mac 导入")
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        FilledTonalButton(onClick = onAddManually) {
-            Text(text = "手动添加")
-        }
-    }
+    GlassButton(
+        onClick = onImportFromMac,
+        tone = GlassButtonTone.Primary,
+        text = "从 Mac 导入",
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+    GlassButton(
+        onClick = onAddManually,
+        text = "手动添加",
+    )
+}
 }

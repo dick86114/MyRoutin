@@ -11,13 +11,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
+import ai.routin.mytoken.core.ui.GlassButton
+import ai.routin.mytoken.core.ui.GlassButtonTone
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -103,18 +102,13 @@ fun TransferPreviewScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
         ) {
-            OutlinedButton(onClick = onCancel) {
-                Text(text = "取消")
-            }
-            FilledTonalButton(onClick = { onConfirm(ImportConflictMode.SKIP) }) {
-                Text(text = "跳过重复")
-            }
-            Button(
+            GlassButton(onClick = onCancel, text = "取消")
+            GlassButton(onClick = { onConfirm(ImportConflictMode.SKIP) }, text = "跳过重复")
+            GlassButton(
                 onClick = { onConfirm(ImportConflictMode.OVERWRITE) },
-                colors = ButtonDefaults.buttonColors(),
-            ) {
-                Text(text = "覆盖导入")
-            }
+                tone = GlassButtonTone.Primary,
+                text = "覆盖导入",
+            )
         }
     }
 }
@@ -170,8 +164,10 @@ fun TransferCompletedScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
         )
-        Button(onClick = onDone) {
-            Text(text = "完成")
-        }
+        GlassButton(
+            onClick = onDone,
+            tone = GlassButtonTone.Primary,
+            text = "完成",
+        )
     }
 }

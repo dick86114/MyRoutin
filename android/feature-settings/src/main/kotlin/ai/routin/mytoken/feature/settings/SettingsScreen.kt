@@ -10,20 +10,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.HorizontalDivider
 import ai.routin.mytoken.core.ui.SectionCard
+import ai.routin.mytoken.core.ui.GlassButton
+import ai.routin.mytoken.core.ui.GlassButtonTone
+import ai.routin.mytoken.core.ui.glassFilterChipBorder
+import ai.routin.mytoken.core.ui.glassFilterChipColors
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -112,18 +118,47 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Button(onClick = onOpenTransfer) { Text(text = "从 Mac 导入") }
+                    GlassButton(
+                        onClick = onOpenTransfer,
+                        tone = GlassButtonTone.Primary,
+                        text = "从 Mac 导入",
+                    )
                 }
             }
             item(key = "about") {
                 SectionCard(title = "关于") {
-                    Text(text = "MyToken $appVersion", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = buildAnnotatedString {
+                            withStyle(
+                                SpanStyle(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            ) {
+                                append("MyToken")
+                            }
+                            withStyle(
+                                SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            ) {
+                                append(" $appVersion")
+                            }
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "更新通道",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     UpdateChannelSection(
                         mirrorBase = state.update.mirrorBase,
                         onMirrorBaseChange = onMirrorBaseChange,
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 6.dp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                    )
                     UpdateSection(
                         state = updateState,
                         currentVersion = appVersion,
@@ -131,11 +166,6 @@ fun SettingsScreen(
                         onDownloadAndInstall = onDownloadAndInstall,
                         onOpenInstallPermissionSettings = onOpenInstallPermissionSettings,
                         onInstallDownloadedUpdate = onInstallDownloadedUpdate,
-                    )
-                    Text(
-                        text = "在手机上查看多家大模型供应商的用量、余额、剩余额度与重置时间。凭证只保存在本机。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -159,7 +189,11 @@ private fun UpdateSection(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(onClick = onCheckForUpdates, enabled = false) { Text(text = "检测更新") }
+            GlassButton(
+                onClick = onCheckForUpdates,
+                enabled = false,
+                text = "检测更新",
+            )
         }
 
         is AppUpdateUiState.Downloading -> {
@@ -186,9 +220,12 @@ private fun UpdateSection(
                     markdown = state.releaseNotes,
                 )
             }
-            Button(onClick = { onDownloadAndInstall(state.version, state.downloadUrl) }) {
-                Text(text = "下载并安装")
-            }
+            GlassButton(
+                onClick = { onDownloadAndInstall(state.version, state.downloadUrl) },
+                modifier = Modifier.fillMaxWidth(),
+                tone = GlassButtonTone.Primary,
+                text = "下载并安装",
+            )
         }
 
         is AppUpdateUiState.NeedsInstallPermission -> {
@@ -197,10 +234,14 @@ private fun UpdateSection(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            TextButton(onClick = onOpenInstallPermissionSettings) {
-                Text(text = "打开安装权限设置")
-            }
-            TextButton(onClick = onInstallDownloadedUpdate) { Text(text = "授权后继续安装") }
+            GlassButton(
+                onClick = onOpenInstallPermissionSettings,
+                text = "打开安装权限设置",
+            )
+            GlassButton(
+                onClick = onInstallDownloadedUpdate,
+                text = "授权后继续安装",
+            )
         }
 
         is AppUpdateUiState.ReadyToInstall -> {
@@ -209,7 +250,11 @@ private fun UpdateSection(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(onClick = onInstallDownloadedUpdate) { Text(text = "安装更新") }
+            GlassButton(
+                onClick = onInstallDownloadedUpdate,
+                tone = GlassButtonTone.Primary,
+                text = "安装更新",
+            )
         }
 
         is AppUpdateUiState.Error -> {
@@ -218,7 +263,10 @@ private fun UpdateSection(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
-            Button(onClick = onCheckForUpdates) { Text(text = "重试") }
+            GlassButton(
+                onClick = onCheckForUpdates,
+                text = "重试",
+            )
         }
 
         is AppUpdateUiState.UpToDate -> {
@@ -229,10 +277,18 @@ private fun UpdateSection(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(onClick = onCheckForUpdates) { Text(text = "检测更新") }
+            GlassButton(
+                onClick = onCheckForUpdates,
+                tone = GlassButtonTone.Primary,
+                text = "检测更新",
+            )
         }
 
-        AppUpdateUiState.Idle -> Button(onClick = onCheckForUpdates) { Text(text = "检测更新") }
+        AppUpdateUiState.Idle -> GlassButton(
+            onClick = onCheckForUpdates,
+            tone = GlassButtonTone.Primary,
+            text = "检测更新",
+        )
     }
 }
 
@@ -242,7 +298,13 @@ private fun ThemeChip(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    FilterChip(selected = selected, onClick = onClick, label = { Text(text = label) })
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(text = label) },
+        colors = glassFilterChipColors(selected = selected),
+        border = glassFilterChipBorder(selected = selected),
+    )
 }
 
 @Composable
@@ -256,11 +318,15 @@ private fun UpdateChannelSection(
                 selected = mirrorBase.isEmpty(),
                 onClick = { onMirrorBaseChange("") },
                 label = { Text(text = "GitHub 直连") },
+                colors = glassFilterChipColors(selected = mirrorBase.isEmpty()),
+                border = glassFilterChipBorder(selected = mirrorBase.isEmpty()),
             )
             FilterChip(
                 selected = mirrorBase.isNotEmpty(),
                 onClick = { if (mirrorBase.isEmpty()) onMirrorBaseChange(DEFAULT_UPDATE_CDN_BASES.first()) },
                 label = { Text(text = "CDN 加速") },
+                colors = glassFilterChipColors(selected = mirrorBase.isNotEmpty()),
+                border = glassFilterChipBorder(selected = mirrorBase.isNotEmpty()),
             )
         }
         if (mirrorBase.isNotEmpty()) {
@@ -270,6 +336,8 @@ private fun UpdateChannelSection(
                         selected = mirrorBase == base,
                         onClick = { onMirrorBaseChange(base) },
                         label = { Text(text = base.removePrefix("https://")) },
+                        colors = glassFilterChipColors(selected = mirrorBase == base),
+                        border = glassFilterChipBorder(selected = mirrorBase == base),
                     )
                 }
             }

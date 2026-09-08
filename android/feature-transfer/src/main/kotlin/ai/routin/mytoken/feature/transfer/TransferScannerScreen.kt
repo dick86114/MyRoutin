@@ -22,7 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.FilledTonalButton
+import ai.routin.mytoken.core.ui.GlassButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -130,9 +130,7 @@ fun TransferScannerScreen(
                 }
             }
         }
-        FilledTonalButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-            Text(text = "取消")
-        }
+        GlassButton(onClick = onCancel, modifier = Modifier.fillMaxWidth(), text = "取消")
     }
 }
 

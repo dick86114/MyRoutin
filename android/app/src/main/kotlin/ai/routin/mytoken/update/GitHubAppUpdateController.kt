@@ -1,6 +1,5 @@
 package ai.routin.mytoken.update
 
-import ai.routin.mytoken.data.preferences.AppPreferencesRepository
 import ai.routin.mytoken.feature.settings.AppUpdateController
 import ai.routin.mytoken.feature.settings.AppUpdateUiState
 import android.content.Context
@@ -35,7 +34,8 @@ class GitHubAppUpdateController(
     private val context: Context,
     private val currentVersionName: String,
     private val repository: String = "dick86114/MyToken",
-    private val preferences: AppPreferencesRepository? = null,
+    /** 返回当前镜像前缀；空值/空白表示 GitHub 直连。由 App 层接 DataStore。 */
+    private val mirrorBaseProvider: suspend () -> String? = { null },
     private val network: suspend (String, Map<String, String>) -> UpdateResponse = ::request,
     private val probeStatus: (suspend (String) -> Int)? = null,
 ) : AppUpdateController {
@@ -189,7 +189,7 @@ class GitHubAppUpdateController(
     }
 
     private suspend fun mirrorBase(): String? =
-        preferences?.updatePreferences?.first()?.updateMirrorBase?.takeIf { it.isNotBlank() }
+        mirrorBaseProvider()?.takeIf { it.isNotBlank() }
 
     private fun applyMirror(url: String, mirror: String?): String =
         if (mirror != null && url.startsWith("https://github.com/")) "$mirror/$url" else url

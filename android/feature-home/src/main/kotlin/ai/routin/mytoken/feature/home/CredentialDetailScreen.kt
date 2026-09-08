@@ -1,34 +1,29 @@
 package ai.routin.mytoken.feature.home
 
 import ai.routin.mytoken.core.ui.SectionCard
+import ai.routin.mytoken.core.ui.GlassButton
+import ai.routin.mytoken.core.ui.GlassButtonTone
 import ai.routin.mytoken.domain.model.CredentialKind
 import ai.routin.mytoken.domain.model.CredentialMetadataKey
 import ai.routin.mytoken.domain.model.UsageMetric
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.PauseCircle
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -97,27 +92,30 @@ fun CredentialDetailScreen(
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Button(onClick = onRefresh, modifier = Modifier.weight(1f)) {
-                        Text(text = "刷新")
-                    }
+                    GlassButton(
+                        onClick = onRefresh,
+                        modifier = Modifier.weight(1f),
+                        tone = GlassButtonTone.Primary,
+                        text = "刷新",
+                    )
                     if (onCheckIn != null) {
-                        OutlinedButton(onClick = onCheckIn, modifier = Modifier.weight(1f)) {
-                            Text(text = "签到")
-                        }
+                        GlassButton(
+                            onClick = onCheckIn,
+                            modifier = Modifier.weight(1f),
+                            text = "签到",
+                        )
                     }
-                    OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
-                        Text(text = "编辑")
-                    }
-                    Button(
+                    GlassButton(
+                        onClick = onEdit,
+                        modifier = Modifier.weight(1f),
+                        text = "编辑",
+                    )
+                    GlassButton(
                         onClick = onDelete,
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError,
-                        ),
-                    ) {
-                        Text(text = "删除")
-                    }
+                        tone = GlassButtonTone.Destructive,
+                        text = "删除",
+                    )
                 }
             }
         },
@@ -132,7 +130,6 @@ fun CredentialDetailScreen(
             return@Scaffold
         }
 
-        val accent = ProviderCatalog.accentColor(card.credential.providerId)
         Column(
             modifier = Modifier
                 .padding(padding)
@@ -142,24 +139,7 @@ fun CredentialDetailScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .background(accent.copy(alpha = 0.16f), RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = card.credential.name.take(1).uppercase(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = accent,
-                    )
-                }
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 12.dp),
-                ) {
+                Column {
                     Text(
                         text = card.credential.name,
                         style = MaterialTheme.typography.headlineSmall,

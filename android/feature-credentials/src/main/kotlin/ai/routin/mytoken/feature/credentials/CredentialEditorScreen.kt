@@ -17,18 +17,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import ai.routin.mytoken.core.ui.GlassButton
+import ai.routin.mytoken.core.ui.GlassButtonTone
+import ai.routin.mytoken.core.ui.GlassTextField
+import ai.routin.mytoken.core.ui.glassFilterChipBorder
+import ai.routin.mytoken.core.ui.glassFilterChipColors
 import ai.routin.mytoken.core.ui.LiquidGlassSurface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -114,6 +116,8 @@ fun CredentialEditorScreen(
                                     selected = state.providerId == provider,
                                     onClick = { onProviderChange(provider) },
                                     label = { Text(text = ProviderNames.displayName(provider)) },
+                                    colors = glassFilterChipColors(selected = state.providerId == provider),
+                                    border = glassFilterChipBorder(selected = state.providerId == provider),
                                 )
                             }
                         }
@@ -127,11 +131,10 @@ fun CredentialEditorScreen(
                 )
             }
 
-            OutlinedTextField(
+            GlassTextField(
                 value = state.name,
                 onValueChange = onNameChange,
-                label = { Text(text = "名称") },
-                singleLine = true,
+                label = "名称",
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("editor_name"),
@@ -155,14 +158,13 @@ fun CredentialEditorScreen(
                     testTag = "editor_api_key",
                 )
                 CredentialKind.AccessKeyPair -> {
-                    OutlinedTextField(
-                        value = state.accessKeyID,
-                        onValueChange = onAccessKeyIDChange,
-                        label = { Text(text = "Access Key ID") },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("editor_access_key_id"),
+            GlassTextField(
+                value = state.accessKeyID,
+                onValueChange = onAccessKeyIDChange,
+                label = "Access Key ID",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("editor_access_key_id"),
                     )
                     SecretField(
                         label = "Secret Access Key",
@@ -172,44 +174,40 @@ fun CredentialEditorScreen(
                         onToggleVisible = onToggleSecretVisible,
                         testTag = "editor_secret_access_key",
                     )
-                    OutlinedTextField(
-                        value = state.region,
-                        onValueChange = onRegionChange,
-                        label = { Text(text = "区域（默认 cn-beijing）") },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("editor_region"),
+            GlassTextField(
+                value = state.region,
+                onValueChange = onRegionChange,
+                label = "区域（默认 cn-beijing）",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("editor_region"),
                     )
                 }
             }
 
             if (state.providerId == ProviderId.NewAPI) {
-                OutlinedTextField(
+                GlassTextField(
                     value = state.baseURL,
                     onValueChange = onBaseURLChange,
-                    label = { Text(text = "接口地址") },
-                    singleLine = true,
+                    label = "接口地址",
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("editor_base_url"),
                 )
-                OutlinedTextField(
+                GlassTextField(
                     value = state.userID,
                     onValueChange = onUserIDChange,
-                    label = { Text(text = "用户 ID") },
-                    singleLine = true,
+                    label = "用户 ID",
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("editor_user_id"),
                 )
             }
 
-            OutlinedTextField(
+            GlassTextField(
                 value = state.websiteURL,
                 onValueChange = onWebsiteURLChange,
-                label = { Text(text = "官网地址（可选）") },
-                singleLine = true,
+                label = "官网地址（可选）",
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("editor_website_url"),
@@ -223,13 +221,12 @@ fun CredentialEditorScreen(
                 )
             }
 
-            OutlinedButton(
+            GlassButton(
                 onClick = onTestConnection,
-                enabled = !state.isTestingConnection,
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(text = if (state.isTestingConnection) "测试中…" else "测试连接")
-            }
+                enabled = !state.isTestingConnection,
+                text = if (state.isTestingConnection) "测试中…" else "测试连接",
+            )
 
             state.testResultMessage?.let { message ->
                 Text(
@@ -250,13 +247,13 @@ fun CredentialEditorScreen(
                 )
             }
 
-            Button(
+            GlassButton(
                 onClick = onSave,
-                enabled = !state.isSaving,
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(text = if (state.isSaving) "保存中…" else "保存")
-            }
+                enabled = !state.isSaving,
+                tone = GlassButtonTone.Primary,
+                text = if (state.isSaving) "保存中…" else "保存",
+            )
         }
     }
 }
@@ -270,11 +267,10 @@ private fun SecretField(
     onToggleVisible: () -> Unit,
     testTag: String,
 ) {
-    OutlinedTextField(
+    GlassTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(text = label) },
-        singleLine = true,
+        label = label,
         visualTransformation = if (isVisible) {
             VisualTransformation.None
         } else {

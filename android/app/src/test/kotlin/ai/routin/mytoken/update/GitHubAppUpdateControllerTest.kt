@@ -1,7 +1,7 @@
 package ai.routin.mytoken.update
 
-import ai.routin.mytoken.data.preferences.AppPreferencesRepository
 import ai.routin.mytoken.feature.settings.AppUpdateUiState
+import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import java.io.IOException
 import kotlinx.coroutines.flow.first
@@ -31,14 +31,11 @@ class GitHubAppUpdateControllerTest {
 
     @Test
     fun cdn模式下API失败走镜像Atom并改写下载地址() = runBlocking {
-        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val preferences = AppPreferencesRepository(context)
-        preferences.setUpdateMirrorBase("https://ghfast.top")
         val requested = mutableListOf<String>()
         val controller = GitHubAppUpdateController(
-            context = context,
+            context = ApplicationProvider.getApplicationContext<Context>(),
             currentVersionName = "0.0.1",
-            preferences = preferences,
+            mirrorBaseProvider = { "https://ghfast.top" },
             network = { url, _ ->
                 requested.add(url)
                 if (url.startsWith("https://api.github.com")) throw IOException("blocked")

@@ -5,15 +5,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilterChip
+import ai.routin.mytoken.core.ui.GlassSwitch
+import ai.routin.mytoken.core.ui.glassFilterChipBorder
+import ai.routin.mytoken.core.ui.glassFilterChipColors
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import ai.routin.mytoken.core.ui.SettingRow
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
 /**
@@ -46,6 +45,8 @@ fun RefreshSettingsSection(
                     selected = settings.refreshIntervalMinutes == minutes,
                     onClick = { onIntervalChange(minutes) },
                     label = { Text(text = "${minutes}分钟") },
+                    colors = glassFilterChipColors(selected = settings.refreshIntervalMinutes == minutes),
+                    border = glassFilterChipBorder(selected = settings.refreshIntervalMinutes == minutes),
                 )
             }
         }
@@ -74,10 +75,10 @@ internal fun SettingSwitchRow(
     onChange: (Boolean) -> Unit,
 ) {
     SettingRow(title = label) {
-        Switch(
+        GlassSwitch(
             checked = checked,
             onCheckedChange = onChange,
-            modifier = Modifier.semantics { contentDescription = label },
+            contentDescription = label,
         )
     }
 }
