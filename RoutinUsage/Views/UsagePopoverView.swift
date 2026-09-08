@@ -20,6 +20,8 @@ struct UsagePopoverView: View {
     @State private var selectedUpdate: AppUpdate?
     @State private var isUpdateIndicatorVisible = true
     @State private var showRefreshSuccess = false
+    @State private var isVersionLinkHovered = false
+    @State private var isUpdateBadgeHovered = false
     @State private var scrollMetrics = PopoverScrollMetrics(contentHeight: 0, contentOffset: 0)
 
     init(
@@ -138,14 +140,16 @@ private extension UsagePopoverView {
                     .padding(.vertical, 5)
                     .background {
                         Capsule()
-                            .fill(Color.primary.opacity(0.055))
+                            .fill(Color.primary.opacity(isVersionLinkHovered ? 0.12 : 0.055))
                     }
                     .overlay {
                         Capsule()
-                            .strokeBorder(Color.primary.opacity(0.12))
+                            .strokeBorder(Color.primary.opacity(isVersionLinkHovered ? 0.24 : 0.12))
                     }
                 }
                 .buttonStyle(.plain)
+                .onHover { isVersionLinkHovered = $0 }
+                .animation(.easeInOut(duration: 0.15), value: isVersionLinkHovered)
                 .foregroundStyle(.secondary)
                 .help("打开 Releases 页面")
                 .accessibilityLabel("当前版本 v\(RoutinUsageApp.currentVersion)，打开 Releases 页面")
@@ -167,7 +171,7 @@ private extension UsagePopoverView {
                                     .strokeBorder(Color.green.opacity(0.55), lineWidth: 1)
                             }
                             .opacity(isUpdateIndicatorVisible ? 1 : 0.28)
-                            .scaleEffect(isUpdateIndicatorVisible ? 1 : 0.94)
+                            .scaleEffect(isUpdateBadgeHovered ? 1.08 : isUpdateIndicatorVisible ? 1 : 0.94)
                             .onAppear {
                                 withAnimation(.easeInOut(duration: 0.72).repeatForever(autoreverses: true)) {
                                     isUpdateIndicatorVisible = false
@@ -175,6 +179,7 @@ private extension UsagePopoverView {
                             }
                     }
                     .buttonStyle(.plain)
+                    .onHover { isUpdateBadgeHovered = $0 }
                     .help("查看 v\(update.version) 更新详情")
                     .accessibilityLabel("发现新版本 v\(update.version)，查看更新详情")
                 }
@@ -185,53 +190,15 @@ private extension UsagePopoverView {
 
             Spacer()
 
-            Button {
-                Task { await store.refreshAll() }
-            } label: {
-                Group {
-                    if store.isRefreshing {
-                        TimelineView(.animation) { timeline in
-                            let angle = timeline.date.timeIntervalSinceReferenceDate
-                                .truncatingRemainder(dividingBy: 1) * 360
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .rotationEffect(.degrees(angle))
-                        }
-                    } else if showRefreshSuccess {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                            .transition(.scale.combined(with: .opacity))
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                            .transition(.opacity)
-                    }
-                }
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 30, height: 30)
+            GlassIconButton(
+                action: { openSettings() },
+                help: "设置"
+            ) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 13, weight: .medium))
             }
-            .buttonStyle(.plain)
-            .background {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(0.07))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.12))
-            }
-            .disabled(store.isRefreshing || store.visibleKeyIDs.isEmpty)
-            .help("刷新全部 Key")
-            .accessibilityLabel(store.isRefreshing ? "正在刷新全部 Key" : "刷新全部 Key")
-            .onChange(of: store.isRefreshing) { _, isRefreshing in
-                if !isRefreshing {
-                    withAnimation(.spring(duration: 0.3)) {
-                        showRefreshSuccess = true
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                        withAnimation(.easeOut(duration: 0.35)) {
-                            showRefreshSuccess = false
-                        }
-                    }
-                }
-            }
+            .keyboardShortcut(",")
+            .accessibilityLabel("打开设置")
         }
         .overlay(alignment: .center) {
             Link(destination: RoutinUsageApp.websiteURL) {
@@ -399,6 +366,18 @@ private extension UsagePopoverView {
         isSelected: Bool,
         action: @escaping () -> Void
     ) -> some View {
+        ProviderFilterChip(title: title, isSelected: isSelected, action: action)
+    }
+}
+
+private struct ProviderFilterChip: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
         Button(action: action) {
             Text(title)
                 .font(.caption.weight(.medium))
@@ -408,22 +387,26 @@ private extension UsagePopoverView {
                 .padding(.vertical, 4)
                 .background {
                     Capsule()
-                        .fill(isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.05))
+                        .fill(isSelected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(isHovered ? 0.10 : 0.05))
                 }
                 .overlay {
                     Capsule()
                         .strokeBorder(
-                            isSelected ? Color.accentColor.opacity(0.58) : Color.primary.opacity(0.12),
+                            isSelected ? Color.accentColor.opacity(0.58) : Color.primary.opacity(isHovered ? 0.24 : 0.12),
                             lineWidth: 1
                         )
                 }
                 .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
         .accessibilityLabel("\(title)供应商筛选")
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
+}
+
+private extension UsagePopoverView {
     @ViewBuilder
     var footerStatuses: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -444,55 +427,64 @@ private extension UsagePopoverView {
 
     var bottomBar: some View {
         HStack(spacing: 10) {
+            GlassIconButton(
+                action: { Task { await store.refreshAll() } },
+                help: "刷新全部 Key"
+            ) {
+                Group {
+                    if store.isRefreshing {
+                        TimelineView(.animation) { timeline in
+                            let angle = timeline.date.timeIntervalSinceReferenceDate
+                                .truncatingRemainder(dividingBy: 1) * 360
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .rotationEffect(.degrees(angle))
+                        }
+                    } else if showRefreshSuccess {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .transition(.scale.combined(with: .opacity))
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .transition(.opacity)
+                    }
+                }
+                .font(.system(size: 13, weight: .medium))
+            }
+            .disabled(store.isRefreshing || store.visibleKeyIDs.isEmpty)
+            .accessibilityLabel(store.isRefreshing ? "正在刷新全部 Key" : "刷新全部 Key")
+            .onChange(of: store.isRefreshing) { _, isRefreshing in
+                if !isRefreshing {
+                    withAnimation(.spring(duration: 0.3)) {
+                        showRefreshSuccess = true
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                        withAnimation(.easeOut(duration: 0.35)) {
+                            showRefreshSuccess = false
+                        }
+                    }
+                }
+            }
+
             HStack(spacing: 6) {
                 Image(systemName: store.isRefreshing ? "arrow.triangle.2.circlepath" : "clock")
                     .accessibilityHidden(true)
                 Text(refreshDescription)
                     .lineLimit(1)
-                Spacer(minLength: 4)
             }
             .font(.caption)
             .foregroundStyle(.secondary)
             .accessibilityLabel(refreshAccessibilityLabel)
 
-            Button {
-                openSettings()
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 13, weight: .medium))
-                    .frame(width: 30, height: 30)
-            }
-            .buttonStyle(.plain)
-            .background {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(0.07))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.12))
-            }
-            .keyboardShortcut(",")
-            .help("设置")
-            .accessibilityLabel("打开设置")
+            Spacer(minLength: 4)
 
-            Button {
-                NSApplication.shared.terminate(nil)
-            } label: {
+            GlassIconButton(
+                action: { NSApplication.shared.terminate(nil) },
+                help: "退出 MyToken"
+            ) {
                 Image(systemName: "power")
                     .font(.system(size: 13, weight: .medium))
-                    .frame(width: 30, height: 30)
-            }
-            .buttonStyle(.plain)
-            .background {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(0.07))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.12))
             }
             .keyboardShortcut("q")
-            .help("退出 MyToken")
             .accessibilityLabel("退出 MyToken")
         }
     }
@@ -876,5 +868,38 @@ private struct UpdateReleaseDetailView: View {
         formatter.timeZone = .current
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
         return formatter.string(from: publishedAt)
+    }
+}
+
+/// 弹窗内统一的玻璃图标按钮：整个 30×30 边框区域都是点击热区，
+/// 悬停时底色和描边加深，按下时再加深，给出明确的可点击反馈。
+private struct GlassIconButton<Label: View>: View {
+    var action: () -> Void
+    var help: String
+    @ViewBuilder var label: () -> Label
+
+    @State private var isHovered = false
+    @State private var isPressed = false
+
+    var body: some View {
+        Button {
+            action()
+        } label: {
+            label()
+                .frame(width: 30, height: 30)
+                .background {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.primary.opacity(isPressed ? 0.12 : isHovered ? 0.14 : 0.07))
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(isHovered ? 0.26 : 0.12))
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .onHover { isHovered = $0 }
+        .help(help)
     }
 }
