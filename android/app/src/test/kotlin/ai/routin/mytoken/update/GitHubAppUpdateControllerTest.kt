@@ -46,7 +46,13 @@ class GitHubAppUpdateControllerTest {
 
         controller.checkForUpdates()
         val state = withTimeout(5_000) {
-            controller.state.first { it !is AppUpdateUiState.Checking }
+            // 等终态而不是“非 Checking”：checkForUpdates 异步启动时状态仍是 Idle，
+            // “非 Checking”会立即匹配到 Idle 造成竞态（CI 上必然复现）。
+            controller.state.first {
+                it is AppUpdateUiState.Available ||
+                    it is AppUpdateUiState.Error ||
+                    it is AppUpdateUiState.UpToDate
+            }
         }
 
         assertTrue(
