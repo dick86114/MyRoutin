@@ -22,6 +22,7 @@ class SettingsViewModelTest {
     private lateinit var refreshStore: FakeRefreshSettingsStore
     private lateinit var displayStore: FakeDisplaySettingsStore
     private lateinit var notificationStore: FakeNotificationSettingsStore
+    private lateinit var updateController: FakeAppUpdateController
 
     @Before
     fun setUp() {
@@ -29,6 +30,7 @@ class SettingsViewModelTest {
         refreshStore = FakeRefreshSettingsStore()
         displayStore = FakeDisplaySettingsStore()
         notificationStore = FakeNotificationSettingsStore()
+        updateController = FakeAppUpdateController()
     }
 
     @After
@@ -36,7 +38,12 @@ class SettingsViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel() = SettingsViewModel(refreshStore, displayStore, notificationStore)
+    private fun viewModel() = SettingsViewModel(
+        refreshStore,
+        displayStore,
+        notificationStore,
+        updateController,
+    )
 
     @Test
     fun initialStateLoadsDefaults() = runTest(dispatcher) {

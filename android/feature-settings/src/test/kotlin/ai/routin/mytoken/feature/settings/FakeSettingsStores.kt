@@ -71,3 +71,21 @@ class FakeNotificationSettingsStore(
     override suspend fun setCredentialFailureAlertsEnabled(enabled: Boolean) =
         state.update { it.copy(credentialFailureAlertsEnabled = enabled) }
 }
+
+class FakeAppUpdateController : AppUpdateController {
+    override val state = MutableStateFlow<AppUpdateUiState>(AppUpdateUiState.Idle)
+    var checked = 0
+    var downloaded: Pair<String, String>? = null
+
+    override fun checkForUpdates() {
+        checked += 1
+    }
+
+    override fun downloadAndInstall(version: String, downloadUrl: String) {
+        downloaded = version to downloadUrl
+    }
+
+    override fun openInstallPermissionSettings() = Unit
+
+    override fun installDownloadedUpdate() = Unit
+}

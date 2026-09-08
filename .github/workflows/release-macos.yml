@@ -1,0 +1,56 @@
+name: 发布 macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'macOS 版本号（例如 1.2.0）'
+        required: true
+        type: string
+      release_notes:
+        description: 'macOS 发布说明（Markdown）'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 构建 macOS DMG
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 校验版本号
+        run: |
+          [[ "${RELEASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+      - name: 校验 Xcode 26 与 macOS 26 SDK
+        run: scripts/verify-xcode-26.sh
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+      - name: 写入应用版本
+        run: |
+          sed -i '' "s/MARKETING_VERSION: \"[^\"]*\"/MARKETING_VERSION: \"${RELEASE_VERSION}\"/" project.yml
+      - name: 构建 DMG
+        run: scripts/build-dmg.sh
+      - name: 重命名安装包
+        run: |
+          arch="$(uname -m)"
+          dmg_name="MyToken-${RELEASE_VERSION}-${arch}.dmg"
+          cp "build/dist/MyToken.dmg" "build/dist/${dmg_name}"
+          echo "dmg_name=${dmg_name}" >> "$GITHUB_ENV"
+      - name: 创建 macOS Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: macos-v${{ inputs.version }}
+          name: MyToken macOS v${{ inputs.version }}
+          body: ${{ inputs.release_notes }}
+          generate_release_notes: false
+          files: |
+            build/dist/MyToken.dmg
+            build/dist/${{ env.dmg_name }}

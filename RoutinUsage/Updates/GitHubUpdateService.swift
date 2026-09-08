@@ -64,7 +64,7 @@ struct NoUpdateService: UpdateChecking {
 
 struct GitHubUpdateService: UpdateChecking, Sendable {
     static let repository = "dick86114/MyToken"
-    static let releasesURL = URL(string: "https://api.github.com/repos/\(repository)/releases/latest")!
+    static let releasesURL = URL(string: "https://api.github.com/repos/\(repository)/releases?per_page=100")!
     static let releasesAtomURL = URL(string: "https://github.com/\(repository)/releases.atom")!
 
     let session: URLSession
@@ -133,7 +133,19 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
         }
         let release: ReleaseDTO
         do {
-            release = try JSONDecoder().decode(ReleaseDTO.self, from: data)
+            let decoder = JSONDecoder()
+            if data.first == 91 { // 兼容历史测试与旧服务返回的单个 Release 对象。
+                let releases = try decoder.decode([ReleaseDTO].self, from: data)
+                guard let platformRelease = releases.first(where: {
+                    $0.tagName.hasPrefix("macos-v")
+                }) else {
+                    await logWriter.log(level: .info, event: "update_check_succeeded", details: "result=no_macos_release")
+                    return nil
+                }
+                release = platformRelease
+            } else {
+                release = try decoder.decode(ReleaseDTO.self, from: data)
+            }
         } catch {
             await logWriter.log(
                 level: .error,
@@ -370,7 +382,8 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
         enum CodingKeys: String, CodingKey { case name, browserDownloadURL = "browser_download_url" }
     }
     private static func normalize(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "^v", with: "", options: .regularExpression)
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "^(macos-|android-)?v", with: "", options: .regularExpression)
     }
     private static func compare(_ lhs: String, _ rhs: String) -> ComparisonResult {
         let a = lhs.split(separator: ".").compactMap { Int($0) }

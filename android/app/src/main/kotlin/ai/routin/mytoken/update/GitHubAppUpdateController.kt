@@ -180,14 +180,25 @@ class GitHubAppUpdateController(
 
     private suspend fun fetchLatestRelease(): AvailableRelease {
         val body = network(
-            "https://api.github.com/repos/$repository/releases/latest",
+            "https://api.github.com/repos/$repository/releases?per_page=100",
             mapOf(
                 "Accept" to "application/vnd.github+json",
                 "X-GitHub-Api-Version" to "2022-11-28",
             ),
         ).body
-        val json = JSONObject(body)
-        val tag = json.optString("tag_name")
+        val releases = org.json.JSONArray(body)
+        val json = (0 until releases.length())
+            .asSequence()
+            .map { releases.getJSONObject(it) }
+            .filter { it.optString("tag_name").startsWith("android-v") }
+            .maxWithOrNull(Comparator { left, right ->
+                    compareVersions(
+                        left.optString("tag_name").removePrefix("android-").removePrefix("v"),
+                        right.optString("tag_name").removePrefix("android-").removePrefix("v"),
+                    )
+                })
+            ?: throw IOException("暂无 Android 发布版本")
+        val tag = json.optString("tag_name").removePrefix("android-")
         val version = tag.removePrefix("v").takeIf { it.isNotEmpty() }
             ?: throw IOException("发布版本号无效")
         val asset = json.optJSONArray("assets")

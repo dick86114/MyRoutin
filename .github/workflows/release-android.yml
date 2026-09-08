@@ -1,0 +1,82 @@
+name: 发布 Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Android versionName（例如 1.2.0）'
+        required: true
+        type: string
+      version_code:
+        description: 'Android versionCode（必须比已发布版本更大）'
+        required: true
+        type: string
+      release_notes:
+        description: 'Android 发布说明（Markdown）'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 构建 Android APK
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 配置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: 校验版本号
+        run: |
+          [[ "${RELEASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "${{ inputs.version_code }}" =~ ^[1-9][0-9]*$ ]]
+          (( ${{ inputs.version_code }} <= 2100000000 ))
+      - name: 写入 Android 版本
+        run: |
+          sed -i "s/versionCode = [0-9][0-9]*/versionCode = ${{ inputs.version_code }}/" android/app/build.gradle.kts
+          sed -i "s/versionName = \"[^\"]*\"/versionName = \"${RELEASE_VERSION}\"/" android/app/build.gradle.kts
+      - name: 测试并构建 APK
+        run: |
+          args=(test)
+          if [[ -n "${ANDROID_KEYSTORE_BASE64}" && -n "${ANDROID_KEYSTORE_PASSWORD}" && -n "${ANDROID_KEY_ALIAS}" && -n "${ANDROID_KEY_PASSWORD}" ]]; then
+            key_path="${RUNNER_TEMP}/mytoken-release.jks"
+            printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${key_path}"
+            args+=(
+              "-Pandroid.injected.signing.store.file=${key_path}"
+              "-Pandroid.injected.signing.store.password=${ANDROID_KEYSTORE_PASSWORD}"
+              "-Pandroid.injected.signing.key.alias=${ANDROID_KEY_ALIAS}"
+              "-Pandroid.injected.signing.key.password=${ANDROID_KEY_PASSWORD}"
+              ":app:assembleRelease"
+            )
+            apk_source="android/app/build/outputs/apk/release/app-release.apk"
+            apk_name="MyToken-${RELEASE_VERSION}-android.apk"
+          else
+            echo "::warning::未配置 Android 签名 secrets，本次发布 APK 将使用 Debug 签名。"
+            args+=(":app:assembleDebug")
+            apk_source="android/app/build/outputs/apk/debug/app-debug.apk"
+            apk_name="MyToken-${RELEASE_VERSION}-android-debug.apk"
+          fi
+          ./android/gradlew -p android "${args[@]}" --stacktrace
+          mkdir -p android/build/dist
+          cp "${apk_source}" "android/build/dist/${apk_name}"
+      - name: 创建 Android Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v${{ inputs.version }}
+          name: MyToken Android v${{ inputs.version }}
+          body: ${{ inputs.release_notes }}
+          generate_release_notes: false
+          files: android/build/dist/*.apk

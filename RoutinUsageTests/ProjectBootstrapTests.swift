@@ -432,24 +432,22 @@ final class ProjectBootstrapTests: XCTestCase {
     }
 
     func test发布工作流使用MyToken作为版本展示名称() throws {
-        let releaseWorkflow = try sourceText(at: ".github/workflows/release.yml")
+        let releaseWorkflow = try sourceText(at: ".github/workflows/release-macos.yml")
 
-        XCTAssertTrue(releaseWorkflow.contains("name: MyToken v${{ inputs.version }}"))
+        XCTAssertTrue(releaseWorkflow.contains("name: MyToken macOS v${{ inputs.version }}"))
         XCTAssertTrue(releaseWorkflow.contains("RELEASE_VERSION: ${{ inputs.version }}"))
         XCTAssertTrue(releaseWorkflow.contains("cp \"build/dist/MyToken.dmg\" \"build/dist/${dmg_name}\""))
         XCTAssertTrue(releaseWorkflow.contains("uname -m"))
-        XCTAssertTrue(releaseWorkflow.contains("release/macos/*.dmg"))
-        XCTAssertTrue(releaseWorkflow.contains(":app:assembleRelease"))
-        XCTAssertTrue(releaseWorkflow.contains("release/android/*.apk"))
+        XCTAssertTrue(releaseWorkflow.contains("tag_name: macos-v${{ inputs.version }}"))
         XCTAssertFalse(releaseWorkflow.contains("MyRoutin.dmg"))
         XCTAssertFalse(releaseWorkflow.contains("Routin Usage"))
     }
 
     func test发布工作流要求手动Markdown更新日志() throws {
-        let workflow = try sourceText(at: ".github/workflows/release.yml")
+        let workflow = try sourceText(at: ".github/workflows/release-macos.yml")
         let releaseNotesInput = """
               release_notes:
-                description: '发布说明（Markdown）'
+                description: 'macOS 发布说明（Markdown）'
                 required: true
                 type: string
         """
@@ -461,7 +459,7 @@ final class ProjectBootstrapTests: XCTestCase {
     }
 
     func test发布工作流显式选择并校验Xcode26() throws {
-        let workflow = try sourceText(at: ".github/workflows/release.yml")
+        let workflow = try sourceText(at: ".github/workflows/release-macos.yml")
 
         XCTAssertTrue(
             workflow.contains("DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer")
@@ -688,8 +686,8 @@ final class ProjectBootstrapTests: XCTestCase {
             resource = ("project", "yml")
         case "scripts/test.sh":
             resource = ("test", "sh")
-        case ".github/workflows/release.yml":
-            resource = ("release", "yml")
+        case ".github/workflows/release-macos.yml":
+            resource = ("release-macos", "yml")
         case ".github/workflows/ci.yml":
             resource = ("ci", "yml")
         case "RoutinUsage/App/RoutinUsageApp.swift":
