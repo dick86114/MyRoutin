@@ -119,7 +119,7 @@ jobs:
             apk_name="MyToken-${RELEASE_VERSION}-android-debug.apk"
           fi
 
-          ./gradlew "${args[@]}" --stacktrace
+          ./android/gradlew -p android "${args[@]}" --stacktrace
           mkdir -p android/build/dist
           cp "${apk_source}" "android/build/dist/${apk_name}"
           echo "apk_name=${apk_name}" >> "$GITHUB_ENV"
