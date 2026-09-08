@@ -44,15 +44,18 @@ actor TransferServer: TransferServing {
     private var isStarting = false
     private var isStopped = false
     private static let maxHandshakeBytes = 64 * 1024
+    private let startGateForTesting: (@Sendable () async -> Void)?
 
     init(
         host: String = TransferServer.defaultLANHost(),
         timeout: TimeInterval = TransferSession.defaultTimeout,
-        session: TransferSession? = nil
+        session: TransferSession? = nil,
+        startGateForTesting: (@Sendable () async -> Void)? = nil
     ) {
         self.host = host
         self.timeout = max(0.001, timeout)
         self.session = session ?? TransferSession(timeout: timeout)
+        self.startGateForTesting = startGateForTesting
     }
 
     func start() async throws -> TransferQRCodePayload {
@@ -88,6 +91,9 @@ actor TransferServer: TransferServing {
         guard !isStarting else { throw TransferServerError.alreadyStarting }
 
         isStarting = true
+        if let startGateForTesting {
+            await startGateForTesting()
+        }
         do {
             try await session.beginWaitingForAndroid()
             let listener = try NWListener(using: .tcp, on: .any)

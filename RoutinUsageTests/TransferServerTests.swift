@@ -17,6 +17,31 @@ private func transferServerStartOutcome(for server: TransferServer) async -> Tra
     }
 }
 
+/// Deterministic start-order test hook: the first start suspends before it can
+/// complete, so the second start cannot accidentally execute after success.
+private actor ConcurrentStartGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private(set) var isWaiting = false
+
+    func wait() async {
+        isWaiting = true
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func resume() {
+        continuation?.resume()
+        continuation = nil
+    }
+
+    func waitUntilWaiting() async {
+        while !isWaiting {
+            await Task.yield()
+        }
+    }
+}
+
 final class TransferServerTests: XCTestCase {
     private enum TestTimeout: Error { case timedOut }
 
@@ -125,18 +150,26 @@ final class TransferServerTests: XCTestCase {
     }
 
     func testConcurrentStartIsRejectedAndFirstCallIsReleasedByStop() async throws {
-        let server = TransferServer(host: "127.0.0.1")
-        let outcome = try await concurrentStartOutcome(for: server)
-        guard let rejected = outcome.rejected else { throw TestTimeout.timedOut }
-        switch rejected {
+        let gate = ConcurrentStartGate()
+        let server = TransferServer(
+            host: "127.0.0.1",
+            startGateForTesting: { await gate.wait() }
+        )
+
+        let firstTask = Task { await transferServerStartOutcome(for: server) }
+        await gate.waitUntilWaiting()
+        let secondOutcome = await transferServerStartOutcome(for: server)
+        await gate.resume()
+        await server.stop()
+        let firstOutcome = await firstTask.value
+
+        switch secondOutcome {
         case .returned(let payload):
             XCTFail("second start must be rejected, but returned cached payload for port \(payload.port)")
         case .failed(let message):
             XCTAssertEqual(message, String(describing: TransferServerError.alreadyStarting), "second start must fail with .alreadyStarting, got: \(message)")
         }
-        // The helper's watchdog and stop() bound the released call: reaching
-        // this line means it ended within the limit, with success or cancellation.
-        XCTAssertNotNil(outcome.released, "pending start must complete within the bounded timeout")
+        XCTAssertNotNil(firstOutcome, "pending start must be released by stop")
     }
 
     func testRealLocalHandshakeAndDisconnectTerminatesSession() async throws {
