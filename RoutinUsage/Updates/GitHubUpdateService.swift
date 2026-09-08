@@ -224,7 +224,7 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
             return nil
         }
 
-        let tag = release.version.hasPrefix("v") ? release.version : "v\(release.version)"
+        let tag = release.version.hasPrefix("macos-") ? release.version : "v\(version)"
         guard let assetName = try await Self.resolveDMGAssetName(version: version, tag: tag, session: session),
               let downloadURL = URL(
                 string: "https://github.com/\(Self.repository)/releases/download/\(tag)/\(assetName)"
@@ -422,7 +422,6 @@ private final class AtomReleaseParser: NSObject, XMLParserDelegate {
     private var publishedText: String?
     private var notes = ""
     private var stoppedAfterFirstEntry = false
-
     func parse(data: Data) -> AtomRelease? {
         let parser = XMLParser(data: data)
         parser.delegate = self
@@ -456,6 +455,10 @@ private final class AtomReleaseParser: NSObject, XMLParserDelegate {
         if elementName == "entry" {
             inEntry = true
             currentText = ""
+            version = nil
+            releaseURL = nil
+            publishedText = nil
+            notes = ""
         }
     }
 
@@ -487,8 +490,11 @@ private final class AtomReleaseParser: NSObject, XMLParserDelegate {
             }
         case "entry":
             inEntry = false
-            stoppedAfterFirstEntry = true
-            parser.abortParsing()
+            let isMacOSRelease = version?.range(of: "^(macos-)?v[0-9]+\\.[0-9]+\\.[0-9]+$", options: .regularExpression) != nil
+            if isMacOSRelease {
+                stoppedAfterFirstEntry = true
+                parser.abortParsing()
+            }
         default:
             break
         }

@@ -3,6 +3,28 @@ import XCTest
 @testable import RoutinUsage
 
 final class GitHubUpdateServiceTests: XCTestCase {
+    func testRelease列表只选择macOS版本() async throws {
+        let body = """
+        [
+          {"tag_name":"android-v9.0.0","html_url":"https://github.com/dick86114/MyToken/releases/tag/android-v9.0.0","assets":[{"name":"MyToken-9.0.0-android.apk","browser_download_url":"https://example.com/app.apk"}]},
+          {"tag_name":"macos-v5.2.0","html_url":"https://github.com/dick86114/MyToken/releases/tag/macos-v5.2.0","assets":[{"name":"MyToken-5.2.0-arm64.dmg","browser_download_url":"https://example.com/app.dmg"}],"body":"macOS 更新"}
+        ]
+        """
+        let stub = URLProtocolStub.makeSession { request in
+            let response = try XCTUnwrap(
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)
+            )
+            return (response, Data(body.utf8))
+        }
+        let service = GitHubUpdateService(session: stub.session, currentVersion: "5.1.0")
+
+        let update = try await service.checkForUpdate()
+
+        XCTAssertEqual(update?.version, "5.2.0")
+        XCTAssertEqual(update?.notes, "macOS 更新")
+        XCTAssertEqual(update?.downloadURL.absoluteString, "https://example.com/app.dmg")
+    }
+
     func test发现较新Release并选择DMG资源() async throws {
         let stub = URLProtocolStub.makeSession { request in
             let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
