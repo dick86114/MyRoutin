@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.NotificationManager
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -51,7 +52,7 @@ class MainActivityNotificationPermissionTest {
 
     private fun openSettingsAndScrollToPermissionStatus() {
         composeRule.waitForIdle()
-        composeRule.onNodeWithText("设置").performClick()
+        composeRule.onNodeWithContentDescription("设置").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("settings_list").performScrollToNode(
             hasText("系统通知权限：已允许"),
