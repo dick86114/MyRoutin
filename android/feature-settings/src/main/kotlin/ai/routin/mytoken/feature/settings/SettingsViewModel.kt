@@ -15,6 +15,7 @@ data class SettingsUiState(
     val refresh: RefreshSettings = RefreshSettings(),
     val display: DisplaySettings = DisplaySettings(),
     val notifications: NotificationSettings = NotificationSettings(),
+    val update: UpdateSettings = UpdateSettings(),
 )
 
 /**
@@ -25,6 +26,7 @@ class SettingsViewModel(
     private val refreshStore: RefreshSettingsStore,
     private val displayStore: DisplaySettingsStore,
     private val notificationStore: NotificationSettingsStore,
+    private val updateStore: UpdateSettingsStore,
     private val updateController: AppUpdateController,
 ) : ViewModel() {
 
@@ -32,9 +34,16 @@ class SettingsViewModel(
         refreshStore.settings,
         displayStore.settings,
         notificationStore.settings,
-    ) { refresh, display, notifications ->
+        updateStore.settings,
+    ) { refresh, display, notifications, update ->
         currentNotifications = notifications
-        SettingsUiState(isLoading = false, refresh = refresh, display = display, notifications = notifications)
+        SettingsUiState(
+            isLoading = false,
+            refresh = refresh,
+            display = display,
+            notifications = notifications,
+            update = update,
+        )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUiState())
 
     val updateState: StateFlow<AppUpdateUiState> = updateController.state
@@ -84,6 +93,8 @@ class SettingsViewModel(
 
     fun setCredentialFailureAlertsEnabled(enabled: Boolean) =
         launch { notificationStore.setCredentialFailureAlertsEnabled(enabled) }
+
+    fun setUpdateMirrorBase(base: String) = launch { updateStore.setMirrorBase(base) }
 
     fun setLowAlertThreshold(percent: Int) {
         if (!isValidThreshold(percent)) return

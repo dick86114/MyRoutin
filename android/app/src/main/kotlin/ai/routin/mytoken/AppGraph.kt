@@ -10,6 +10,7 @@ import ai.routin.mytoken.domain.usage.RefreshCredentialsUseCase
 import ai.routin.mytoken.feature.credentials.DataStoreCredentialOrderStore
 import ai.routin.mytoken.feature.settings.AppPreferencesNotificationSettingsStore
 import ai.routin.mytoken.feature.settings.AppPreferencesRefreshSettingsStore
+import ai.routin.mytoken.feature.settings.AppPreferencesUpdateSettingsStore
 import ai.routin.mytoken.feature.settings.DataStoreDisplaySettingsStore
 import ai.routin.mytoken.feature.transfer.TransferClient
 import ai.routin.mytoken.feature.transfer.TransferRepositoryImpl
@@ -54,6 +55,10 @@ class AppGraph(context: Context) {
         AppPreferencesRefreshSettingsStore(AppPreferencesRepository(appContext))
     }
 
+    val updateSettingsStore: AppPreferencesUpdateSettingsStore by lazy {
+        AppPreferencesUpdateSettingsStore(AppPreferencesRepository(appContext))
+    }
+
     val notificationSettingsStore: AppPreferencesNotificationSettingsStore by lazy {
         AppPreferencesNotificationSettingsStore(AppPreferencesRepository(appContext))
     }
@@ -90,6 +95,7 @@ class AppGraph(context: Context) {
         GitHubAppUpdateController(
             context = appContext,
             currentVersionName = versionName,
+            preferences = AppPreferencesRepository(appContext),
         )
     }
 }

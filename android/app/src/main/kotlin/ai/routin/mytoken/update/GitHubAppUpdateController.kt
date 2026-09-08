@@ -1,9 +1,11 @@
 package ai.routin.mytoken.update
 
+import ai.routin.mytoken.data.preferences.AppPreferencesRepository
 import ai.routin.mytoken.feature.settings.AppUpdateController
 import ai.routin.mytoken.feature.settings.AppUpdateUiState
 import android.content.Context
 import android.content.Intent
+import android.util.Xml
 import android.net.Uri
 import androidx.core.content.FileProvider
 import java.io.File
@@ -11,6 +13,7 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,8 +35,13 @@ class GitHubAppUpdateController(
     private val context: Context,
     private val currentVersionName: String,
     private val repository: String = "dick86114/MyToken",
+    private val preferences: AppPreferencesRepository? = null,
     private val network: suspend (String, Map<String, String>) -> UpdateResponse = ::request,
+    private val probeStatus: (suspend (String) -> Int)? = null,
 ) : AppUpdateController {
+
+    private val probe: suspend (String) -> Int
+        get() = probeStatus ?: { url -> headStatus(url) }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
@@ -47,7 +55,8 @@ class GitHubAppUpdateController(
             runCatching {
                 mutex.withLock {
                     _state.update { AppUpdateUiState.Checking }
-                    val release = fetchLatestRelease()
+                    val mirror = mirrorBase()
+                    val release = fetchLatestRelease(mirror)
                     if (compareVersions(release.version, currentVersionName) <= 0) {
                         AppUpdateUiState.UpToDate(currentVersionName)
                     } else {
@@ -122,6 +131,7 @@ class GitHubAppUpdateController(
     }
 
     private suspend fun download(update: AvailableRelease): File = withContext(Dispatchers.IO) {
+        val mirror = mirrorBase()
         val directory = context.getExternalFilesDir("updates") ?: File(context.filesDir, "updates").apply { mkdirs() }
         directory.mkdirs()
         val target = File(directory, "MyToken-${update.version}.apk")
@@ -131,7 +141,7 @@ class GitHubAppUpdateController(
 
         var connection: HttpURLConnection? = null
         try {
-            connection = openConnection(update.downloadUrl, headers = emptyMap())
+            connection = openConnection(applyMirror(update.downloadUrl, mirror), headers = emptyMap())
             if (connection.responseCode !in 200..299) {
                 throw IOException("更新包下载失败（HTTP ${connection.responseCode}）")
             }
@@ -178,7 +188,27 @@ class GitHubAppUpdateController(
         }
     }
 
-    private suspend fun fetchLatestRelease(): AvailableRelease {
+    private suspend fun mirrorBase(): String? =
+        preferences?.updatePreferences?.first()?.updateMirrorBase?.takeIf { it.isNotBlank() }
+
+    private fun applyMirror(url: String, mirror: String?): String =
+        if (mirror != null && url.startsWith("https://github.com/")) "$mirror/$url" else url
+
+    private suspend fun fetchLatestRelease(mirror: String?): AvailableRelease {
+        val release: AvailableRelease = try {
+            fetchLatestReleaseFromApi()
+        } catch (error: IOException) {
+            // CDN 模式下 API 直连失败时，改走镜像的 Atom 源完成检测。
+            if (mirror != null) {
+                fetchLatestReleaseFromAtom(mirror)
+            } else {
+                throw error
+            }
+        }
+        return release.copy(downloadUrl = applyMirror(release.downloadUrl, mirror))
+    }
+
+    private suspend fun fetchLatestReleaseFromApi(): AvailableRelease {
         val body = network(
             "https://api.github.com/repos/$repository/releases?per_page=100",
             mapOf(
@@ -226,6 +256,108 @@ class GitHubAppUpdateController(
             notes = json.optString("body"),
             downloadUrl = asset.url,
         )
+    }
+
+    /**
+     * Atom 源不含资产列表，按命名约定探测下载地址（优先正式包，再回退 debug 包）。
+     */
+    private suspend fun fetchLatestReleaseFromAtom(mirror: String): AvailableRelease {
+        val body = network(
+            applyMirror("https://github.com/$repository/releases.atom", mirror),
+            mapOf("Accept" to "application/atom+xml"),
+        ).body
+        val tag = parseLatestAndroidTag(body)
+            ?: throw IOException("暂无 Android 发布版本")
+        val version = tag.removePrefix("android-").removePrefix("v").takeIf { it.isNotEmpty() }
+            ?: throw IOException("发布版本号无效")
+        val assetName = probeAtomAssetName(version, mirror)
+            ?: throw IOException("最新发布没有 Android 安装包")
+        val downloadUrl = "https://github.com/$repository/releases/download/$tag/$assetName"
+        return AvailableRelease(
+            version = version,
+            notes = "",
+            downloadUrl = downloadUrl,
+        )
+    }
+
+    private suspend fun probeAtomAssetName(version: String, mirror: String): String? {
+        val candidates = listOf(
+            "MyToken-$version-android.apk",
+            "MyToken-$version-android-debug.apk",
+        )
+        for (name in candidates) {
+            val url = applyMirror(
+                "https://github.com/$repository/releases/download/android-v$version/$name",
+                mirror,
+            )
+            val status = runCatching { probe(url) }.getOrNull() ?: continue
+            if (status in 200..299) return name
+        }
+        return null
+    }
+
+    private suspend fun headStatus(url: String): Int = withContext(Dispatchers.IO) {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "HEAD"
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 30_000
+            connection.setRequestProperty("User-Agent", "MyToken-Android-Updater")
+            connection.responseCode
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    /** 解析 Atom feed 里最新的 android-vX.Y.Z 条目，返回 tag（如 android-v0.0.4）。 */
+    private fun parseLatestAndroidTag(body: String): String? {
+        val parser = Xml.newPullParser()
+        parser.setFeature(org.xmlpull.v1.XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
+        parser.setInput(body.reader())
+        var event = parser.eventType
+        var inEntry = false
+        var currentText = StringBuilder()
+        var entryTag: String? = null
+        while (event != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+            when (event) {
+                org.xmlpull.v1.XmlPullParser.START_TAG -> when (parser.name) {
+                    "entry" -> {
+                        inEntry = true
+                        currentText = StringBuilder()
+                        entryTag = null
+                    }
+                    "link" -> {
+                        if (inEntry && parser.getAttributeValue(null, "rel") == "alternate") {
+                            entryTag = parser.getAttributeValue(null, "href")
+                                ?.substringAfterLast('/')
+                                ?.takeIf { it.startsWith("android-v") }
+                                ?: entryTag
+                        }
+                    }
+                }
+                org.xmlpull.v1.XmlPullParser.TEXT -> if (inEntry) currentText.append(parser.text)
+                org.xmlpull.v1.XmlPullParser.END_TAG -> when (parser.name) {
+                    "id" -> if (inEntry && entryTag == null) {
+                        entryTag = currentText.toString().trim().substringAfterLast('/')
+                            .takeIf { it.startsWith("android-v") }
+                    }
+                    "title" -> if (inEntry && entryTag == null) {
+                        entryTag = currentText.toString().trim().split(' ')
+                            .lastOrNull { it.startsWith("android-v") }
+                    }
+                    "entry" -> {
+                        if (entryTag != null &&
+                            entryTag.matches(Regex("^android-v\\d+\\.\\d+\\.\\d+$"))
+                        ) {
+                            return entryTag
+                        }
+                        inEntry = false
+                    }
+                }
+            }
+            event = parser.next()
+        }
+        return null
     }
 
     private fun install(update: DownloadedUpdate) {

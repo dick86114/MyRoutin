@@ -16,9 +16,15 @@ struct AlertThresholds: Equatable, Sendable {
     }
 }
 
+enum UpdateChannel: String, Equatable, Sendable, CaseIterable {
+    case direct
+    case cdn
+}
+
 @Observable
 final class AppSettings {
     static let allowedRefreshMinutes = [1, 5, 15, 30]
+    static let cdnBases = ["https://ghfast.top", "https://gh-proxy.com", "https://ghproxy.net"]
 
     @ObservationIgnored private let defaults: UserDefaults
     private var credentialUsagePreferences: [String: CredentialUsagePreferences]
@@ -68,6 +74,45 @@ final class AppSettings {
     var launchAtLogin: Bool {
         didSet {
             defaults.set(launchAtLogin, forKey: Keys.launchAtLogin)
+        }
+    }
+
+    var updateChannel: UpdateChannel {
+        didSet {
+            guard updateChannel != oldValue || defaults.string(forKey: Keys.updateChannel) != updateChannel.rawValue else {
+                return
+            }
+            defaults.set(updateChannel.rawValue, forKey: Keys.updateChannel)
+            if updateChannel == .cdn, updateCDNBase.isEmpty {
+                updateCDNBase = Self.cdnBases[0]
+            }
+            syncUpdateMirrorBase()
+        }
+    }
+
+    var updateCDNBase: String {
+        didSet {
+            let trimmed = updateCDNBase
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            defaults.set(trimmed, forKey: Keys.updateCDNBase)
+            if trimmed != updateCDNBase {
+                updateCDNBase = trimmed
+            }
+            syncUpdateMirrorBase()
+        }
+    }
+
+    /// nil = 直连 GitHub；非空 = 走该镜像前缀下载和检测。
+    var updateMirrorBase: String? {
+        updateChannel == .cdn && !updateCDNBase.isEmpty ? updateCDNBase : nil
+    }
+
+    private func syncUpdateMirrorBase() {
+        if let mirror = updateMirrorBase {
+            defaults.set(mirror, forKey: "updateMirrorBase")
+        } else {
+            defaults.removeObject(forKey: "updateMirrorBase")
         }
     }
 
@@ -179,6 +224,10 @@ final class AppSettings {
 
         launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
 
+        updateChannel = defaults.string(forKey: Keys.updateChannel)
+            .flatMap(UpdateChannel.init(rawValue:)) ?? .direct
+        updateCDNBase = defaults.string(forKey: Keys.updateCDNBase) ?? Self.cdnBases[0]
+
         if let data = defaults.data(forKey: Self.displayOrderKey),
            let decoded = try? JSONDecoder().decode(CredentialDisplayOrder.self, from: data) {
             displayOrder = decoded
@@ -198,6 +247,7 @@ final class AppSettings {
 
         let storedMigratedIDs = defaults.stringArray(forKey: Self.migratedUsagePreferenceIDsKey) ?? []
         migratedUsagePreferenceIDs = Set(storedMigratedIDs)
+        syncUpdateMirrorBase()
     }
 }
 
@@ -210,6 +260,8 @@ private extension AppSettings {
         static let lowThreshold = "notificationLowThreshold"
         static let highThreshold = "notificationHighThreshold"
         static let launchAtLogin = "launchAtLogin"
+        static let updateChannel = "updateChannel"
+        static let updateCDNBase = "updateCDNBase"
         static let selectedCredentialIDs = "selectedCredentialIDs"
         static let availableCredentialIDs = "availableCredentialIDs"
     }

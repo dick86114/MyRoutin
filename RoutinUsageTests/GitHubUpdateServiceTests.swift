@@ -206,6 +206,82 @@ final class GitHubUpdateServiceTests: XCTestCase {
         XCTAssertEqual(UpdateCompletionNotice.consume(defaults: defaults), "1.3.0")
         XCTAssertNil(UpdateCompletionNotice.consume(defaults: defaults))
     }
+
+    func testCDN模式给下载与发布页地址套镜像前缀() async throws {
+        let body = """
+        [
+          {"tag_name":"macos-v5.2.0","html_url":"https://github.com/dick86114/MyToken/releases/tag/macos-v5.2.0","assets":[{"name":"MyToken-5.2.0-arm64.dmg","browser_download_url":"https://github.com/dick86114/MyToken/releases/download/macos-v5.2.0/MyToken-5.2.0-arm64.dmg"}],"body":""}
+        ]
+        """
+        let stub = URLProtocolStub.makeSession { request in
+            let response = try XCTUnwrap(
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)
+            )
+            return (response, Data(body.utf8))
+        }
+        let service = GitHubUpdateService(
+            session: stub.session,
+            currentVersion: "5.1.0",
+            mirrorBaseProvider: { "https://ghfast.top" }
+        )
+
+        let update = try await service.checkForUpdate()
+
+        XCTAssertEqual(update?.version, "5.2.0")
+        XCTAssertEqual(
+            update?.downloadURL.absoluteString,
+            "https://ghfast.top/https://github.com/dick86114/MyToken/releases/download/macos-v5.2.0/MyToken-5.2.0-arm64.dmg"
+        )
+        XCTAssertEqual(
+            update?.releaseURL.absoluteString,
+            "https://ghfast.top/https://github.com/dick86114/MyToken/releases/tag/macos-v5.2.0"
+        )
+    }
+
+    func testCDN模式下API不可用时走镜像Atom检测() async throws {
+        struct NetworkUnavailable: Error {}
+        let atom = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <entry>
+            <id>tag:github.com,2008:Repository/1/macos-v5.2.0</id>
+            <updated>2026-09-08T08:48:28Z</updated>
+            <link rel="alternate" href="https://github.com/dick86114/MyToken/releases/tag/macos-v5.2.0" />
+            <title>MyToken v5.2.0</title>
+            <content type="html">CDN 检测</content>
+          </entry>
+        </feed>
+        """
+        let mirror = "https://ghfast.top"
+        let mirroredAtomURL = URL(string: "\(mirror)/\(GitHubUpdateService.releasesAtomURL.absoluteString)")
+        let stub = URLProtocolStub.makeSession { request in
+            let url = try XCTUnwrap(request.url)
+            if url.host == "api.github.com" {
+                throw NetworkUnavailable()
+            }
+            if url == mirroredAtomURL {
+                let response = try XCTUnwrap(
+                    HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+                )
+                return (response, Data(atom.utf8))
+            }
+            let response = try XCTUnwrap(
+                HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+            )
+            return (response, Data())
+        }
+        let service = GitHubUpdateService(
+            session: stub.session,
+            currentVersion: "5.1.0",
+            mirrorBaseProvider: { mirror }
+        )
+
+        let update = try await service.checkForUpdate()
+
+        XCTAssertEqual(update?.version, "5.2.0")
+        XCTAssertTrue(update?.downloadURL.absoluteString.hasPrefix("\(mirror)/https://github.com/") == true)
+        XCTAssertTrue(update?.releaseURL.absoluteString.hasPrefix("\(mirror)/https://github.com/") == true)
+    }
 }
 
 private actor DownloadProgressCapture {

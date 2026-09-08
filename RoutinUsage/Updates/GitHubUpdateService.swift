@@ -70,23 +70,46 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
     let session: URLSession
     let currentVersion: String
     let logWriter: any AppLogWriting
+    /// 返回当前镜像前缀（如 `https://ghfast.top`）；nil 表示 GitHub 直连。
+    let mirrorBaseProvider: @Sendable () -> String?
 
     init(
         session: URLSession = .shared,
         currentVersion: String? = nil,
-        logWriter: any AppLogWriting = NoopAppLogWriter()
+        logWriter: any AppLogWriting = NoopAppLogWriter(),
+        mirrorBaseProvider: @escaping @Sendable () -> String? = {
+            UserDefaults.standard.string(forKey: "updateMirrorBase")
+        }
     ) {
         self.session = session
         self.currentVersion = currentVersion ?? (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0")
         self.logWriter = logWriter
+        self.mirrorBaseProvider = mirrorBaseProvider
+    }
+
+    /// CDN 模式下把 `https://github.com/...` 地址套上镜像前缀；其余地址原样返回。
+    private func rewritten(_ url: URL, mirror: String?) -> URL {
+        guard let mirror,
+              !mirror.isEmpty,
+              url.scheme == "https",
+              url.host == "github.com" else {
+            return url
+        }
+        return URL(string: "\(mirror)/\(url.absoluteString)") ?? url
+    }
+
+    private func rewrittenString(_ value: String, mirror: String?) -> String {
+        guard let url = URL(string: value) else { return value }
+        return rewritten(url, mirror: mirror).absoluteString
     }
 
     func checkForUpdate() async throws -> AppUpdate? {
         await logWriter.log(
             level: .info,
             event: "update_check_started",
-            details: "version=\(currentVersion)"
+            details: "version=\(currentVersion) mirror=\(mirrorBaseProvider() ?? "direct")"
         )
+        let mirror = mirrorBaseProvider()
         var request = URLRequest(
             url: Self.releasesURL,
             cachePolicy: .reloadIgnoringLocalCacheData,
@@ -107,6 +130,10 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
                 event: "update_check_network_failed",
                 details: String(describing: error)
             )
+            // CDN 模式下 API 直连失败时，改走镜像的 Atom 源完成检测。
+            if mirror != nil {
+                return try await checkForUpdateFromAtom(mirror: mirror)
+            }
             throw UpdateServiceError.unavailable
         }
         guard let http = response as? HTTPURLResponse else {
@@ -126,7 +153,7 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
                 event: "update_check_rate_limited",
                 details: "status=\(http.statusCode)"
             )
-            return try await checkForUpdateFromAtom()
+            return try await checkForUpdateFromAtom(mirror: mirror)
         }
         guard (200..<300).contains(http.statusCode) else {
             throw UpdateServiceError.unavailable
@@ -160,11 +187,11 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
             return nil
         }
         guard let asset = release.assets.first(where: { $0.name.hasSuffix(".dmg") }),
-              let downloadURL = URL(string: asset.browserDownloadURL) else {
+              let downloadURL = URL(string: rewrittenString(asset.browserDownloadURL, mirror: mirror)) else {
             await logWriter.log(level: .error, event: "update_check_asset_missing", details: "version=\(version)")
             throw UpdateServiceError.invalidResponse
         }
-        guard let releaseURL = URL(string: release.htmlURL) else {
+        guard let releaseURL = URL(string: rewrittenString(release.htmlURL, mirror: mirror)) else {
             await logWriter.log(level: .error, event: "update_check_release_url_invalid", details: "version=\(version)")
             throw UpdateServiceError.invalidResponse
         }
@@ -178,10 +205,10 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
         )
     }
 
-    private func checkForUpdateFromAtom() async throws -> AppUpdate? {
+    private func checkForUpdateFromAtom(mirror: String?) async throws -> AppUpdate? {
         await logWriter.log(level: .info, event: "update_check_atom_started", details: nil)
         var request = URLRequest(
-            url: Self.releasesAtomURL,
+            url: rewritten(Self.releasesAtomURL, mirror: mirror),
             cachePolicy: .reloadIgnoringLocalCacheData,
             timeoutInterval: 30
         )
@@ -225,11 +252,19 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
         }
 
         let tag = release.version.hasPrefix("macos-") ? release.version : "v\(version)"
-        guard let assetName = try await Self.resolveDMGAssetName(version: version, tag: tag, session: session),
-              let downloadURL = URL(
-                string: "https://github.com/\(Self.repository)/releases/download/\(tag)/\(assetName)"
+        guard let assetName = try await Self.resolveDMGAssetName(
+                version: version,
+                tag: tag,
+                session: session,
+                mirror: mirror
               ),
-              let releaseURL = URL(string: release.releaseURL) else {
+              let downloadURL = URL(
+                string: rewrittenString(
+                  "https://github.com/\(Self.repository)/releases/download/\(tag)/\(assetName)",
+                  mirror: mirror
+                )
+              ),
+              let releaseURL = URL(string: rewrittenString(release.releaseURL, mirror: mirror)) else {
             await logWriter.log(
                 level: .error,
                 event: "update_check_atom_asset_missing",
@@ -256,7 +291,8 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
     private static func resolveDMGAssetName(
         version: String,
         tag: String,
-        session: URLSession
+        session: URLSession,
+        mirror: String?
     ) async throws -> String? {
         let baseURL = "https://github.com/\(repository)/releases/download/\(tag)"
         let candidates = [
@@ -266,7 +302,13 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
         ]
         for candidate in candidates {
             guard let url = URL(string: "\(baseURL)/\(candidate)") else { continue }
-            var request = URLRequest(url: url, timeoutInterval: 30)
+            var request = URLRequest(
+                url: {
+                    guard let mirror, url.host == "github.com" else { return url }
+                    return URL(string: "\(mirror)/\(url.absoluteString)") ?? url
+                }(),
+                timeoutInterval: 30
+            )
             request.httpMethod = "HEAD"
             do {
                 let (_, response) = try await session.data(for: request)
@@ -286,13 +328,15 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
         _ update: AppUpdate,
         progress: @escaping @Sendable (Double?) async -> Void
     ) async throws -> URL {
+        let mirror = mirrorBaseProvider()
+        let downloadURL = rewritten(update.downloadURL, mirror: mirror)
         await logWriter.log(
             level: .info,
             event: "update_download_started",
-            details: "version=\(update.version)"
+            details: "version=\(update.version) mirror=\(mirror ?? "direct")"
         )
         do {
-            let (bytes, response) = try await session.bytes(from: update.downloadURL)
+            let (bytes, response) = try await session.bytes(from: downloadURL)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 await logWriter.log(
                     level: .error,

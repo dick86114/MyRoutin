@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -30,6 +31,11 @@ data class AppPreferences(
     }
 }
 
+/** 更新通道设置；mirrorBase 为空表示 GitHub 直连，非空表示走该镜像前缀。 */
+data class UpdatePreferences(
+    val updateMirrorBase: String = "",
+)
+
 private val Context.preferencesDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "mytoken_settings"
 )
@@ -50,6 +56,12 @@ class AppPreferencesRepository(private val context: Context) {
             alertHighThresholdPercent = prefs[ALERT_HIGH_THRESHOLD_PERCENT]
                 ?: AppPreferences.DEFAULT_ALERT_HIGH_THRESHOLD_PERCENT,
             credentialFailureAlertsEnabled = prefs[CREDENTIAL_FAILURE_ALERTS_ENABLED] ?: true
+        )
+    }
+
+    val updatePreferences: Flow<UpdatePreferences> = context.preferencesDataStore.data.map { prefs ->
+        UpdatePreferences(
+            updateMirrorBase = prefs[UPDATE_MIRROR_BASE].orEmpty().trim(),
         )
     }
 
@@ -95,6 +107,12 @@ class AppPreferencesRepository(private val context: Context) {
         context.preferencesDataStore.edit { it[CREDENTIAL_FAILURE_ALERTS_ENABLED] = enabled }
     }
 
+    suspend fun setUpdateMirrorBase(base: String) {
+        context.preferencesDataStore.edit {
+            it[UPDATE_MIRROR_BASE] = base.trim().trimEnd('/')
+        }
+    }
+
     private companion object {
         val AUTO_REFRESH_ENABLED = booleanPreferencesKey("autoRefreshEnabled")
         val REFRESH_INTERVAL_MINUTES = intPreferencesKey("refreshIntervalMinutes")
@@ -105,5 +123,6 @@ class AppPreferencesRepository(private val context: Context) {
         val ALERT_LOW_THRESHOLD_PERCENT = intPreferencesKey("alertLowThresholdPercent")
         val ALERT_HIGH_THRESHOLD_PERCENT = intPreferencesKey("alertHighThresholdPercent")
         val CREDENTIAL_FAILURE_ALERTS_ENABLED = booleanPreferencesKey("credentialFailureAlertsEnabled")
+        val UPDATE_MIRROR_BASE = stringPreferencesKey("updateMirrorBase")
     }
 }

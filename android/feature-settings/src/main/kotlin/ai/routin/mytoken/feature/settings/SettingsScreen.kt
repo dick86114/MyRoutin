@@ -49,6 +49,7 @@ fun SettingsScreen(
     onDownloadAndInstall: (String, String) -> Unit = { _, _ -> },
     onOpenInstallPermissionSettings: () -> Unit = {},
     onInstallDownloadedUpdate: () -> Unit = {},
+    onMirrorBaseChange: (String) -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -117,6 +118,11 @@ fun SettingsScreen(
             item(key = "about") {
                 SectionCard(title = "关于") {
                     Text(text = "MyToken $appVersion", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    UpdateChannelSection(
+                        mirrorBase = state.update.mirrorBase,
+                        onMirrorBaseChange = onMirrorBaseChange,
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                     UpdateSection(
                         state = updateState,
@@ -238,6 +244,49 @@ private fun ThemeChip(
 ) {
     FilterChip(selected = selected, onClick = onClick, label = { Text(text = label) })
 }
+
+@Composable
+private fun UpdateChannelSection(
+    mirrorBase: String,
+    onMirrorBaseChange: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = mirrorBase.isEmpty(),
+                onClick = { onMirrorBaseChange("") },
+                label = { Text(text = "GitHub 直连") },
+            )
+            FilterChip(
+                selected = mirrorBase.isNotEmpty(),
+                onClick = { if (mirrorBase.isEmpty()) onMirrorBaseChange(DEFAULT_UPDATE_CDN_BASES.first()) },
+                label = { Text(text = "CDN 加速") },
+            )
+        }
+        if (mirrorBase.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DEFAULT_UPDATE_CDN_BASES.forEach { base ->
+                    FilterChip(
+                        selected = mirrorBase == base,
+                        onClick = { onMirrorBaseChange(base) },
+                        label = { Text(text = base.removePrefix("https://")) },
+                    )
+                }
+            }
+            Text(
+                text = "大陆网络建议选择 CDN 加速；若某镜像不可用可切换其他源。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private val DEFAULT_UPDATE_CDN_BASES = listOf(
+    "https://ghfast.top",
+    "https://gh-proxy.com",
+    "https://ghproxy.net",
+)
 
 @Composable
 internal fun Section(

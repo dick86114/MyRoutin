@@ -12,6 +12,7 @@ struct HelpUpdateView: View {
                 )
 
                 currentVersionSection
+                updateChannelSection
                 updateStatusSection
                 feedbackSection
             }
@@ -28,6 +29,31 @@ struct HelpUpdateView: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("当前版本 \(RoutinUsageApp.currentVersion)")
+        }
+    }
+
+    private var updateChannelSection: some View {
+        @Bindable var settings = environment.settings
+        return settingSection {
+            Picker("更新通道", selection: $settings.updateChannel) {
+                Text("GitHub 直连").tag(UpdateChannel.direct)
+                Text("CDN 加速").tag(UpdateChannel.cdn)
+            }
+            .pickerStyle(.segmented)
+            .accessibilityLabel("更新通道")
+
+            if environment.settings.updateChannel == .cdn {
+                Picker("CDN 源", selection: $settings.updateCDNBase) {
+                    ForEach(AppSettings.cdnBases, id: \.self) { base in
+                        Text(base.replacingOccurrences(of: "https://", with: "")).tag(base)
+                    }
+                }
+                .accessibilityLabel("CDN 加速源")
+
+                Text("大陆网络建议选择 CDN 加速；若某镜像不可用可切换其他源。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

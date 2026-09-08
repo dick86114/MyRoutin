@@ -72,6 +72,14 @@ class FakeNotificationSettingsStore(
         state.update { it.copy(credentialFailureAlertsEnabled = enabled) }
 }
 
+class FakeUpdateSettingsStore(initial: UpdateSettings = UpdateSettings()) : UpdateSettingsStore {
+    val state = MutableStateFlow(initial)
+    override val settings: Flow<UpdateSettings> = state
+
+    override suspend fun setMirrorBase(base: String) =
+        state.update { it.copy(mirrorBase = base) }
+}
+
 class FakeAppUpdateController : AppUpdateController {
     override val state = MutableStateFlow<AppUpdateUiState>(AppUpdateUiState.Idle)
     var checked = 0

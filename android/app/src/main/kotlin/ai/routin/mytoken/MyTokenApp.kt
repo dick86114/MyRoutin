@@ -137,6 +137,7 @@ fun MyTokenApp(
             refreshStore = graph.refreshSettingsStore,
             displayStore = graph.displaySettingsStore,
             notificationStore = graph.notificationSettingsStore,
+            updateStore = graph.updateSettingsStore,
             updateController = graph.appUpdateController,
         )
     }
@@ -260,6 +261,7 @@ fun MyTokenApp(
                                 onDownloadAndInstall = settingsViewModel::downloadAndInstall,
                                 onOpenInstallPermissionSettings = settingsViewModel::openInstallPermissionSettings,
                                 onInstallDownloadedUpdate = settingsViewModel::installDownloadedUpdate,
+                                onMirrorBaseChange = settingsViewModel::setUpdateMirrorBase,
                             )
                         }
                     }

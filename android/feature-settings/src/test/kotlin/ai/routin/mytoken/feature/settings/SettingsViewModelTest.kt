@@ -23,6 +23,7 @@ class SettingsViewModelTest {
     private lateinit var displayStore: FakeDisplaySettingsStore
     private lateinit var notificationStore: FakeNotificationSettingsStore
     private lateinit var updateController: FakeAppUpdateController
+    private lateinit var updateStore: FakeUpdateSettingsStore
 
     @Before
     fun setUp() {
@@ -31,6 +32,7 @@ class SettingsViewModelTest {
         displayStore = FakeDisplaySettingsStore()
         notificationStore = FakeNotificationSettingsStore()
         updateController = FakeAppUpdateController()
+        updateStore = FakeUpdateSettingsStore()
     }
 
     @After
@@ -42,6 +44,7 @@ class SettingsViewModelTest {
         refreshStore,
         displayStore,
         notificationStore,
+        updateStore,
         updateController,
     )
 
