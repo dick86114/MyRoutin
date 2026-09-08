@@ -50,7 +50,8 @@ jobs:
           key_path="${RUNNER_TEMP}/mytoken-release.jks"
           printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${key_path}"
 
-          if ! xxd -l 4 "${key_path}" | grep -q "fe ed fe ed"; then
+          file_magic=$(xxd -l 4 -p "${key_path}" 2>/dev/null)
+          if [ "${file_magic}" != "feedfeed" ] && [ "${file_magic:0:4}" != "3082" ]; then
             echo "::error::解码后的文件不是有效的 JKS/PKCS12 keystore，请检查 ANDROID_KEYSTORE_BASE64 是否为原始 keystore 文件的 base64 编码。"
             exit 1
           fi
