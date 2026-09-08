@@ -28,7 +28,6 @@ final class StatusBarController: NSObject {
     func start() {
         guard statusItem == nil else { return }
         registerStatusItem()
-        observeStatusBarAppearance()
         observeEnvironment()
         applicationDidBecomeActiveObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
@@ -55,6 +54,7 @@ final class StatusBarController: NSObject {
         logStatusItem("创建")
         configurePopover()
         configureStatusButton()
+        observeStatusBarAppearance()
         updateStatusButton()
     }
 
@@ -118,7 +118,18 @@ final class StatusBarController: NSObject {
     }
 
     private func observeStatusBarAppearance() {
-        appearanceObservation = NSApp.observe(\NSApplication.effectiveAppearance, options: [.new]) {
+        guard let button = statusItem?.button else {
+            appearanceObservation = NSApp.observe(\NSApplication.effectiveAppearance, options: [.new]) {
+            [weak self] _, _ in
+                Task { @MainActor [weak self] in
+                    self?.updateStatusButton()
+                }
+            }
+            return
+        }
+        // 监听状态栏按钮的 appearance（由系统根据壁纸实时调整），
+        // 而不是 NSApp.effectiveAppearance（跟随系统设置），确保反色和其他 app 一致。
+        appearanceObservation = button.observe(\.effectiveAppearance, options: [.new]) {
             [weak self] _, _ in
             Task { @MainActor [weak self] in
                 self?.updateStatusButton()
