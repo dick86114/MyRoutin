@@ -61,8 +61,10 @@ internal object CredentialWidgetRenderer {
             views.setTextViewText(R.id.widget_name, context.getString(R.string.widget_choose))
             views.setViewVisibility(R.id.widget_subscription, android.view.View.GONE)
             views.setViewVisibility(R.id.widget_refresh, android.view.View.GONE)
+            views.setViewVisibility(R.id.widget_metrics_empty, android.view.View.VISIBLE)
+            views.setTextViewText(R.id.widget_metrics_empty, "点击选择凭证")
             views.setOnClickPendingIntent(R.id.widget_content, configPendingIntent(context, appWidgetId))
-            views.setTextViewText(R.id.widget_status, "添加凭证后返回小组件选择")
+            views.setTextViewText(R.id.widget_status, "点击小组件选择要显示的凭证")
             return views
         }
 
