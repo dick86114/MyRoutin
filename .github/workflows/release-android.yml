@@ -117,5 +117,5 @@ jobs:
           name: MyToken Android v${{ inputs.version }}
           body: ${{ inputs.release_notes }}
           generate_release_notes: false
-          make_latest: false
+          make_latest: true
           files: android/build/dist/*.apk
