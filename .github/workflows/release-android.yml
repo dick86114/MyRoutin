@@ -44,6 +44,43 @@ jobs:
           [[ "${RELEASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "${{ inputs.version_code }}" =~ ^[1-9][0-9]*$ ]]
           (( ${{ inputs.version_code }} <= 2100000000 ))
+      - name: 校验签名配置
+        if: env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEYSTORE_PASSWORD != '' && env.ANDROID_KEY_ALIAS != '' && env.ANDROID_KEY_PASSWORD != ''
+        run: |
+          key_path="${RUNNER_TEMP}/mytoken-release.jks"
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${key_path}"
+
+          if ! xxd -l 4 "${key_path}" | grep -q "fe ed fe ed"; then
+            echo "::error::解码后的文件不是有效的 JKS/PKCS12 keystore，请检查 ANDROID_KEYSTORE_BASE64 是否为原始 keystore 文件的 base64 编码。"
+            exit 1
+          fi
+
+          if ! keytool -list -keystore "${key_path}" -storepass "${ANDROID_KEYSTORE_PASSWORD}" > /dev/null 2>&1; then
+            echo "::error::ANDROID_KEYSTORE_PASSWORD 不正确，无法打开 keystore。"
+            exit 1
+          fi
+
+          if ! keytool -list -keystore "${key_path}" -storepass "${ANDROID_KEYSTORE_PASSWORD}" -alias "${ANDROID_KEY_ALIAS}" > /dev/null 2>&1; then
+            echo "::error::ANDROID_KEY_ALIAS 不存在，请确认 keystore 中的 alias 名称。"
+            exit 1
+          fi
+
+          tmp_verify="${RUNNER_TEMP}/verify-key.jks"
+          if ! keytool -importkeystore \
+            -srckeystore "${key_path}" \
+            -srcstorepass "${ANDROID_KEYSTORE_PASSWORD}" \
+            -srcalias "${ANDROID_KEY_ALIAS}" \
+            -srckeypass "${ANDROID_KEY_PASSWORD}" \
+            -destkeystore "${tmp_verify}" \
+            -deststorepass ci-verify-only \
+            -destkeypass ci-verify-only \
+            -noprompt > /dev/null 2>&1
+          then
+            echo "::error::ANDROID_KEY_PASSWORD 不正确，无法解密 key 条目。"
+            echo "如果生成 keystore 时没有单独设置 key password，ANDROID_KEY_PASSWORD 应与 ANDROID_KEYSTORE_PASSWORD 相同。"
+            exit 1
+          fi
+          rm -f "${tmp_verify}"
       - name: 写入 Android 版本
         run: |
           sed -i "s/versionCode = [0-9][0-9]*/versionCode = ${{ inputs.version_code }}/" android/app/build.gradle.kts
