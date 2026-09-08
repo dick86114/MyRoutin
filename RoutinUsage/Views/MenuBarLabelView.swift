@@ -116,16 +116,20 @@ enum MenuBarMultiUsageIcon {
     ) -> NSImage {
         let count = max(1, min(indicators.count, maximumCount))
         let image = NSImage(size: NSSize(width: imageWidth(for: count), height: size.height))
-        image.lockFocus()
-        defer { image.unlockFocus() }
         let labelColor = foregroundColor(for: appearance ?? NSApp?.effectiveAppearance)
-        for (index, indicator) in indicators.prefix(maximumCount).enumerated() {
-            let x = outerPadding + CGFloat(index) * (unitWidth + gap)
-            draw(
-                indicator: indicator,
-                in: NSRect(x: x, y: 0, width: unitWidth, height: size.height),
-                foregroundColor: labelColor
-            )
+        let resolvedAppearance = appearance ?? NSApp?.effectiveAppearance
+        // 系统外观传播中测量字体会让 CoreText 崩溃；锁定绘制外观保证稳定。
+        resolvedAppearance?.performAsCurrentDrawingAppearance {
+            image.lockFocus()
+            defer { image.unlockFocus() }
+            for (index, indicator) in indicators.prefix(maximumCount).enumerated() {
+                let x = outerPadding + CGFloat(index) * (unitWidth + gap)
+                draw(
+                    indicator: indicator,
+                    in: NSRect(x: x, y: 0, width: unitWidth, height: size.height),
+                    foregroundColor: labelColor
+                )
+            }
         }
         // 模板图会丢弃颜色；这里保留风险色，同时手动根据菜单栏深浅绘制文字。
         image.isTemplate = false

@@ -14,6 +14,7 @@ final class StatusBarController: NSObject {
     private var refreshMinutes: Int
     private var notificationsEnabled: Bool
     private var appearanceObservation: NSKeyValueObservation?
+    private var appearanceUpdateScheduled = false
     private var popoverWindowResignObserver: NSObjectProtocol?
     private var applicationDidBecomeActiveObserver: NSObjectProtocol?
 
@@ -129,11 +130,23 @@ final class StatusBarController: NSObject {
         }
         // 监听状态栏按钮的 appearance（由系统根据壁纸实时调整），
         // 而不是 NSApp.effectiveAppearance（跟随系统设置），确保反色和其他 app 一致。
+        // 注意：外观切换传播期间直接重画图标会让 CoreText 抛异常（SIGABRT），
+        // 必须推迟到下一个 runloop，等 AppKit 完成传播后再绘制。
         appearanceObservation = button.observe(\.effectiveAppearance, options: [.new]) {
             [weak self] _, _ in
             Task { @MainActor [weak self] in
-                self?.updateStatusButton()
+                self?.scheduleStatusButtonUpdate()
             }
+        }
+    }
+
+    private func scheduleStatusButtonUpdate() {
+        guard !appearanceUpdateScheduled else { return }
+        appearanceUpdateScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.statusItem != nil else { return }
+            self.appearanceUpdateScheduled = false
+            self.updateStatusButton()
         }
     }
 
