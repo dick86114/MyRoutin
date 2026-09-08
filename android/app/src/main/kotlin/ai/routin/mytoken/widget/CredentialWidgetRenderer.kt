@@ -40,6 +40,7 @@ internal object CredentialWidgetRenderer {
         credential: Credential?,
         snapshot: UsageSnapshot?,
         statusText: String,
+        refreshing: Boolean = false,
     ): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.credential_widget)
 
@@ -73,6 +74,7 @@ internal object CredentialWidgetRenderer {
         views.setTextViewText(R.id.widget_name, credential.name)
         renderSubscription(views, snapshot)
         views.setViewVisibility(R.id.widget_refresh, android.view.View.VISIBLE)
+        views.setFloat(R.id.widget_refresh, "setAlpha", if (refreshing) 0.3f else 1f)
         views.setOnClickPendingIntent(
             R.id.widget_content,
             detailPendingIntent(context, appWidgetId, credential.id),
@@ -83,7 +85,16 @@ internal object CredentialWidgetRenderer {
             R.id.widget_metrics,
             detailPendingIntent(context, appWidgetId, credential.id),
         )
-        views.setTextViewText(R.id.widget_status, statusText)
+        views.setTextViewText(R.id.widget_status, if (refreshing) "正在刷新…" else statusText)
+        return views
+    }
+
+    /** 用户点击刷新后立即反馈，不等网络请求完成。 */
+    fun renderRefreshing(context: Context, appWidgetId: Int): RemoteViews {
+        val views = RemoteViews(context.packageName, R.layout.credential_widget)
+        views.setViewVisibility(R.id.widget_refresh, android.view.View.VISIBLE)
+        views.setFloat(R.id.widget_refresh, "setAlpha", 0.3f)
+        views.setTextViewText(R.id.widget_status, "正在刷新…")
         return views
     }
 

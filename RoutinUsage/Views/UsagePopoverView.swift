@@ -19,6 +19,7 @@ struct UsagePopoverView: View {
     @State private var providerFilter: ProviderID?
     @State private var selectedUpdate: AppUpdate?
     @State private var isUpdateIndicatorVisible = true
+    @State private var showRefreshSuccess = false
     @State private var scrollMetrics = PopoverScrollMetrics(contentHeight: 0, contentOffset: 0)
 
     init(
@@ -187,9 +188,25 @@ private extension UsagePopoverView {
             Button {
                 Task { await store.refreshAll() }
             } label: {
-                Image(systemName: store.isRefreshing ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
-                    .font(.system(size: 13, weight: .medium))
-                    .frame(width: 30, height: 30)
+                Group {
+                    if store.isRefreshing {
+                        TimelineView(.animation) { timeline in
+                            let angle = timeline.date.timeIntervalSinceReferenceDate
+                                .truncatingRemainder(dividingBy: 1) * 360
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .rotationEffect(.degrees(angle))
+                        }
+                    } else if showRefreshSuccess {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .transition(.scale.combined(with: .opacity))
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .transition(.opacity)
+                    }
+                }
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 30, height: 30)
             }
             .buttonStyle(.plain)
             .background {
@@ -203,6 +220,18 @@ private extension UsagePopoverView {
             .disabled(store.isRefreshing || store.visibleKeyIDs.isEmpty)
             .help("刷新全部 Key")
             .accessibilityLabel(store.isRefreshing ? "正在刷新全部 Key" : "刷新全部 Key")
+            .onChange(of: store.isRefreshing) { _, isRefreshing in
+                if !isRefreshing {
+                    withAnimation(.spring(duration: 0.3)) {
+                        showRefreshSuccess = true
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                        withAnimation(.easeOut(duration: 0.35)) {
+                            showRefreshSuccess = false
+                        }
+                    }
+                }
+            }
         }
         .overlay(alignment: .center) {
             Link(destination: RoutinUsageApp.websiteURL) {

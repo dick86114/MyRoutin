@@ -50,12 +50,22 @@ class CredentialWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == WidgetRefresher.ACTION_REFRESH) {
+            val appWidgetId = intent.getIntExtra(
+                WidgetRefresher.EXTRA_WIDGET_ID,
+                AppWidgetManager.INVALID_APPWIDGET_ID,
+            )
+            if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                // 点击反馈：立即降低刷新按钮透明度并显示"正在刷新…"
+                runCatching {
+                    AppWidgetManager.getInstance(context).updateAppWidget(
+                        appWidgetId,
+                        CredentialWidgetRenderer.renderRefreshing(context, appWidgetId),
+                    )
+                }
+            }
             WidgetRefresher.enqueue(
                 context,
-                intent.getIntExtra(
-                    WidgetRefresher.EXTRA_WIDGET_ID,
-                    AppWidgetManager.INVALID_APPWIDGET_ID,
-                ),
+                appWidgetId,
             )
             return
         }
