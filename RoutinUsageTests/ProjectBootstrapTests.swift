@@ -435,10 +435,12 @@ final class ProjectBootstrapTests: XCTestCase {
         let releaseWorkflow = try sourceText(at: ".github/workflows/release.yml")
 
         XCTAssertTrue(releaseWorkflow.contains("name: MyToken v${{ inputs.version }}"))
-        XCTAssertTrue(releaseWorkflow.contains("build/dist/MyToken.dmg"))
-        XCTAssertTrue(releaseWorkflow.contains("MyToken-${{ inputs.version }}-${arch}.dmg"))
+        XCTAssertTrue(releaseWorkflow.contains("RELEASE_VERSION: ${{ inputs.version }}"))
+        XCTAssertTrue(releaseWorkflow.contains("cp \"build/dist/MyToken.dmg\" \"build/dist/${dmg_name}\""))
         XCTAssertTrue(releaseWorkflow.contains("uname -m"))
-        XCTAssertTrue(releaseWorkflow.contains("build/dist/${{ env.dmg_name }}"))
+        XCTAssertTrue(releaseWorkflow.contains("release/macos/*.dmg"))
+        XCTAssertTrue(releaseWorkflow.contains(":app:assembleRelease"))
+        XCTAssertTrue(releaseWorkflow.contains("release/android/*.apk"))
         XCTAssertFalse(releaseWorkflow.contains("MyRoutin.dmg"))
         XCTAssertFalse(releaseWorkflow.contains("Routin Usage"))
     }
