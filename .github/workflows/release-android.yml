@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Android versionName（例如 1.2.0）'
+        description: 'Android versionName（建议与 macOS 主版本一致，例如 5.1.8）'
         required: true
         type: string
       version_code:
