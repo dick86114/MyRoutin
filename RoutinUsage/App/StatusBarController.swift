@@ -15,6 +15,10 @@ final class StatusBarController: NSObject {
     private var notificationsEnabled: Bool
     private var appearanceObservation: NSKeyValueObservation?
     private var appearanceUpdateScheduled = false
+    /// 上一次绘制时菜单栏按钮的深浅状态；nil 表示还没画过。
+    /// 相邻状态项频繁刷新会让 AppKit 反复重设按钮 appearance 并触发 KVO，
+    /// 深浅没变时必须跳过重绘，否则高频文字测量会撞上 CoreText 的 nil-insert 竞态。
+    private var lastDrawnMenuBarDark: Bool?
     private var popoverWindowResignObserver: NSObjectProtocol?
     private var applicationDidBecomeActiveObserver: NSObjectProtocol?
 
@@ -52,6 +56,7 @@ final class StatusBarController: NSObject {
 
     private func registerStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        lastDrawnMenuBarDark = nil
         logStatusItem("创建")
         configurePopover()
         configureStatusButton()
@@ -135,7 +140,10 @@ final class StatusBarController: NSObject {
         appearanceObservation = button.observe(\.effectiveAppearance, options: [.new]) {
             [weak self] _, _ in
             Task { @MainActor [weak self] in
-                self?.scheduleStatusButtonUpdate()
+                guard let self, let button = self.statusItem?.button else { return }
+                let isDark = button.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+                guard isDark != self.lastDrawnMenuBarDark else { return }
+                self.scheduleStatusButtonUpdate()
             }
         }
     }
@@ -188,6 +196,7 @@ final class StatusBarController: NSObject {
         guard let statusItem, let button = statusItem.button else {
             return
         }
+        let isDark = button.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         let enabledIDs = Set(environment.store.visibleKeyIDs)
         let visibility = environment.settings.displayOrder.visible(enabledIDs: enabledIDs)
         let selectedIndicators = visibility.menuBarIDs.compactMap { id -> MenuBarIndicatorModel? in
@@ -221,6 +230,7 @@ final class StatusBarController: NSObject {
             let hoverSummary = MenuBarIndicatorModel.hoverSummary(for: selectedIndicators)
             button.setAccessibilityLabel(hoverSummary)
             button.toolTip = hoverSummary
+            lastDrawnMenuBarDark = isDark
             return
         }
         let state: KeyUsageState? = nil
@@ -230,6 +240,7 @@ final class StatusBarController: NSObject {
         button.image = NSImage(named: "MenuBarLogoMask")
         button.imagePosition = .imageOnly
         button.imageScaling = .scaleProportionallyDown
+        lastDrawnMenuBarDark = isDark
         button.setAccessibilityLabel(text)
         button.toolTip = helpText(for: state)
     }
