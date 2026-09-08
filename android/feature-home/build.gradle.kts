@@ -35,6 +35,7 @@ android {
 dependencies {
     api(project(":domain"))
     implementation(project(":core"))
+    implementation(project(":core-ui"))
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")

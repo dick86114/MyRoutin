@@ -240,4 +240,22 @@ final class TransferServerTests: XCTestCase {
         XCTAssertFalse(encoded.contains("config"))
         XCTAssertFalse(encoded.contains("snapshot"))
     }
+
+    func test二维码优先使用正在运行的物理私网地址() {
+        let interfaces = [
+            LANInterface(name: "utun3", address: "100.100.10.10", isUp: true, isRunning: true),
+            LANInterface(name: "awdl0", address: "169.254.12.34", isUp: true, isRunning: true),
+            LANInterface(name: "bridge0", address: "192.168.9.2", isUp: true, isRunning: false),
+            LANInterface(name: "en0", address: "192.168.31.194", isUp: true, isRunning: true),
+        ]
+        XCTAssertEqual(TransferServer.preferredLANHost(from: interfaces), "192.168.31.194")
+    }
+
+    func test二维码忽略无效和回环地址() {
+        let interfaces = [
+            LANInterface(name: "utun0", address: "169.254.1.2", isUp: true, isRunning: true),
+            LANInterface(name: "lo0", address: "127.0.0.1", isUp: true, isRunning: true),
+        ]
+        XCTAssertEqual(TransferServer.preferredLANHost(from: interfaces), "127.0.0.1")
+    }
 }

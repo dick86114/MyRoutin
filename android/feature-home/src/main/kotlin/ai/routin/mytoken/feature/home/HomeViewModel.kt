@@ -19,10 +19,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -72,6 +74,7 @@ data class ProviderGroupUi(
 /** Whole-screen state rendered by [HomeScreen]. Single source: [HomeViewModel.state]. */
 data class HomeUiState(
     val isLoading: Boolean = true,
+    val cards: List<CredentialCardUi> = emptyList(),
     val groups: List<ProviderGroupUi> = emptyList(),
     val credentialCount: Int = 0,
     val isRefreshingAll: Boolean = false,
@@ -86,6 +89,7 @@ data class HomeUiState(
 class HomeViewModel(
     private val repository: CredentialRepository,
     private val refreshUseCase: RefreshCredentialsUseCase,
+    private val credentialOrderIds: Flow<List<String>> = emptyFlow(),
     private val clock: Clock = Clock.systemUTC(),
     refreshOnStart: Boolean = true,
     private val nowTickIntervalMillis: Long? = DEFAULT_NOW_TICK_MILLIS,
@@ -102,6 +106,13 @@ class HomeViewModel(
     internal val nowTick: StateFlow<Long> = nowTickCounter.asStateFlow()
 
     private val nowTickEnabled = MutableStateFlow(true)
+
+    private val orderedCredentialsFlow = combine(
+        repository.observeCredentials(),
+        credentialOrderIds,
+    ) { credentials, orderIds ->
+        orderCredentials(credentials, orderIds)
+    }
 
     /**
      * Lifecycle-aware ticker switch: the app layer pauses ticking while the
@@ -149,7 +160,7 @@ class HomeViewModel(
 
     val state: StateFlow<HomeUiState> =
         combine(
-            repository.observeCredentials(),
+            orderedCredentialsFlow,
             refreshUseCase.states,
             collapsedGroups,
             isRefreshingAll,
@@ -193,6 +204,25 @@ class HomeViewModel(
     }
 
     /**
+     * Uses the same phone-local order persisted by the credential page. IDs that
+     * have not been ordered yet keep repository order after the ordered prefix.
+     */
+    private fun orderCredentials(
+        credentials: List<Credential>,
+        orderIds: List<String>,
+    ): List<Credential> {
+        val byId = credentials.associateBy { it.id.toString() }
+        val ordered = orderIds
+            .asSequence()
+            .distinct()
+            .mapNotNull(byId::get)
+            .toList()
+        val orderedIdSet = ordered.mapTo(mutableSetOf()) { it.id.toString() }
+        val remainder = credentials.filter { it.id.toString() !in orderedIdSet }
+        return ordered + remainder
+    }
+
+    /**
      * Refreshes one credential; failures keep its last snapshot and mark it stale.
      * A call while the same credential is already refreshing is a no-op.
      */
@@ -221,11 +251,11 @@ class HomeViewModel(
         isRefreshingAll: Boolean,
     ): HomeUiState {
         val now = clock.instant()
-        val sorted = credentials.sortedWith(compareBy({ it.sortOrder }, { it.name }))
+        val allCards = credentials.map { it.toCardUi(usageStates[it.id], now) }
         val groups = ProviderId.entries
-            .filter { providerId -> sorted.any { it.providerId == providerId } }
+            .filter { providerId -> credentials.any { it.providerId == providerId } }
             .map { providerId ->
-                val cards = sorted
+                val cards = credentials
                     .filter { it.providerId == providerId }
                     .map { it.toCardUi(usageStates[it.id], now) }
                 ProviderGroupUi(
@@ -238,6 +268,7 @@ class HomeViewModel(
         val lastUpdatedAt = usageStates.values.mapNotNull { it.snapshot?.fetchedAt }.maxOrNull()
         return HomeUiState(
             isLoading = false,
+            cards = allCards,
             groups = groups,
             credentialCount = credentials.size,
             isRefreshingAll = isRefreshingAll,

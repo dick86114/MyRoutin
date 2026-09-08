@@ -34,6 +34,7 @@ android {
 
 dependencies {
     api(project(":domain"))
+    implementation(project(":core-ui"))
     implementation(project(":data"))
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")

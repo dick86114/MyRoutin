@@ -5,6 +5,7 @@ import ai.routin.mytoken.domain.usage.UsageProvider
 import ai.routin.mytoken.provider.deepseek.DeepSeekUsageProvider
 import ai.routin.mytoken.provider.glm.GLMUsageProvider
 import ai.routin.mytoken.provider.http.JavaHttpTransport
+import ai.routin.mytoken.provider.newapi.NewAPIUsageProvider
 import ai.routin.mytoken.provider.routin.RoutinUsageProvider
 import ai.routin.mytoken.provider.volcengine.VolcengineUsageProvider
 
@@ -20,5 +21,6 @@ fun defaultUsageProviders(): Map<ProviderId, UsageProvider> {
         ProviderId.DeepSeek to DeepSeekUsageProvider(transport),
         ProviderId.Glm to GLMUsageProvider(transport),
         ProviderId.Volcengine to VolcengineUsageProvider(transport),
+        ProviderId.NewAPI to NewAPIUsageProvider(transport),
     )
 }

@@ -86,10 +86,8 @@ class CredentialListScreenTest {
                 val state by viewModel.state.collectAsState()
                 CredentialListScreen(
                     state = state,
-                    onSearchQueryChange = viewModel::setSearchQuery,
                     onToggleEnabled = viewModel::toggleEnabled,
-                    onTogglePinned = viewModel::setPinned,
-                    onMoveWithinGroup = viewModel::moveWithinGroup,
+                    onMove = viewModel::move,
                     onEditCredential = {},
                     onRequestDelete = viewModel::requestDelete,
                     onDismissDelete = viewModel::dismissDelete,
@@ -104,7 +102,7 @@ class CredentialListScreenTest {
     }
 
     @Test
-    fun rendersProviderGroupedRows() {
+    fun rendersFlatRows() {
         repository.credentials.value = listOf(
             credential("00000001", "主力 Key"),
             credential("00000002", "备用 Key", provider = ProviderId.DeepSeek),
@@ -112,25 +110,8 @@ class CredentialListScreenTest {
         advanceVm()
         setContent()
 
-        composeRule.onNodeWithText("Routin").assertIsDisplayed()
         composeRule.onNodeWithText("主力 Key").assertIsDisplayed()
-        composeRule.onNodeWithText("DeepSeek").performScrollTo()
         composeRule.onNodeWithText("备用 Key").performScrollTo()
-    }
-
-    @Test
-    fun searchBoxFiltersRenderedRows() {
-        repository.credentials.value = listOf(
-            credential("00000001", "主力 Key"),
-            credential("00000002", "备用 Key"),
-        )
-        advanceVm()
-        setContent()
-
-        composeRule.onNodeWithTag("credential_search").performTextReplacement("备用")
-        waitUntilVm { viewModel.state.value.credentialCount == 1 }
-
-        composeRule.onNodeWithText("备用 Key").assertIsDisplayed()
     }
 
     @Test

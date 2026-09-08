@@ -3,12 +3,14 @@ package ai.routin.mytoken
 import android.Manifest
 import android.app.NotificationManager
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeUp
 import androidx.lifecycle.Lifecycle
 import org.junit.Rule
 import org.junit.Test
@@ -51,10 +53,9 @@ class MainActivityNotificationPermissionTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithText("设置").performClick()
         composeRule.waitForIdle()
-        repeat(3) {
-            composeRule.onNodeWithTag("settings_list").performTouchInput { swipeUp() }
-            composeRule.waitForIdle()
-        }
+        composeRule.onNodeWithTag("settings_list").performScrollToNode(
+            hasText("系统通知权限：已允许"),
+        )
     }
 
     @Test

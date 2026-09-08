@@ -49,7 +49,6 @@ class SettingsViewModelTest {
         assertEquals(15, state.refresh.refreshIntervalMinutes)
         assertTrue(state.refresh.openAppRefresh)
         assertTrue(state.refresh.retryOnFailure)
-        assertEquals(CardDensity.STANDARD, state.display.cardDensity)
         assertTrue(state.display.showDisabledCredentials)
     }
 
@@ -99,7 +98,6 @@ class SettingsViewModelTest {
         val vm = viewModel()
         advanceUntilIdle()
 
-        vm.setCardDensity(CardDensity.COMPACT)
         vm.setShowDisabledCredentials(false)
         vm.setDefaultExpandGroups(false)
         vm.setShowUsageProgress(false)
@@ -108,7 +106,6 @@ class SettingsViewModelTest {
         advanceUntilIdle()
 
         val display = displayStore.state.value
-        assertEquals(CardDensity.COMPACT, display.cardDensity)
         assertFalse(display.showDisabledCredentials)
         assertFalse(display.defaultExpandGroups)
         assertFalse(display.showUsageProgress)

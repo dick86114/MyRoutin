@@ -26,7 +26,7 @@ class MyTokenApplication : Application() {
         super.onCreate()
 
         NotificationChannels.ensureChannels(this)
-        RefreshWorker.delegateProvider = { AppBackgroundRefreshDelegate(graph) }
+        RefreshWorker.delegateProvider = { AppBackgroundRefreshDelegate(graph, this@MyTokenApplication) }
 
         // Keep the periodic WorkManager schedule in sync with the refresh settings.
         appScope.launch {

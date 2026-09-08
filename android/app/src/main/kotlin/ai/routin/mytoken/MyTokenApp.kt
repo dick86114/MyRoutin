@@ -11,7 +11,6 @@ import ai.routin.mytoken.feature.credentials.pruneCredential
 import ai.routin.mytoken.feature.home.HomeScreen
 import ai.routin.mytoken.feature.home.HomeViewModel
 import ai.routin.mytoken.feature.home.CredentialDetailScreen
-import ai.routin.mytoken.feature.settings.CardDensity
 import ai.routin.mytoken.feature.settings.SettingsScreen
 import ai.routin.mytoken.feature.settings.SettingsViewModel
 import ai.routin.mytoken.feature.transfer.ImportConflictMode
@@ -23,21 +22,25 @@ import ai.routin.mytoken.feature.transfer.TransferViewModel
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import ai.routin.mytoken.core.ui.GlassNavItem
+import ai.routin.mytoken.core.ui.LiquidGlassBottomBar
+import ai.routin.mytoken.core.ui.WalletCardsIcon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -77,7 +80,10 @@ fun MyTokenApp(
     appVersion: String,
     notificationPermissionGranted: Boolean = true,
     onRequestNotificationPermission: () -> Unit = {},
+    openCredentialId: UUID? = null,
+    onOpenCredentialConsumed: () -> Unit = {},
 ) {
+    var selectedTab by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var screen by remember { mutableStateOf<AppScreen>(AppScreen.Home) }
     val backStack = remember { mutableStateListOf<AppScreen>() }
     val scope = rememberCoroutineScope()
@@ -94,10 +100,11 @@ fun MyTokenApp(
     BackHandler(enabled = backStack.isNotEmpty()) { goBack() }
 
     val homeViewModel = remember {
-        HomeViewModel(
-            repository = graph.credentialRepository,
-            refreshUseCase = graph.refreshUseCase,
-        )
+            HomeViewModel(
+                repository = graph.credentialRepository,
+                refreshUseCase = graph.refreshUseCase,
+                credentialOrderIds = graph.credentialOrderStore.order,
+            )
     }
 
     // Lifecycle-aware freshness ticker: relative-time labels re-render every
@@ -124,95 +131,125 @@ fun MyTokenApp(
         SettingsViewModel(graph.refreshSettingsStore, graph.displaySettingsStore, graph.notificationSettingsStore)
     }
 
+    val pagerState = rememberPagerState(initialPage = selectedTab, pageCount = { 3 })
+    LaunchedEffect(pagerState) {
+        androidx.compose.runtime.snapshotFlow { pagerState.currentPage }.collect { page ->
+            selectedTab = page
+            if (screen == AppScreen.Home || screen == AppScreen.Credentials || screen == AppScreen.Settings) {
+                screen = when (page) {
+                    0 -> AppScreen.Home
+                    1 -> AppScreen.Credentials
+                    else -> AppScreen.Settings
+                }
+            }
+        }
+    }
+
+    fun selectTab(index: Int) {
+        selectedTab = index
+        screen = when (index) {
+            0 -> AppScreen.Home
+            1 -> AppScreen.Credentials
+            else -> AppScreen.Settings
+        }
+        scope.launch { pagerState.animateScrollToPage(index) }
+    }
+
+    LaunchedEffect(openCredentialId) {
+        openCredentialId?.let { credentialId ->
+            selectedTab = 0
+            pagerState.scrollToPage(0)
+            screen = AppScreen.Detail(credentialId)
+            backStack.clear()
+            onOpenCredentialConsumed()
+        }
+    }
+
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (screen is AppScreen.Home || screen is AppScreen.Credentials || screen is AppScreen.Settings) {
-                NavigationBar {
-                    NavigationBarItem(
-                        selected = screen is AppScreen.Home,
-                        onClick = { screen = AppScreen.Home },
-                        icon = { Icon(imageVector = Icons.Filled.Home, contentDescription = null) },
-                        label = { Text(text = "首页") },
+                LiquidGlassBottomBar(
+                    items = listOf(
+                        GlassNavItem("首页", Icons.Filled.Home, "首页", selectedTab == 0) {
+                            selectTab(0)
+                        },
+                        GlassNavItem("凭证", WalletCardsIcon, "凭证", selectedTab == 1) {
+                            selectTab(1)
+                        },
+                        GlassNavItem("设置", Icons.Filled.Settings, "设置", selectedTab == 2) {
+                            selectTab(2)
+                        },
                     )
-                    NavigationBarItem(
-                        selected = screen is AppScreen.Credentials,
-                        onClick = { screen = AppScreen.Credentials },
-                        icon = { Icon(imageVector = Icons.Filled.List, contentDescription = null) },
-                        label = { Text(text = "凭证") },
-                    )
-                    NavigationBarItem(
-                        selected = screen is AppScreen.Settings,
-                        onClick = { screen = AppScreen.Settings },
-                        icon = { Icon(imageVector = Icons.Filled.Settings, contentDescription = null) },
-                        label = { Text(text = "设置") },
-                    )
-                }
+                )
             }
         },
     ) { padding ->
         Box(modifier = Modifier
             .padding(padding)
             .fillMaxSize()) {
-            when (val current = screen) {
-                AppScreen.Home -> {
-                    val homeState by homeViewModel.state.collectAsState()
-                    HomeScreen(
-                        state = homeState,
-                        onRefreshAll = homeViewModel::refreshAll,
-                        onRefreshCredential = { id ->
-                            homeState.groups.flatMap { it.cards }
-                                .firstOrNull { it.credential.id == id }
-                                ?.let { homeViewModel.refreshCredential(it.credential) }
-                        },
-                        onToggleGroup = homeViewModel::toggleGroup,
-                        onOpenCredential = { id -> navigate(AppScreen.Detail(id)) },
-                        onImportFromMac = { navigate(AppScreen.Transfer) },
-                        onAddManually = { navigate(AppScreen.Editor(null)) },
-                    )
+            if (screen == AppScreen.Home || screen == AppScreen.Credentials || screen == AppScreen.Settings) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    beyondViewportPageCount = 1,
+                ) { page ->
+                    when (page) {
+                        0 -> {
+                            val homeState by homeViewModel.state.collectAsState()
+                            HomeScreen(
+                                state = homeState,
+                                onRefreshAll = homeViewModel::refreshAll,
+                                onRefreshCredential = { id ->
+                                    homeState.groups.flatMap { it.cards }
+                                        .firstOrNull { it.credential.id == id }
+                                        ?.let { homeViewModel.refreshCredential(it.credential) }
+                                },
+                                onOpenCredential = { id -> navigate(AppScreen.Detail(id)) },
+                                onImportFromMac = { navigate(AppScreen.Transfer) },
+                                onAddManually = { navigate(AppScreen.Editor(null)) },
+                            )
+                        }
+                        1 -> {
+                            val listState by credentialListViewModel.state.collectAsState()
+                            CredentialListScreen(
+                                state = listState,
+                                onToggleEnabled = credentialListViewModel::toggleEnabled,
+                                onMove = credentialListViewModel::move,
+                                onEditCredential = { id -> navigate(AppScreen.Editor(id)) },
+                                onRequestDelete = credentialListViewModel::requestDelete,
+                                onDismissDelete = credentialListViewModel::dismissDelete,
+                                onConfirmDelete = credentialListViewModel::confirmDelete,
+                                onImportFromMac = { navigate(AppScreen.Transfer) },
+                                onAddManually = { navigate(AppScreen.Editor(null)) },
+                            )
+                        }
+                        else -> {
+                            val settingsState by settingsViewModel.state.collectAsState()
+                            SettingsScreen(
+                                state = settingsState,
+                                appVersion = appVersion,
+                                onAutoRefreshChange = settingsViewModel::setAutoRefreshEnabled,
+                                onIntervalChange = settingsViewModel::setRefreshIntervalMinutes,
+                                onWifiOnlyChange = settingsViewModel::setWifiOnly,
+                                onOpenAppRefreshChange = settingsViewModel::setOpenAppRefresh,
+                                onRetryOnFailureChange = settingsViewModel::setRetryOnFailure,
+                                onThemeModeChange = settingsViewModel::setThemeMode,
+                                onOpenTransfer = { navigate(AppScreen.Transfer) },
+                                onNotificationsEnabledChange = settingsViewModel::setNotificationsEnabled,
+                                onCredentialFailureAlertsChange = settingsViewModel::setCredentialFailureAlertsEnabled,
+                                onLowThresholdChange = settingsViewModel::setLowAlertThreshold,
+                                onHighThresholdChange = settingsViewModel::setHighAlertThreshold,
+                                notificationPermissionGranted = notificationPermissionGranted,
+                                onRequestNotificationPermission = onRequestNotificationPermission,
+                            )
+                        }
+                    }
                 }
-                AppScreen.Credentials -> {
-                    val listState by credentialListViewModel.state.collectAsState()
-                    CredentialListScreen(
-                        state = listState,
-                        onSearchQueryChange = credentialListViewModel::setSearchQuery,
-                        onToggleEnabled = credentialListViewModel::toggleEnabled,
-                        onTogglePinned = credentialListViewModel::setPinned,
-                        onMoveWithinGroup = credentialListViewModel::moveWithinGroup,
-                        onEditCredential = { id -> navigate(AppScreen.Editor(id)) },
-                        onRequestDelete = credentialListViewModel::requestDelete,
-                        onDismissDelete = credentialListViewModel::dismissDelete,
-                        onConfirmDelete = credentialListViewModel::confirmDelete,
-                        onImportFromMac = { navigate(AppScreen.Transfer) },
-                        onAddManually = { navigate(AppScreen.Editor(null)) },
-                    )
-                }
-                AppScreen.Settings -> {
-                    val settingsState by settingsViewModel.state.collectAsState()
-                    SettingsScreen(
-                        state = settingsState,
-                        appVersion = appVersion,
-                        onBack = { goBack() },
-                        onAutoRefreshChange = settingsViewModel::setAutoRefreshEnabled,
-                        onIntervalChange = settingsViewModel::setRefreshIntervalMinutes,
-                        onWifiOnlyChange = settingsViewModel::setWifiOnly,
-                        onOpenAppRefreshChange = settingsViewModel::setOpenAppRefresh,
-                        onRetryOnFailureChange = settingsViewModel::setRetryOnFailure,
-                        onCardDensityChange = settingsViewModel::setCardDensity,
-                        onShowDisabledCredentialsChange = settingsViewModel::setShowDisabledCredentials,
-                        onDefaultExpandGroupsChange = settingsViewModel::setDefaultExpandGroups,
-                        onShowUsageProgressChange = settingsViewModel::setShowUsageProgress,
-                        onShowBalanceChange = settingsViewModel::setShowBalance,
-                        onShowResetTimeChange = settingsViewModel::setShowResetTime,
-                        onOpenTransfer = { navigate(AppScreen.Transfer) },
-                        onNotificationsEnabledChange = settingsViewModel::setNotificationsEnabled,
-                        onCredentialFailureAlertsChange = settingsViewModel::setCredentialFailureAlertsEnabled,
-                        onLowThresholdChange = settingsViewModel::setLowAlertThreshold,
-                        onHighThresholdChange = settingsViewModel::setHighAlertThreshold,
-                        notificationPermissionGranted = notificationPermissionGranted,
-                        onRequestNotificationPermission = onRequestNotificationPermission,
-                    )
-                }
-                is AppScreen.Detail -> {
+            } else {
+                val current = screen
+                when (current) {
+                    is AppScreen.Detail -> {
                     val homeState by homeViewModel.state.collectAsState()
                     val card = homeState.groups
                         .flatMap { it.cards }
@@ -233,6 +270,7 @@ fun MyTokenApp(
                         }
                     CredentialDetailScreen(
                         card = card,
+                        lowThresholdPercent = settingsViewModel.state.value.notifications.lowThresholdPercent,
                         onBack = { goBack() },
                         onRefresh = { card?.let { homeViewModel.refreshCredential(it.credential) } },
                         onEdit = { navigate(AppScreen.Editor(current.credentialId)) },
@@ -337,7 +375,9 @@ fun MyTokenApp(
                         }
                     }
                 }
+                else -> Unit
             }
         }
     }
+}
 }

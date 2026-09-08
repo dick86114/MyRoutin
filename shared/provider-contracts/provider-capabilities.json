@@ -13,6 +13,6 @@
       ],
       "capabilities": { "fiveHour": true, "weekly": true, "balance": false, "remainingQuota": true, "resetTime": true }
     },
-    { "providerId": "newAPI", "credentialKinds": ["bearerAPIKey"], "androidV1": false, "capabilities": { "fiveHour": false, "weekly": false, "balance": true, "remainingQuota": false, "resetTime": false } }
+    { "providerId": "newAPI", "credentialKinds": ["bearerAPIKey"], "capabilities": { "fiveHour": false, "weekly": false, "balance": true, "remainingQuota": true, "resetTime": false } }
   ]
 }

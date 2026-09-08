@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.runtime.Composable
+import ai.routin.mytoken.core.ui.SettingRow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -95,14 +96,7 @@ private fun ThresholdStepperRow(
     onDecrease: () -> Unit,
     onIncrease: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(text = label, style = MaterialTheme.typography.bodyMedium)
+    SettingRow(title = label) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onDecrease) {
                 Icon(imageVector = Icons.Filled.Remove, contentDescription = "$label 减少")

@@ -31,10 +31,7 @@ class SettingsScreenTest {
     private val refreshStore = FakeRefreshSettingsStore()
     private val displayStore = FakeDisplaySettingsStore()
 
-    private fun setContent(
-        onOpenTransfer: () -> Unit = {},
-        onBack: () -> Unit = {},
-    ) {
+    private fun setContent(onOpenTransfer: () -> Unit = {}) {
         composeRule.setContent {
             MaterialTheme {
                 SettingsScreen(
@@ -44,18 +41,12 @@ class SettingsScreenTest {
                         display = displayStore.state.value,
                     ),
                     appVersion = "0.1.0",
-                    onBack = onBack,
                     onAutoRefreshChange = { refreshStore.state.value = refreshStore.state.value.copy(autoRefreshEnabled = it) },
                     onIntervalChange = { refreshStore.state.value = refreshStore.state.value.copy(refreshIntervalMinutes = it) },
                     onWifiOnlyChange = { refreshStore.state.value = refreshStore.state.value.copy(wifiOnly = it) },
                     onOpenAppRefreshChange = { refreshStore.state.value = refreshStore.state.value.copy(openAppRefresh = it) },
                     onRetryOnFailureChange = { refreshStore.state.value = refreshStore.state.value.copy(retryOnFailure = it) },
-                    onCardDensityChange = { displayStore.state.value = displayStore.state.value.copy(cardDensity = it) },
-                    onShowDisabledCredentialsChange = { displayStore.state.value = displayStore.state.value.copy(showDisabledCredentials = it) },
-                    onDefaultExpandGroupsChange = { displayStore.state.value = displayStore.state.value.copy(defaultExpandGroups = it) },
-                    onShowUsageProgressChange = { displayStore.state.value = displayStore.state.value.copy(showUsageProgress = it) },
-                    onShowBalanceChange = { displayStore.state.value = displayStore.state.value.copy(showBalance = it) },
-                    onShowResetTimeChange = { displayStore.state.value = displayStore.state.value.copy(showResetTime = it) },
+                    onThemeModeChange = { displayStore.state.value = displayStore.state.value.copy(themeMode = it) },
                     onOpenTransfer = onOpenTransfer,
                 )
             }
@@ -98,24 +89,6 @@ class SettingsScreenTest {
         composeRule.waitUntil(5_000) { !refreshStore.state.value.autoRefreshEnabled }
 
         assertFalse(refreshStore.state.value.autoRefreshEnabled)
-    }
-
-    @Test
-    fun displaySectionRendersDensityAndMetricOptions() {
-        setContent()
-
-        // Pre-scroll: the 通知 section (Task 10) sits between 刷新 and 首页显示.
-        repeat(2) {
-            composeRule.onNodeWithTag("settings_list").performTouchInput { swipeUp() }
-            composeRule.waitForIdle()
-        }
-        composeRule.onNodeWithText("首页显示").performScrollTo()
-        composeRule.onNodeWithText("卡片密度").performScrollTo()
-        composeRule.onNodeWithText("紧凑").performScrollTo()
-        composeRule.onNodeWithText("显示已停用凭证").performScrollTo()
-        composeRule.onNodeWithText("默认展开分组").performScrollTo()
-        composeRule.onNodeWithText("指标显隐").performScrollTo()
-        composeRule.onNodeWithText("显示余额").performScrollTo()
     }
 
     @Test

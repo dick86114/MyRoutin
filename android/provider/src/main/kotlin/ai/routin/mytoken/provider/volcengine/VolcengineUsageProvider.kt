@@ -90,13 +90,19 @@ class VolcengineUsageProvider(
             return Result.failure(error as? UsageProviderException ?: UsageProviderException.Transport())
         }
 
-        return runCatching { mapResponse(response, credential.id) }.recoverCatching { error ->
+        return runCatching {
+            mapResponse(response, credential.id, if (isCodingPlan) "Coding Plan" else "Personal Agent Plan")
+        }.recoverCatching { error ->
             if (error is UsageProviderException) throw error
             throw UsageProviderException.InvalidResponse()
         }
     }
 
-    private fun mapResponse(response: ProviderHttpResponse, credentialId: java.util.UUID): UsageSnapshot {
+    private fun mapResponse(
+        response: ProviderHttpResponse,
+        credentialId: java.util.UUID,
+        planName: String,
+    ): UsageSnapshot {
         val body = response.body.decodeToString()
         if (response.statusCode !in 200..299) {
             // Same message-first priority as the macOS provider.
@@ -113,6 +119,10 @@ class VolcengineUsageProvider(
             ?: throw UsageProviderException.InvalidResponse()
         val result = root.objOrNull("Result")
             ?: throw UsageProviderException.InvalidResponse()
+        val remotePlanName = result.stringOrNull("planType")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { "$it Plan" }
+            ?: planName
 
         val metrics = buildList {
             val windows = listOf(
@@ -168,6 +178,7 @@ class VolcengineUsageProvider(
         return UsageSnapshot(
             credentialId = credentialId,
             fetchedAt = clock.instant(),
+            planName = remotePlanName,
             metrics = metrics
         )
     }

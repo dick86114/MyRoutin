@@ -8,6 +8,7 @@ import ai.routin.mytoken.domain.model.UsageMetric
 import ai.routin.mytoken.domain.model.UsageMetricPresentation
 import ai.routin.mytoken.domain.model.UsageMetricSemantic
 import ai.routin.mytoken.domain.model.UsageMetricUnit
+import ai.routin.mytoken.domain.model.UsageGroupMultiplier
 import ai.routin.mytoken.domain.model.UsageSnapshot
 import ai.routin.mytoken.domain.usage.UsageProvider
 import ai.routin.mytoken.domain.usage.UsageProviderException
@@ -21,6 +22,9 @@ import ai.routin.mytoken.provider.json.decimalOrNull
 import ai.routin.mytoken.provider.json.intOrNull
 import ai.routin.mytoken.provider.json.objOrNull
 import ai.routin.mytoken.provider.json.stringOrNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import java.math.BigDecimal
 import java.time.Clock
 import java.time.Instant
@@ -125,8 +129,63 @@ class RoutinUsageProvider(
         return UsageSnapshot(
             credentialId = credentialId,
             fetchedAt = clock.instant(),
+            planName = root.stringOrNull("planName").orEmpty(),
+            subscriptionStartAt = root.stringOrNull("startAt")?.let(::parseInstant),
+            subscriptionEndAt = root.stringOrNull("endAt")?.let(::parseInstant),
+            status = root.intOrNull("status"),
+            usageKind = if (hasPeriodicLimit) "periodic" else "tokenPack",
+            allowedModels = root.arrayOrNull("allowedModels")
+                ?.mapNotNull { item -> (item as? JsonPrimitive)?.contentOrNull }
+                .orEmpty(),
+            groupMultipliers = readGroupMultipliers(root),
             metrics = metrics
         )
+    }
+
+    private fun readGroupMultipliers(root: JsonObject): List<UsageGroupMultiplier> {
+        val names = keyedStringValues(root, "groupNames")
+        val multipliers = keyedDecimalValues(root, "groupMultipliers")
+        if (names == null || multipliers == null) return emptyList()
+        return names.keys.mapNotNull { key ->
+            val multiplier = multipliers[key] ?: return@mapNotNull null
+            UsageGroupMultiplier(name = key, multiplier = multiplier)
+        }
+    }
+
+    private fun keyedStringValues(
+        root: JsonObject,
+        key: String,
+    ): Map<String, String>? {
+        val element = root[key] ?: return null
+        return when (element) {
+            is kotlinx.serialization.json.JsonArray -> element.mapIndexedNotNull { index, item ->
+                val value = (item as? JsonPrimitive)?.contentOrNull ?: return@mapIndexedNotNull null
+                index.toString() to value
+            }.toMap()
+            is kotlinx.serialization.json.JsonObject -> element.keys.sorted().mapNotNull { itemKey ->
+                val value = (element[itemKey] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+                itemKey to value
+            }.toMap()
+            else -> null
+        }
+    }
+
+    private fun keyedDecimalValues(
+        root: JsonObject,
+        key: String,
+    ): Map<String, BigDecimal>? {
+        val element = root[key] ?: return null
+        return when (element) {
+            is kotlinx.serialization.json.JsonArray -> element.mapIndexedNotNull { index, item ->
+                val value = (item as? JsonPrimitive)?.contentOrNull?.toBigDecimalOrNull() ?: return@mapIndexedNotNull null
+                index.toString() to value
+            }.toMap()
+            is kotlinx.serialization.json.JsonObject -> element.keys.sorted().mapNotNull { itemKey ->
+                val value = (element[itemKey] as? JsonPrimitive)?.contentOrNull?.toBigDecimalOrNull() ?: return@mapNotNull null
+                itemKey to value
+            }.toMap()
+            else -> null
+        }
     }
 
     private fun metric(

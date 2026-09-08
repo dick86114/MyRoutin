@@ -11,6 +11,7 @@ settings:
     CURRENT_PROJECT_VERSION: 1
     GENERATE_INFOPLIST_FILE: YES
     INFOPLIST_KEY_LSUIElement: YES
+    INFOPLIST_KEY_NSLocalNetworkUsageDescription: "MyToken 需要访问本地网络，以便向 Android 客户端一次性加密迁移凭证。"
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 targets:
   RoutinUsage:

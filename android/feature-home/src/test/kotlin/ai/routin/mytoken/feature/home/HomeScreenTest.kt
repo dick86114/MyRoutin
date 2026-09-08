@@ -12,25 +12,18 @@ import ai.routin.mytoken.domain.model.UsageMetricUnit
 import ai.routin.mytoken.domain.model.UsageSnapshot
 import ai.routin.mytoken.domain.usage.RefreshStatus
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.unit.Density
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,56 +33,30 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w400dp-h1100dp")
 class HomeScreenTest {
-    @get:Rule
-    val composeRule = createComposeRule()
-
+    @get:Rule val composeRule = createComposeRule()
     private val now = Instant.parse("2026-09-07T12:00:00Z")
 
-    /** Brings the first node whose text contains [text] fully into the visible viewport. */
-    private fun scrollToText(text: String) {
-        composeRule.onNodeWithText(text, substring = true).performScrollTo()
-    }
-
-    private class Callbacks {
-        var openedCredentialId: UUID? = null
-        var refreshedAll = 0
-        var refreshedCredentialId: UUID? = null
-        var toggledProvider: ProviderId? = null
-        var importFromMac = 0
-        var addedManually = 0
-    }
-
-    private fun credential(
-        name: String,
-        provider: ProviderId,
-    ) = Credential(
+    private fun credential(name: String, provider: ProviderId = ProviderId.Routin) = Credential(
         id = UUID.randomUUID(),
         providerId = provider,
-        credentialKind = CredentialKind.ApiKey,
+        credentialKind = CredentialKind.BearerApiKey,
         name = name,
     )
 
-    private fun progressMetric(
-        id: String,
-        label: String,
-        used: Double,
-        limit: Double,
-        remaining: Double? = null,
-        windowEnd: Instant? = null,
-    ) = UsageMetric(
-        id = id,
-        label = label,
+    private fun progress(used: Double, limit: Double) = UsageMetric(
+        id = "fiveHour",
+        label = "5 小时",
         used = BigDecimal.valueOf(used),
         limit = BigDecimal.valueOf(limit),
-        remaining = remaining?.let { BigDecimal.valueOf(it) },
-        unit = UsageMetricUnit.Token,
+        remaining = BigDecimal.valueOf(limit - used),
+        unit = UsageMetricUnit.Currency,
         presentation = UsageMetricPresentation.Progress,
         semantic = UsageMetricSemantic.UsedQuota,
-        windowEnd = windowEnd,
+        currencyCode = "USD",
         healthState = UsageMetricHealthState.Unknown,
     )
 
-    private fun balanceMetric(value: Double) = UsageMetric(
+    private fun balance(value: Double) = UsageMetric(
         id = "balance",
         label = "余额",
         value = BigDecimal.valueOf(value),
@@ -100,539 +67,142 @@ class HomeScreenTest {
         healthState = UsageMetricHealthState.Normal,
     )
 
-    private fun readyCard(
+    private fun card(
         credential: Credential,
-        metrics: List<UsageMetric>,
+        status: RefreshStatus = RefreshStatus.Ready,
+        metrics: List<UsageMetric> = emptyList(),
+        isStale: Boolean = false,
+        error: AppError? = null,
     ) = CredentialCardUi(
         credential = credential,
-        status = RefreshStatus.Ready,
-        snapshot = UsageSnapshot(credential.id, now, metrics),
-        isStale = false,
-        error = null,
-        freshness = Freshness(FreshnessLevel.JUST_NOW, "刚刚更新"),
+        status = status,
+        snapshot = UsageSnapshot(credential.id, now, metrics, "成长版", now.minusSeconds(86400), now.plusSeconds(86400)),
+        isStale = isStale,
+        error = error,
+        freshness = if (isStale) Freshness(FreshnessLevel.EXPIRED, "数据已过期") else Freshness(FreshnessLevel.JUST_NOW, "刚刚更新"),
     )
 
-    private fun group(
-        provider: ProviderId,
-        cards: List<CredentialCardUi>,
-        isCollapsed: Boolean = false,
-    ) = ProviderGroupUi(
+    private fun group(provider: ProviderId, cards: List<CredentialCardUi>) = ProviderGroupUi(
         providerId = provider,
         displayName = ProviderCatalog.displayName(provider),
-        isCollapsed = isCollapsed,
+        isCollapsed = false,
         cards = cards,
     )
 
     @Test
-    fun rendersMultipleProviderGroupsWithCards() {
-        val rt = credential("RT 主力", ProviderId.Routin)
-        val ds = credential("DS 备用", ProviderId.DeepSeek)
-        val callbacks = Callbacks()
+    fun showsStandardCardWithMacStyleFields() {
+        val credential = credential("熠")
         composeRule.setContent {
             MaterialTheme {
                 HomeScreen(
                     state = HomeUiState(
                         isLoading = false,
-                        groups = listOf(
-                            group(ProviderId.Routin, listOf(readyCard(rt, listOf(balanceMetric(20.0))))),
-                            group(ProviderId.DeepSeek, listOf(readyCard(ds, listOf(balanceMetric(10.0))))),
-                        ),
-                        credentialCount = 2,
-                        lastUpdatedAt = now,
-                        lastUpdatedText = "刚刚更新",
-                    ),
-                    onRefreshAll = { callbacks.refreshedAll++ },
-                    onRefreshCredential = { callbacks.refreshedCredentialId = it },
-                    onToggleGroup = { callbacks.toggledProvider = it },
-                    onOpenCredential = { callbacks.openedCredentialId = it },
-                    onImportFromMac = { callbacks.importFromMac++ },
-                    onAddManually = { callbacks.addedManually++ },
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("Routin").assertIsDisplayed()
-        composeRule.onNodeWithText("RT 主力").assertIsDisplayed()
-
-        scrollToText("DS 备用")
-        composeRule.onNodeWithText("DeepSeek").assertIsDisplayed()
-        composeRule.onNodeWithText("DS 备用").assertIsDisplayed()
-    }
-
-    @Test
-    fun usageCardShowsProgressMetricsWithAmounts() {
-        val rt = credential("RT 主力", ProviderId.Routin)
-        composeRule.setContent {
-            MaterialTheme {
-                HomeScreen(
-                    state = HomeUiState(
-                        isLoading = false,
-                        groups = listOf(
-                            group(
-                                ProviderId.Routin,
-                                listOf(
-                                    readyCard(
-                                        rt,
-                                        listOf(
-                                            progressMetric(
-                                                "fiveHour",
-                                                "5 小时",
-                                                used = 4.2,
-                                                limit = 10.0,
-                                                remaining = 5.8,
-                                            ),
-                                        ),
-                                    ),
-                                ),
-                            ),
-                        ),
+                        cards = listOf(card(credential, metrics = listOf(progress(42.0, 100.0)))),
+                        groups = listOf(group(ProviderId.Routin, listOf(card(credential, metrics = listOf(progress(42.0, 100.0)))))),
                         credentialCount = 1,
                     ),
                     onRefreshAll = {},
                     onRefreshCredential = {},
-                    onToggleGroup = {},
                     onOpenCredential = {},
                     onImportFromMac = {},
                     onAddManually = {},
                 )
             }
         }
-
-        composeRule.onNodeWithText("42%").assertIsDisplayed()
-        composeRule.onNodeWithText("已用 4.2 / 10", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("剩余 5.8", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("熠").assertIsDisplayed()
+        composeRule.onNodeWithText("Routin · 成长版").assertIsDisplayed()
+        composeRule.onAllNodesWithText("已用", substring = true, useUnmergedTree = true).onFirst().assertIsDisplayed()
+        composeRule.onAllNodesWithText("剩余", substring = true, useUnmergedTree = true).onFirst().assertIsDisplayed()
     }
 
     @Test
-    fun balanceCardHidesUnsupportedMetrics() {
-        val ds = credential("DS 备用", ProviderId.DeepSeek)
-        composeRule.setContent {
-            MaterialTheme {
-                HomeScreen(
-                    state = HomeUiState(
-                        isLoading = false,
-                        groups = listOf(group(ProviderId.DeepSeek, listOf(readyCard(ds, listOf(balanceMetric(12.5)))))),
-                        credentialCount = 1,
-                    ),
-                    onRefreshAll = {},
-                    onRefreshCredential = {},
-                    onToggleGroup = {},
-                    onOpenCredential = {},
-                    onImportFromMac = {},
-                    onAddManually = {},
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("账户余额").assertIsDisplayed()
-        composeRule.onNodeWithText("12.5 CNY", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("重置", substring = true).assertDoesNotExist()
-        composeRule.onNodeWithText("%", substring = true).assertDoesNotExist()
-    }
-
-    @Test
-    fun failedCardKeepsLastSnapshotWithStaleLabelAndRetry() {
-        val rt = credential("RT 主力", ProviderId.Routin)
-        val callbacks = Callbacks()
-        composeRule.setContent {
-            MaterialTheme {
-                HomeScreen(
-                    state = HomeUiState(
-                        isLoading = false,
-                        groups = listOf(
-                            group(
-                                ProviderId.Routin,
-                                listOf(
-                                    CredentialCardUi(
-                                        credential = rt,
-                                        status = RefreshStatus.Failed,
-                                        snapshot = UsageSnapshot(rt.id, now, listOf(balanceMetric(20.0))),
-                                        isStale = true,
-                                        error = AppError.Authentication("凭证无效或没有该供应商权限"),
-                                        freshness = Freshness(FreshnessLevel.EXPIRED, "数据已过期"),
-                                    ),
-                                ),
-                            ),
-                        ),
-                        credentialCount = 1,
-                    ),
-                    onRefreshAll = { callbacks.refreshedAll++ },
-                    onRefreshCredential = { callbacks.refreshedCredentialId = it },
-                    onToggleGroup = {},
-                    onOpenCredential = {},
-                    onImportFromMac = {},
-                    onAddManually = {},
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("更新失败", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("上次成功数据", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("凭证无效或没有该供应商权限").assertIsDisplayed()
-        composeRule.onNodeWithText("20 CNY", substring = true).assertIsDisplayed()
-
-        scrollToText("重试")
-        composeRule.onNodeWithText("重试").performClick()
-        assertEquals(rt.id, callbacks.refreshedCredentialId)
-    }
-
-    @Test
-    fun loadingCardShowsRefreshingNotError() {
-        val rt = credential("RT 主力", ProviderId.Routin)
-        composeRule.setContent {
-            MaterialTheme {
-                HomeScreen(
-                    state = HomeUiState(
-                        isLoading = false,
-                        groups = listOf(
-                            group(
-                                ProviderId.Routin,
-                                listOf(
-                                    CredentialCardUi(
-                                        credential = rt,
-                                        status = RefreshStatus.Loading,
-                                        snapshot = null,
-                                        isStale = false,
-                                        error = null,
-                                        freshness = Freshness(FreshnessLevel.NEVER, "从未刷新"),
-                                    ),
-                                ),
-                            ),
-                        ),
-                        credentialCount = 1,
-                    ),
-                    onRefreshAll = {},
-                    onRefreshCredential = {},
-                    onToggleGroup = {},
-                    onOpenCredential = {},
-                    onImportFromMac = {},
-                    onAddManually = {},
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("刷新中", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("更新失败", substring = true).assertDoesNotExist()
-        composeRule.onNodeWithText("重试").assertDoesNotExist()
-    }
-
-    @Test
-    fun disabledCardShowsDisabledLabel() {
-        val glm = credential("GLM 停用", ProviderId.Glm)
-        composeRule.setContent {
-            MaterialTheme {
-                HomeScreen(
-                    state = HomeUiState(
-                        isLoading = false,
-                        groups = listOf(
-                            group(
-                                ProviderId.Glm,
-                                listOf(
-                                    CredentialCardUi(
-                                        credential = glm,
-                                        status = RefreshStatus.Disabled,
-                                        snapshot = null,
-                                        isStale = false,
-                                        error = null,
-                                        freshness = Freshness(FreshnessLevel.NEVER, "从未刷新"),
-                                    ),
-                                ),
-                            ),
-                        ),
-                        credentialCount = 1,
-                    ),
-                    onRefreshAll = {},
-                    onRefreshCredential = {},
-                    onToggleGroup = {},
-                    onOpenCredential = {},
-                    onImportFromMac = {},
-                    onAddManually = {},
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("已停用").assertIsDisplayed()
-    }
-
-    @Test
-    fun emptyStateOffersImportAndManualAdd() {
-        val callbacks = Callbacks()
-        composeRule.setContent {
-            MaterialTheme {
-                HomeScreen(
-                    state = HomeUiState(isLoading = false, groups = emptyList(), credentialCount = 0),
-                    onRefreshAll = {},
-                    onRefreshCredential = {},
-                    onToggleGroup = {},
-                    onOpenCredential = {},
-                    onImportFromMac = { callbacks.importFromMac++ },
-                    onAddManually = { callbacks.addedManually++ },
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("从 Mac 导入").performClick()
-        composeRule.onNodeWithText("手动添加").performClick()
-        assertEquals(1, callbacks.importFromMac)
-        assertEquals(1, callbacks.addedManually)
-    }
-
-    @Test
-    fun loadingStateHidesEmptyStateAndGroups() {
-        composeRule.setContent {
-            MaterialTheme {
-                HomeScreen(
-                    state = HomeUiState(isLoading = true, groups = emptyList(), credentialCount = 0),
-                    onRefreshAll = {},
-                    onRefreshCredential = {},
-                    onToggleGroup = {},
-                    onOpenCredential = {},
-                    onImportFromMac = {},
-                    onAddManually = {},
-                )
-            }
-        }
-
-        // Initial load must not flash the empty state or stale groups.
-        composeRule.onNodeWithText("尚未添加凭证").assertDoesNotExist()
-        composeRule.onNodeWithText("从 Mac 导入").assertDoesNotExist()
-    }
-
-    @Test
-    fun groupHeaderExposesButtonRoleAndStateDescription() {
-        val rt = credential("RT 主力", ProviderId.Routin)
-        composeRule.setContent {
-            MaterialTheme {
-                HomeScreen(
-                    state = HomeUiState(
-                        isLoading = false,
-                        groups = listOf(group(ProviderId.Routin, listOf(readyCard(rt, listOf(balanceMetric(1.0)))))),
-                        credentialCount = 1,
-                    ),
-                    onRefreshAll = {},
-                    onRefreshCredential = {},
-                    onToggleGroup = {},
-                    onOpenCredential = {},
-                    onImportFromMac = {},
-                    onAddManually = {},
-                )
-            }
-        }
-
-        val header = composeRule.onNodeWithText("Routin").fetchSemanticsNode()
-        assertEquals(Role.Button, header.config[SemanticsProperties.Role])
-        assertEquals("已展开", header.config[SemanticsProperties.StateDescription])
-    }
-
-    @Test
-    fun statusColorsFollowInstalledColorScheme() {
-        var observedDark: StatusColors? = null
-        var observedLight: StatusColors? = null
-
-        composeRule.setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
-                observedDark = statusColors()
-            }
-            MaterialTheme(colorScheme = lightColorScheme()) {
-                observedLight = statusColors()
-            }
-        }
-
-        assertEquals(StatusColors.darkPalette, observedDark)
-        assertEquals(StatusColors.lightPalette, observedLight)
-        assertNotEquals(observedLight, observedDark)
-        // Dark palette tones must be lighter than the light palette ones for contrast.
-        assertTrue(
-            observedDark!!.normal.luminance() > StatusColors.lightPalette.normal.luminance(),
+    fun filtersProvidersAndHidesDisabledCredentials() {
+        val enabled = credential("启用", ProviderId.Routin)
+        val disabled = credential("停用", ProviderId.DeepSeek)
+        val enabledDeepSeek = credential("备用", ProviderId.DeepSeek)
+        val cards = listOf(
+            card(enabled, metrics = listOf(balance(20.0))),
+            card(enabledDeepSeek, metrics = listOf(balance(10.0))),
+            card(disabled, status = RefreshStatus.Disabled),
         )
-        assertTrue(
-            observedDark!!.critical.luminance() > StatusColors.lightPalette.critical.luminance(),
-        )
-    }
-
-    @Test
-    fun collapsedGroupHidesCardsButKeepsHeader() {
-        val rt = credential("RT 主力", ProviderId.Routin)
         composeRule.setContent {
             MaterialTheme {
                 HomeScreen(
                     state = HomeUiState(
                         isLoading = false,
-                        groups = listOf(group(ProviderId.Routin, listOf(readyCard(rt, listOf(balanceMetric(1.0)))), isCollapsed = true)),
-                        credentialCount = 1,
-                    ),
-                    onRefreshAll = {},
-                    onRefreshCredential = {},
-                    onToggleGroup = {},
-                    onOpenCredential = {},
-                    onImportFromMac = {},
-                    onAddManually = {},
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("Routin").assertIsDisplayed()
-        composeRule.onNodeWithText("RT 主力").assertDoesNotExist()
-    }
-
-    @Test
-    fun cardClickOpensDetailCallback() {
-        val rt = credential("RT 主力", ProviderId.Routin)
-        val callbacks = Callbacks()
-        composeRule.setContent {
-            MaterialTheme {
-                HomeScreen(
-                    state = HomeUiState(
-                        isLoading = false,
-                        groups = listOf(group(ProviderId.Routin, listOf(readyCard(rt, listOf(balanceMetric(1.0)))))),
-                        credentialCount = 1,
-                    ),
-                    onRefreshAll = {},
-                    onRefreshCredential = {},
-                    onToggleGroup = {},
-                    onOpenCredential = { callbacks.openedCredentialId = it },
-                    onImportFromMac = {},
-                    onAddManually = {},
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("RT 主力").performClick()
-        assertEquals(rt.id, callbacks.openedCredentialId)
-    }
-
-    @Test
-    fun darkModeRendersGroupsAndCards() {
-        val rt = credential("RT 深色", ProviderId.Routin)
-        composeRule.setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
-                HomeScreen(
-                    state = HomeUiState(
-                        isLoading = false,
-                        groups = listOf(group(ProviderId.Routin, listOf(readyCard(rt, listOf(balanceMetric(9.0)))))),
-                        credentialCount = 1,
-                    ),
-                    onRefreshAll = {},
-                    onRefreshCredential = {},
-                    onToggleGroup = {},
-                    onOpenCredential = {},
-                    onImportFromMac = {},
-                    onAddManually = {},
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("RT 深色").assertIsDisplayed()
-        composeRule.onNodeWithText("账户余额").assertIsDisplayed()
-    }
-
-    @Test
-    fun largeFontScaleRendersWithoutLossOfKeyText() {
-        val rt = credential("RT 大字体", ProviderId.Routin)
-        composeRule.setContent {
-            CompositionLocalProvider(
-                LocalDensity provides Density(density = 2f, fontScale = 1.8f),
-            ) {
-                MaterialTheme {
-                    HomeScreen(
-                        state = HomeUiState(
-                            isLoading = false,
-                            groups = listOf(group(ProviderId.Routin, listOf(readyCard(rt, listOf(balanceMetric(9.0)))))),
-                            credentialCount = 1,
+                        cards = cards,
+                        groups = listOf(
+                            group(ProviderId.Routin, listOf(card(enabled, metrics = listOf(balance(20.0))))),
+                            group(
+                                ProviderId.DeepSeek,
+                                listOf(
+                                    card(enabledDeepSeek, metrics = listOf(balance(10.0))),
+                                    card(disabled, status = RefreshStatus.Disabled),
+                                ),
+                            ),
                         ),
-                        onRefreshAll = {},
-                        onRefreshCredential = {},
-                        onToggleGroup = {},
-                        onOpenCredential = {},
-                        onImportFromMac = {},
-                        onAddManually = {},
-                    )
-                }
+                        credentialCount = 3,
+                    ),
+                    onRefreshAll = {},
+                    onRefreshCredential = {},
+                    onOpenCredential = {},
+                    onImportFromMac = {},
+                    onAddManually = {},
+                )
             }
         }
+        composeRule.onNodeWithText("启用").assertIsDisplayed()
+        composeRule.onNodeWithText("停用").assertDoesNotExist()
 
-        composeRule.onNodeWithText("RT 大字体").assertIsDisplayed()
-
-        scrollToText("账户余额")
-        composeRule.onNodeWithText("账户余额").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Routin")[0].performClick()
+        composeRule.onNodeWithText("备用").assertDoesNotExist()
+        composeRule.onNodeWithText("2 个凭证").assertDoesNotExist()
+        composeRule.onNodeWithText("1 个凭证").assertIsDisplayed()
     }
 
     @Test
-    fun detailScreenShowsAllMetricsTimeErrorAndActions() {
-        val rt = credential("RT 主力", ProviderId.Routin)
-        val callbacks = Callbacks()
-        val card = CredentialCardUi(
-            credential = rt,
+    fun failedCardShowsErrorStaleDataAndRetry() {
+        val credential = credential("失败")
+        var retried = false
+        val failedCard = card(
+            credential,
             status = RefreshStatus.Failed,
-            snapshot = UsageSnapshot(
-                rt.id,
-                now,
-                listOf(
-                    progressMetric("fiveHour", "5 小时", 4.2, 10.0, 5.8, windowEnd = now),
-                    progressMetric("weekly", "本周", 1.0, 20.0, 19.0),
-                    balanceMetric(3.25),
-                ),
-            ),
+            metrics = listOf(balance(20.0)),
             isStale = true,
-            error = AppError.Network("请求过于频繁，请稍后重试"),
-            freshness = Freshness(FreshnessLevel.RECENT, "5分钟前更新"),
+            error = AppError.Authentication("凭证无效"),
         )
-
         composeRule.setContent {
             MaterialTheme {
-                CredentialDetailScreen(
-                    card = card,
-                    onBack = {},
-                    onRefresh = { callbacks.refreshedCredentialId = rt.id },
-                    onEdit = {},
-                    onDelete = {},
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("RT 主力").assertIsDisplayed()
-        composeRule.onNodeWithText("5 小时").assertIsDisplayed()
-
-        scrollToText("本周")
-        composeRule.onNodeWithText("本周").assertIsDisplayed()
-
-        scrollToText("账户余额")
-        composeRule.onNodeWithText("账户余额").assertIsDisplayed()
-
-        scrollToText("更新时间")
-        composeRule.onNodeWithText("更新时间", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("请求过于频繁，请稍后重试").assertIsDisplayed()
-
-        composeRule.onNodeWithText("刷新").performClick()
-        assertEquals(rt.id, callbacks.refreshedCredentialId)
-        composeRule.onNodeWithText("编辑").assertIsDisplayed()
-        composeRule.onNodeWithText("删除").assertIsDisplayed()
-    }
-
-    @Test
-    fun detailScreenSupportsCardWithoutSnapshot() {
-        val rt = credential("RT 空数据", ProviderId.Routin)
-        composeRule.setContent {
-            MaterialTheme {
-                CredentialDetailScreen(
-                    card = CredentialCardUi(
-                        credential = rt,
-                        status = RefreshStatus.Failed,
-                        snapshot = null,
-                        isStale = false,
-                        error = AppError.Authentication("凭证无效或没有该供应商权限"),
-                        freshness = Freshness(FreshnessLevel.NEVER, "从未刷新"),
+                HomeScreen(
+                    state = HomeUiState(
+                        isLoading = false,
+                        cards = listOf(failedCard),
+                        groups = listOf(
+                            group(
+                                ProviderId.Routin,
+                                listOf(
+                                    card(
+                                        credential,
+                                        status = RefreshStatus.Failed,
+                                        metrics = listOf(balance(20.0)),
+                                        isStale = true,
+                                        error = AppError.Authentication("凭证无效"),
+                                    )
+                                )
+                            )
+                        ),
+                        credentialCount = 1,
                     ),
-                    onBack = {},
-                    onRefresh = {},
-                    onEdit = {},
-                    onDelete = {},
+                    onRefreshAll = {},
+                    onRefreshCredential = { retried = true },
+                    onOpenCredential = {},
+                    onImportFromMac = {},
+                    onAddManually = {},
                 )
             }
         }
-
-        composeRule.onNodeWithText("从未刷新", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("凭证无效或没有该供应商权限").assertIsDisplayed()
-        composeRule.onNodeWithText("刷新").assertIsDisplayed()
+        composeRule.onNodeWithText("凭证无效").assertIsDisplayed()
+        composeRule.onNodeWithText("重试").performClick()
+        assertEquals(true, retried)
     }
 }

@@ -51,7 +51,7 @@ class SettingsViewModel(
 
     fun setRetryOnFailure(enabled: Boolean) = launch { refreshStore.setRetryOnFailure(enabled) }
 
-    fun setCardDensity(density: CardDensity) = launch { displayStore.setCardDensity(density) }
+    fun setThemeMode(mode: AppThemeMode) = launch { displayStore.setThemeMode(mode) }
 
     fun setShowDisabledCredentials(enabled: Boolean) =
         launch { displayStore.setShowDisabledCredentials(enabled) }

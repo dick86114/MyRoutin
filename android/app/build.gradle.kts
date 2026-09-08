@@ -48,6 +48,7 @@ android {
 
 dependencies {
     implementation(project(":core"))
+    implementation(project(":core-ui"))
     implementation(project(":data"))
     implementation(project(":domain"))
     implementation(project(":provider"))
@@ -58,6 +59,7 @@ dependencies {
 
     // AppGraph 构造 Room 数据库时直接引用 androidx.room.Room，app 需要该依赖。
     implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")

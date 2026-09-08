@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">MyToken</string>
+    <string name="widget_refresh">刷新用量</string>
+    <string name="widget_choose">选择凭证</string>
 </resources>

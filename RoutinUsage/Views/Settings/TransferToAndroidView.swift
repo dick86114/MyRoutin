@@ -256,6 +256,8 @@ final class TransferToAndroidModel {
                 do {
                     let package = try makeTransferPackage()
                     try await server.send(package: package)
+                    payload = nil
+                    expiresAt = nil
                     phase = .sent
                 } catch {
                     phase = .failed(failureMessage(for: error))

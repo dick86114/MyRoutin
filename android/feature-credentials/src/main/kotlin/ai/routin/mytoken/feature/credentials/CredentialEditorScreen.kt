@@ -3,7 +3,10 @@ package ai.routin.mytoken.feature.credentials
 import ai.routin.mytoken.domain.model.CredentialKind
 import ai.routin.mytoken.domain.model.ProviderId
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,6 +29,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import ai.routin.mytoken.core.ui.LiquidGlassSurface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -45,7 +49,7 @@ private fun kindLabel(kind: CredentialKind): String = when (kind) {
  * Access Key / Secret Access Key (Volcengine). Secrets are masked by default with a
  * temporary reveal toggle; validation messages align with the macOS editor.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CredentialEditorScreen(
     state: CredentialEditorUiState,
@@ -78,6 +82,10 @@ fun CredentialEditorScreen(
             )
         },
     ) { padding ->
+        if (state.isLoading) {
+            Column(modifier = Modifier.padding(padding).fillMaxSize()) {}
+            return@Scaffold
+        }
         Column(
             modifier = Modifier
                 .padding(padding)
@@ -87,21 +95,28 @@ fun CredentialEditorScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (state.isNew) {
-                Text(
-                    text = "供应商",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    ProviderId.entries.forEach { provider ->
-                        FilterChip(
-                            selected = state.providerId == provider,
-                            onClick = { onProviderChange(provider) },
-                            label = { Text(text = ProviderNames.displayName(provider)) },
+                LiquidGlassSurface(shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(
+                            text = "供应商",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
                         )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            ProviderId.entries.forEach { provider ->
+                                FilterChip(
+                                    selected = state.providerId == provider,
+                                    onClick = { onProviderChange(provider) },
+                                    label = { Text(text = ProviderNames.displayName(provider)) },
+                                )
+                            }
+                        }
                     }
                 }
             } else {

@@ -318,7 +318,9 @@ actor TransferServer: TransferServing {
         guard !isStopped else { throw TransferServerError.notRunning }
         guard let connection = acceptedConnection else { throw TransferServerError.notConnected }
         guard await session.hasSessionKey else { throw TransferServerError.handshakeIncomplete }
-        let plaintext = try JSONEncoder().encode(package)
+        // Android 按 shared schema 将 exportedAt 解码为 ISO8601 字符串；
+        // 默认 JSONEncoder 会把它编码成时间间隔数字。
+        let plaintext = try TransferSchemaCodec.encode(package)
         // sealMessage refuses a session that already sent (replay protection)
         // or is not connected; the session error propagates to the caller.
         let message = try await session.sealMessage(plaintext)
@@ -365,6 +367,7 @@ actor TransferServer: TransferServing {
         guard getifaddrs(&interfaces) == 0, let first = interfaces else { return "127.0.0.1" }
         defer { freeifaddrs(first) }
         var current: UnsafeMutablePointer<ifaddrs>? = first
+        var candidates: [LANInterface] = []
         while let interface = current {
             defer { current = interface.pointee.ifa_next }
             guard let address = interface.pointee.ifa_addr,
@@ -372,9 +375,63 @@ actor TransferServer: TransferServing {
                   (interface.pointee.ifa_flags & UInt32(IFF_LOOPBACK)) == 0 else { continue }
             var numericHost = [CChar](repeating: 0, count: Int(NI_MAXHOST))
             let result = getnameinfo(address, socklen_t(address.pointee.sa_len), &numericHost, socklen_t(numericHost.count), nil, 0, NI_NUMERICHOST)
-            if result == 0 { return String(cString: numericHost) }
+            if result == 0 {
+                let name = String(cString: interface.pointee.ifa_name)
+                candidates.append(
+                    LANInterface(
+                        name: name,
+                        address: String(cString: numericHost),
+                        isUp: interface.pointee.ifa_flags & UInt32(IFF_UP) != 0,
+                        isRunning: interface.pointee.ifa_flags & UInt32(IFF_RUNNING) != 0
+                    )
+                )
+            }
         }
-        #endif
+        return preferredLANHost(from: candidates)
+#else
         return "127.0.0.1"
+#endif
     }
+
+    /// 手机只能直连 Mac 当前局域网内的私网地址。macOS 上存在 Wi-Fi、桥接、
+    /// AWDL、VPN 和 link-local 等多个 IPv4 地址，必须避免把不可达地址写入二维码。
+    static func preferredLANHost(from interfaces: [LANInterface]) -> String {
+        let preferredPrefixes = ["en", "Ethernet", "Wi-Fi"]
+        let ranked = interfaces.map { interface -> (LANInterface, Int) in
+            let address = interface.address
+            let isPrivate = address.hasPrefix("10.") ||
+                address.hasPrefix("192.168.") ||
+                (address.hasPrefix("172.") && isPrivateRFC1918SecondOctet(address))
+            let isRoutable = isPrivate || (!address.hasPrefix("169.254.") && !address.hasPrefix("127."))
+            let isPhysical = preferredPrefixes.contains { interface.name.hasPrefix($0) }
+
+            var score = 0
+            if interface.isUp { score += 40 }
+            if interface.isRunning { score += 20 }
+            if isPrivate { score += 30 }
+            if isPhysical { score += 20 }
+            if isRoutable { score += 10 } else { score -= 100 }
+            if address.hasPrefix("169.254.") || address.hasPrefix("127.") { score -= 100 }
+            return (interface, score)
+        }
+        .filter { $0.1 > 0 }
+        .max { lhs, rhs in
+            if lhs.1 != rhs.1 { return lhs.1 < rhs.1 }
+            return lhs.0.name > rhs.0.name
+        }
+        return ranked?.0.address ?? "127.0.0.1"
+    }
+
+    private static func isPrivateRFC1918SecondOctet(_ address: String) -> Bool {
+        guard let second = address.split(separator: ".").dropFirst().first,
+              let value = Int(second) else { return false }
+        return (16...31).contains(value)
+    }
+}
+
+struct LANInterface: Equatable, Sendable {
+    let name: String
+    let address: String
+    let isUp: Bool
+    let isRunning: Bool
 }

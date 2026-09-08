@@ -379,8 +379,10 @@ final class TransferCryptoTests: XCTestCase {
 
         let androidSideKey = try androidSessionKey(androidKey: androidKey, macPublicKey: payload.macEphemeralPublicKey, sessionID: sessionID)
         let plaintext = try TransferCrypto.open(message, key: androidSideKey)
-        XCTAssertEqual(try JSONDecoder().decode(TransferPackageV1.self, from: plaintext), package)
+        XCTAssertEqual(try TransferSchemaCodec.decode(plaintext), package)
         XCTAssertTrue(String(data: plaintext, encoding: .utf8)!.contains("迁移账号"))
+        let wirePackage = try JSONSerialization.jsonObject(with: plaintext) as? [String: Any]
+        XCTAssertTrue(wirePackage?["exportedAt"] is String, "wire package must use schema-compatible ISO8601 exportedAt")
 
         do {
             _ = try await withTimeout(seconds: 2) { try await server.send(package: package) }

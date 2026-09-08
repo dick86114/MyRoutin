@@ -116,6 +116,7 @@ class GLMUsageProvider(
         return UsageSnapshot(
             credentialId = credentialId,
             fetchedAt = clock.instant(),
+            planName = "Coding Plan",
             metrics = metrics
         )
     }

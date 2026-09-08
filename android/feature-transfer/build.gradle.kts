@@ -36,6 +36,7 @@ android {
 dependencies {
     api(project(":domain"))
     implementation(project(":core"))
+    implementation(project(":core-ui"))
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")

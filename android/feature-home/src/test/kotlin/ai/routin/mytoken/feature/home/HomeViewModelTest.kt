@@ -66,9 +66,13 @@ class HomeViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel(refreshOnStart: Boolean = false) = HomeViewModel(
+    private fun viewModel(
+        refreshOnStart: Boolean = false,
+        credentialOrderIds: Flow<List<String>> = MutableStateFlow(emptyList()),
+    ) = HomeViewModel(
         repository = repository,
         refreshUseCase = RefreshCredentialsUseCase(repository, providers, clock),
+        credentialOrderIds = credentialOrderIds,
         clock = clock,
         refreshOnStart = refreshOnStart,
         nowTickIntervalMillis = null,
@@ -178,6 +182,27 @@ class HomeViewModelTest {
         )
         assertEquals(listOf("RT-1", "RT-2"), state.groups[0].cards.map { it.credential.name })
         assertEquals(4, state.credentialCount)
+    }
+
+    @Test
+    fun `home cards follow global credential order`() = runTest {
+        addCredential(credential("DS", ProviderId.DeepSeek, sortOrder = 0))
+        addCredential(credential("RT", ProviderId.Routin, sortOrder = 1))
+        addCredential(credential("GLM", ProviderId.Glm, sortOrder = 2))
+
+        val orderFlow = MutableStateFlow(
+            listOf("RT", "GLM", "DS").mapNotNull { raw ->
+                repository.credentials.values.firstOrNull { it.name == raw }?.id.toString()
+            },
+        )
+        val vm = viewModel(credentialOrderIds = orderFlow)
+        backgroundScope.launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf("RT", "GLM", "DS"),
+            vm.state.value.cards.map { it.credential.name },
+        )
     }
 
     @Test

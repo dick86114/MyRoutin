@@ -92,6 +92,7 @@ class DeepSeekUsageProvider(
         return UsageSnapshot(
             credentialId = credential.id,
             fetchedAt = clock.instant(),
+            planName = "API 余额",
             metrics = listOf(
                 UsageMetric(
                     id = "balance",

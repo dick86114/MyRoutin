@@ -1,5 +1,7 @@
 package ai.routin.mytoken.feature.transfer
 
+import ai.routin.mytoken.core.ui.SectionCard
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,95 +10,165 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-/**
- * Import confirmation screen. Shows counts and credential metadata only —
- * no secret material is ever rendered here.
- */
 @Composable
 fun TransferPreviewScreen(
     state: TransferUiState.PreviewReady,
     onConfirm: (ImportConflictMode) -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text(text = "确认导入", style = MaterialTheme.typography.headlineSmall)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            Text(text = "供应商：${state.preview.providerCount}")
-            Text(text = "凭证：${state.preview.credentialCount}")
-            Text(text = "敏感项：${state.preview.sensitiveItemCount}")
-        }
         Text(
-            text = "导出时间：${state.exportedAt}",
-            style = MaterialTheme.typography.bodySmall
+            text = "确认导入",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 4.dp),
         )
-        HorizontalDivider()
-        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+
+        SectionCard(
+            title = "迁移摘要",
+            supportingText = "导出时间：${state.exportedAt}",
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                SummaryCell("供应商", "${state.preview.providerCount}", Modifier.weight(1f))
+                SummaryCell("凭证", "${state.preview.credentialCount}", Modifier.weight(1f))
+                SummaryCell("敏感项", "${state.preview.sensitiveItemCount}", Modifier.weight(1f))
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             items(state.items, key = { it.credentialId }) { item ->
-                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(text = item.name, style = MaterialTheme.typography.titleMedium)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = item.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                         Text(
                             text = "供应商 ${item.providerId} · ${item.credentialKind}",
-                            style = MaterialTheme.typography.bodySmall
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         val flags = buildList {
                             if (item.hasSecret) add("含敏感信息") else add("无密钥")
-                            if (item.conflictsWithExisting) add("已存在，将按所选方式处理")
+                            if (item.conflictsWithExisting) add("已存在")
                         }
-                        Text(text = flags.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            text = flags.joinToString(" · "),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (item.hasSecret) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
             }
         }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
         ) {
             OutlinedButton(onClick = onCancel) {
                 Text(text = "取消")
             }
-            Button(onClick = { onConfirm(ImportConflictMode.SKIP) }) {
-                Text(text = "导入（跳过重复）")
+            FilledTonalButton(onClick = { onConfirm(ImportConflictMode.SKIP) }) {
+                Text(text = "跳过重复")
             }
-            Button(onClick = { onConfirm(ImportConflictMode.OVERWRITE) }) {
-                Text(text = "导入（覆盖重复）")
+            Button(
+                onClick = { onConfirm(ImportConflictMode.OVERWRITE) },
+                colors = ButtonDefaults.buttonColors(),
+            ) {
+                Text(text = "覆盖导入")
             }
         }
     }
 }
 
-/** Completion view shown after a successful import. */
+@Composable
+private fun SummaryCell(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+    }
+}
+
 @Composable
 fun TransferCompletedScreen(
     summary: ImportSummary,
-    onDone: () -> Unit
+    onDone: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(text = "导入完成", style = MaterialTheme.typography.headlineSmall)
         Text(
-            text = "新导入 ${summary.importedCount} 项 · 覆盖 ${summary.overwrittenCount} 项 · " +
-                "跳过 ${summary.skippedCount} 项 · 无密钥跳过 ${summary.skippedWithoutSecretCount} 项"
+            text = "导入完成",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = "新导入 ${summary.importedCount} · 覆盖 ${summary.overwrittenCount} · " +
+                "跳过 ${summary.skippedCount} · 无密钥 ${summary.skippedWithoutSecretCount}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
         )
         Button(onClick = onDone) {
             Text(text = "完成")

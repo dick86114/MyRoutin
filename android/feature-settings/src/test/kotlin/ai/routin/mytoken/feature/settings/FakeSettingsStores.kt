@@ -29,8 +29,8 @@ class FakeDisplaySettingsStore(initial: DisplaySettings = DisplaySettings()) : D
     val state = MutableStateFlow(initial)
     override val settings: Flow<DisplaySettings> = state
 
-    override suspend fun setCardDensity(density: CardDensity) =
-        state.update { it.copy(cardDensity = density) }
+    override suspend fun setThemeMode(mode: AppThemeMode) =
+        state.update { it.copy(themeMode = mode) }
 
     override suspend fun setShowDisabledCredentials(enabled: Boolean) =
         state.update { it.copy(showDisabledCredentials = enabled) }

@@ -18,6 +18,7 @@ rootProject.name = "MyToken"
 
 include(":app")
 include(":core")
+include(":core-ui")
 include(":domain")
 include(":data")
 include(":provider")

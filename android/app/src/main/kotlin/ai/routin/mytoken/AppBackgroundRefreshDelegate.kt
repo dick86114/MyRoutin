@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.first
  */
 class AppBackgroundRefreshDelegate(
     private val graph: AppGraph,
+    private val context: android.content.Context,
     private val clock: Clock = Clock.systemUTC(),
 ) : BackgroundRefreshDelegate {
 
@@ -36,6 +37,7 @@ class AppBackgroundRefreshDelegate(
         // Threshold / invalid-credential alerts are evaluated after every completed
         // background pass; notifications degrade silently without permission.
         graph.usageAlertDispatcher.dispatchAfterRefresh()
+        runCatching { ai.routin.mytoken.widget.CredentialWidgetUpdater.updateAll(context, graph) }
 
         return if (anyFailed) RefreshOutcome.Failed else RefreshOutcome.Succeeded
     }

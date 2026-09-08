@@ -5,6 +5,7 @@ import ai.routin.mytoken.domain.model.UsageMetricHealthState
 import ai.routin.mytoken.domain.model.UsageMetricPresentation
 import ai.routin.mytoken.domain.model.UsageMetricSemantic
 import ai.routin.mytoken.domain.model.UsageMetricUnit
+import ai.routin.mytoken.domain.model.UsageGroupMultiplier
 import ai.routin.mytoken.domain.model.UsageSnapshot
 import java.math.BigDecimal
 import java.time.Instant
@@ -44,6 +45,24 @@ object UsageSnapshotJsonCodec {
         return JSONObject()
             .put("credentialId", snapshot.credentialId.toString())
             .put("fetchedAt", snapshot.fetchedAt.toString())
+            .putOpt("planName", snapshot.planName.takeIf { it.isNotEmpty() })
+            .putOpt("subscriptionStartAt", snapshot.subscriptionStartAt?.toString())
+            .putOpt("subscriptionEndAt", snapshot.subscriptionEndAt?.toString())
+            .putOpt("status", snapshot.status)
+            .putOpt("usageKind", snapshot.usageKind)
+            .put("allowedModels", JSONArray(snapshot.allowedModels))
+            .put(
+                "groupMultipliers",
+                JSONArray().apply {
+                    snapshot.groupMultipliers.forEach { group ->
+                        put(
+                            JSONObject()
+                                .put("name", group.name)
+                                .put("multiplier", group.multiplier.toPlainString())
+                        )
+                    }
+                }
+            )
             .put("metrics", metrics)
             .toString()
     }
@@ -75,6 +94,23 @@ object UsageSnapshotJsonCodec {
         UsageSnapshot(
             credentialId = credentialId,
             fetchedAt = Instant.parse(root.getString("fetchedAt")),
+            planName = root.optNullableString("planName").orEmpty(),
+            subscriptionStartAt = root.optNullableString("subscriptionStartAt")?.let(Instant::parse),
+            subscriptionEndAt = root.optNullableString("subscriptionEndAt")?.let(Instant::parse),
+            status = if (root.has("status") && !root.isNull("status")) root.getInt("status") else null,
+            usageKind = root.optNullableString("usageKind"),
+            allowedModels = root.optJSONArray("allowedModels")
+                ?.let { array -> (0 until array.length()).mapNotNull { array.optString(it).takeIf(String::isNotEmpty) } }
+                ?: emptyList(),
+            groupMultipliers = root.optJSONArray("groupMultipliers")
+                ?.let { groups ->
+                    (0 until groups.length()).mapNotNull { index ->
+                        val item = groups.optJSONObject(index) ?: return@mapNotNull null
+                        val multiplier = item.optNullableString("multiplier")?.let(::BigDecimal) ?: return@mapNotNull null
+                        UsageGroupMultiplier(item.optString("name"), multiplier)
+                    }
+                }
+                ?: emptyList(),
             metrics = metrics
         )
     }.getOrNull()

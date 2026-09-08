@@ -10,10 +10,20 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
@@ -26,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -64,19 +75,62 @@ fun TransferScannerScreen(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(top = 8.dp, start = 16.dp, end = 16.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "扫描 Mac 上的 MyToken 迁移二维码")
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "扫描迁移二维码",
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            Text(
+                text = "将 Mac 屏幕上的二维码对准取景框",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Box(modifier = Modifier.fillMaxSize().weight(1f)) {
             if (hasCameraPermission && isActive) {
-                CameraQrPreview(onQrCodeScanned = onQrCodeScanned)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(16.dp)),
+                ) {
+                    CameraQrPreview(onQrCodeScanned = onQrCodeScanned)
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(252.dp)
+                            .border(
+                                border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
+                                shape = RoundedCornerShape(20.dp),
+                            ),
+                    )
+                }
             } else {
-                Text(text = "需要相机权限才能扫描二维码", modifier = Modifier.align(Alignment.Center))
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = "需要相机权限才能扫描二维码",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = "相机画面只用于识别迁移二维码，不会保存照片",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
             }
         }
-        Button(onClick = onCancel) {
+        FilledTonalButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
             Text(text = "取消")
         }
     }

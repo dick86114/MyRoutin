@@ -2,57 +2,73 @@ package ai.routin.mytoken.feature.home
 
 import ai.routin.mytoken.domain.model.UsageMetric
 import ai.routin.mytoken.domain.model.UsageMetricHealthState
-import ai.routin.mytoken.domain.model.UsageMetricPresentation
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.math.BigDecimal
+import java.time.Duration
+import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.max
 import kotlin.math.roundToInt
 
-/** Color + text label pair so color is never the only information channel. */
-internal data class MetricTone(val color: Color, val label: String) {
-    companion object {
-        fun of(metric: UsageMetric, percent: Double?, colors: StatusColors): MetricTone =
-            when (metric.healthState) {
-                UsageMetricHealthState.Normal -> MetricTone(colors.normal, "正常")
-                UsageMetricHealthState.Warning -> MetricTone(colors.warning, "注意")
-                UsageMetricHealthState.Critical -> MetricTone(colors.critical, "告急")
-                UsageMetricHealthState.Unavailable -> MetricTone(colors.neutral, "不可用")
-                UsageMetricHealthState.Stale -> MetricTone(colors.warning, "已过期")
-                UsageMetricHealthState.Unknown -> when {
-                    percent == null -> MetricTone(colors.neutral, "")
-                    percent >= 80.0 -> MetricTone(colors.critical, "告急")
-                    percent >= 50.0 -> MetricTone(colors.warning, "注意")
-                    else -> MetricTone(colors.normal, "正常")
-                }
-            }
+internal data class MetricTone(val color: Color)
+
+internal fun statusColor(metric: UsageMetric, percent: Double?, colors: StatusColors): Color =
+    when (metric.healthState) {
+        UsageMetricHealthState.Normal -> colors.normal
+        UsageMetricHealthState.Warning -> colors.warning
+        UsageMetricHealthState.Critical, UsageMetricHealthState.Unavailable -> colors.critical
+        UsageMetricHealthState.Stale, UsageMetricHealthState.Unknown -> if (percent == null) colors.neutral else colors.secondaryFallback()
+    }
+
+private fun StatusColors.secondaryFallback(): Color = neutral
+
+internal fun formatDecimal(value: BigDecimal?): String {
+    if (value == null) return "-"
+    val stripped = value.stripTrailingZeros()
+    return if (stripped.compareTo(BigDecimal.ZERO) == 0) "0" else stripped.toPlainString()
+}
+
+internal fun formatGrouped(value: BigDecimal?): String {
+    if (value == null) return "-"
+    val plain = formatDecimal(value)
+    val negative = plain.startsWith("-")
+    val body = if (negative) plain.substring(1) else plain
+    val dot = body.indexOf('.')
+    val integer = if (dot < 0) body else body.substring(0, dot)
+    val fraction = if (dot < 0) "" else body.substring(dot)
+    val grouped = integer.reversed().chunked(3).joinToString(",").reversed()
+    return (if (negative) "-" else "") + grouped + fraction
+}
+
+internal fun formatCompact(value: BigDecimal?): String {
+    if (value == null) return "-"
+    val number = value.toDouble()
+    return when {
+        number >= 1_000_000 || number <= -1_000_000 -> String.format("%.1fM", number / 1_000_000)
+        number >= 1_000 || number <= -1_000 -> String.format("%.1fK", number / 1_000)
+        else -> formatDecimal(value)
     }
 }
 
-/** Metric value formatting: strips trailing zeros, plain decimal string. */
-internal fun formatDecimal(value: BigDecimal?): String {
-    if (value == null) return "—"
-    val stripped = value.stripTrailingZeros()
-    if (stripped.compareTo(BigDecimal.ZERO) == 0) return "0"
-    return stripped.toPlainString()
-}
-
-/** Progress percent (0..100) derived from used/limit; null when not computable. */
 internal fun progressPercent(metric: UsageMetric): Double? {
     val used = metric.used ?: return null
     val limit = metric.limit ?: return null
@@ -60,170 +76,302 @@ internal fun progressPercent(metric: UsageMetric): Double? {
     return used.toDouble() / limit.toDouble() * 100.0
 }
 
-private val resetTimeFormatter = DateTimeFormatter.ofPattern("M月d日 HH:mm")
+private val shortResetFormatter = DateTimeFormatter.ofPattern("MM-dd HH:mm")
+private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+private val subscriptionFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
-internal fun formatResetTime(instant: java.time.Instant): String =
-    resetTimeFormatter.format(instant.atZone(ZoneId.systemDefault()))
+internal fun formatResetTime(instant: Instant): String {
+    val zone = ZoneId.systemDefault()
+    val local = instant.atZone(zone)
+    return if (local.toLocalDate() == LocalDate.now(zone)) timeFormatter.format(local) else shortResetFormatter.format(local)
+}
 
-/**
- * 2-column metric grid replacing the macOS popover's horizontal compact rows.
- * Missing metrics simply do not render — no fabricated 0 or 100% values.
- */
+internal fun formatRemainingDuration(end: Instant, now: Instant): String {
+    if (!end.isAfter(now)) return "已结束"
+    val totalMinutes = max(1L, Duration.between(now, end).toMinutes())
+    val days = totalMinutes / (24 * 60)
+    val hours = (totalMinutes % (24 * 60)) / 60
+    val minutes = totalMinutes % 60
+    val parts = buildList {
+        if (days > 0) add("${days}天")
+        if (hours > 0) add("${hours}小时")
+        if (minutes > 0 || isEmpty()) add("${minutes}分钟")
+    }
+    return parts.joinToString(" ")
+}
+
+@Composable
+internal fun RemainingDurationText(end: Instant, colors: StatusColors, modifier: Modifier = Modifier) {
+    val now = Instant.now()
+    val highlight = end.isAfter(now) && Duration.between(now, end).toMinutes() < 60
+    Text(
+        text = "剩余 ${formatRemainingDuration(end, now)}",
+        style = MaterialTheme.typography.labelSmall,
+        color = if (highlight) colors.normal else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier,
+    )
+}
+
+internal fun formatSubscriptionTime(instant: Instant?): String {
+    if (instant == null) return "-"
+    return subscriptionFormatter.format(instant.atZone(ZoneId.systemDefault()))
+}
+
+internal fun formatCurrency(value: BigDecimal?, currencyCode: String?): String {
+    val amount = value?.setScale(2, java.math.RoundingMode.HALF_UP)?.toPlainString() ?: "-"
+    return when (currencyCode?.uppercase()) {
+        "CNY", "RMB", "¥" -> "¥$amount"
+        "USD", "$" -> "\$$amount"
+        "EUR", "€" -> "€$amount"
+        null -> amount
+        else -> "$amount $currencyCode"
+    }
+}
+
 @Composable
 fun UsageMetricGrid(
     metrics: List<UsageMetric>,
     modifier: Modifier = Modifier,
     columns: Int = 2,
 ) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
+    val colors = statusColors()
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         metrics.chunked(columns).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 row.forEach { metric ->
-                    MetricCell(metric = metric, modifier = Modifier.weight(1f))
+                    MetricCell(metric, colors, Modifier.weight(1f))
                 }
-                repeat(columns - row.size) {
-                    Spacer(modifier = Modifier.weight(1f))
-                }
+                repeat(columns - row.size) { Spacer(modifier = Modifier.weight(1f)) }
             }
         }
     }
 }
 
 @Composable
-private fun MetricCell(
-    metric: UsageMetric,
-    modifier: Modifier = Modifier,
-) {
+private fun MetricCell(metric: UsageMetric, colors: StatusColors, modifier: Modifier = Modifier) {
     when (metric.presentation) {
-        UsageMetricPresentation.Progress -> ProgressCell(metric, modifier)
-        UsageMetricPresentation.Balance -> BalanceCell(metric, modifier)
-        UsageMetricPresentation.Status -> StatusCell(metric, modifier)
-        UsageMetricPresentation.Value -> ValueCell(metric, modifier)
+        ai.routin.mytoken.domain.model.UsageMetricPresentation.Progress -> ProgressCell(metric, colors, modifier)
+        ai.routin.mytoken.domain.model.UsageMetricPresentation.Balance -> BalanceCell(metric, colors, modifier)
+        ai.routin.mytoken.domain.model.UsageMetricPresentation.Status -> StatusCell(metric, colors, modifier)
+        ai.routin.mytoken.domain.model.UsageMetricPresentation.Value -> ValueCell(metric, colors, modifier)
     }
 }
 
 @Composable
-private fun CellLabel(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier,
-    )
+private fun ProgressCell(metric: UsageMetric, colors: StatusColors, modifier: Modifier = Modifier) {
+    val percent = progressPercent(metric)
+    val color = statusColor(metric, percent, colors)
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(metric.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
+        }
+        androidx.compose.material3.LinearProgressIndicator(
+            progress = { ((percent ?: 0.0).coerceIn(0.0, 100.0) / 100.0).toFloat() },
+            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+            color = color,
+            trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+        )
+        MetricText("已用 ${formatAmount(metric.used, metric)} / ${formatAmount(metric.limit, metric)}")
+        metric.remaining?.let { MetricText("剩余 ${formatAmount(it, metric)}") }
+        metric.windowEnd?.let {
+            MetricText("重置 ${formatResetTime(it)}")
+            RemainingDurationText(it, colors)
+        }
+    }
 }
 
 @Composable
-private fun ProgressCell(metric: UsageMetric, modifier: Modifier = Modifier) {
-    val percent = progressPercent(metric)
-    val tone = MetricTone.of(metric, percent, statusColors())
+private fun BalanceCell(metric: UsageMetric, colors: StatusColors, modifier: Modifier = Modifier) {
+    val caption = when (metric.id) {
+        "balance" -> "账户余额"
+        "grantedBalance" -> "赠金余额"
+        "toppedUpBalance" -> "充值余额"
+        else -> metric.label
+    }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            CellLabel(metric.label, modifier = Modifier.weight(1f))
-            if (percent != null) {
-                Text(
-                    text = "${percent.roundToInt()}%",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = tone.color,
+        Text(formatAmount(metric.value, metric), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = statusColor(metric, null, colors))
+        Text(caption, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun StatusCell(metric: UsageMetric, colors: StatusColors, modifier: Modifier = Modifier) {
+    val available = metric.healthState != UsageMetricHealthState.Unavailable
+    val caption = if (metric.id == "availability") "账户状态" else metric.label
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(if (available) "可用" else "不可用", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = statusColor(metric, null, colors))
+        Text(caption, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun ValueCell(metric: UsageMetric, colors: StatusColors, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(formatAmount(metric.value, metric), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+        Text(metric.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+internal fun GLMMetrics(metrics: List<UsageMetric>, modifier: Modifier = Modifier) {
+    val colors = statusColors()
+    val progress = metrics.filter { it.presentation == ai.routin.mytoken.domain.model.UsageMetricPresentation.Progress }
+    val calls = metrics.filter { it.id == "model-calls" || it.id == "zcode-mcp" }
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        progress.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                row.forEach { metric ->
+                    val percent = progressPercent(metric)
+                    val color = statusColor(metric, percent, statusColors())
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(metric.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                            Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
+                        }
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { ((percent ?: 0.0).coerceIn(0.0, 100.0) / 100.0).toFloat() },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                            color = color,
+                            trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                        )
+                        metric.windowEnd?.let {
+                            Text("重置 ${formatResetTime(it)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            RemainingDurationText(it, statusColors())
+                        }
+                    }
+                }
+                repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+        calls.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                row.forEach { metric ->
+                    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        Text(metric.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                        Text("${formatCompact(metric.value)} 次", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun VolcengineMetrics(metrics: List<UsageMetric>, modifier: Modifier = Modifier) {
+    val colors = statusColors()
+    val rowItems = metrics.take(2)
+    val monthly = metrics.firstOrNull { it.id == "monthly" }
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            rowItems.forEach { ProgressCell(it, colors, Modifier.weight(1f)) }
+            repeat(2 - rowItems.size) { Spacer(Modifier.weight(1f)) }
+        }
+        monthly?.let {
+            val percent = progressPercent(it)
+            val color = statusColor(it, percent, colors)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(it.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
+                }
+                androidx.compose.material3.LinearProgressIndicator(
+                    progress = { ((percent ?: 0.0).coerceIn(0.0, 100.0) / 100.0).toFloat() },
+                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                    color = color,
+                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
                 )
-                if (tone.label.isNotEmpty()) {
-                    Text(
-                        text = tone.label,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = tone.color,
-                        modifier = Modifier.padding(start = 4.dp),
-                    )
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        MetricText("已用 ${formatAmount(it.used, it)} / ${formatAmount(it.limit, it)}")
+                        it.windowEnd?.let { end -> MetricText("重置 ${formatResetTime(end)}") }
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        it.remaining?.let { value -> MetricText("剩余 ${formatAmount(value, it)}") }
+                        it.windowEnd?.let { end -> RemainingDurationText(end, colors) }
+                    }
                 }
             }
         }
-        if (percent != null) {
-            val clamped = (percent.coerceIn(0.0, 100.0)) / 100.0
-            LinearProgressIndicator(
-                progress = { clamped.toFloat() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp),
-                color = tone.color,
-                trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-            )
+    }
+}
+
+@Composable
+internal fun NewAPIMetrics(metrics: List<UsageMetric>, modifier: Modifier = Modifier) {
+    val colors = statusColors()
+    val quota = metrics.firstOrNull { it.id == "quota-progress" }
+    val tokens = listOf("today-token", "one-day-token", "seven-day-token", "thirty-day-token").mapNotNull { id -> metrics.firstOrNull { it.id == id } }
+    val activities = listOf(
+        Triple("RPM", metrics.firstOrNull { it.id == "rpm" }, "近 60 秒请求"),
+        Triple("TPM", metrics.firstOrNull { it.id == "tpm" }, "近 60 秒 Token"),
+        Triple("账户累计请求", metrics.firstOrNull { it.id == "request-count" }, "当前用户全部 API 请求"),
+    )
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        quota?.let {
+            val percent = progressPercent(it)
+            val color = statusColor(it, percent, colors)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(it.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
+                }
+                androidx.compose.material3.LinearProgressIndicator(
+                    progress = { ((percent ?: 0.0).coerceIn(0.0, 100.0) / 100.0).toFloat() },
+                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                    color = color,
+                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                )
+                Row {
+                    MetricText("已用 ${formatAmount(it.used, it)} / ${formatAmount(it.limit, it)}", Modifier.weight(1.2f))
+                    it.remaining?.let { value -> MetricText("剩余 ${formatAmount(value, it)}", Modifier.weight(1f)) }
+                }
+            }
         }
-        if (metric.used != null && metric.limit != null) {
-            Text(
-                text = "已用 ${formatDecimal(metric.used)} / ${formatDecimal(metric.limit)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row {
+                Text("Token 消耗", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Text("单位 Token", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            tokens.chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    row.forEach { item -> TokenCell(item, metrics.firstOrNull { cost -> cost.id == "${item.id}-cost" }, Modifier.weight(1f)) }
+                    repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
         }
-        metric.remaining?.let { remaining ->
-            Text(
-                text = "剩余 ${formatDecimal(remaining)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        metric.windowEnd?.let { windowEnd ->
-            Text(
-                text = "重置 ${formatResetTime(windowEnd)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("请求活动", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                activities.forEach { (label, metric, detail) ->
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(formatCompact(metric?.value), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun BalanceCell(metric: UsageMetric, modifier: Modifier = Modifier) {
-    val tone = MetricTone.of(metric, null, statusColors())
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            CellLabel(metric.label, modifier = Modifier.weight(1f))
-            Text(
-                text = "${formatDecimal(metric.value)} ${metric.currencyCode ?: "元"}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = tone.color,
-            )
-        }
-        Text(
-            text = "账户余额",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (tone.label.isNotEmpty()) {
-            Text(
-                text = tone.label,
-                style = MaterialTheme.typography.labelSmall,
-                color = tone.color,
-            )
-        }
+private fun TokenCell(metric: UsageMetric, cost: UsageMetric?, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(metric.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(formatGrouped(metric.value), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Text("≈ ${formatCurrency(cost?.value, cost?.currencyCode)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-@Composable
-private fun StatusCell(metric: UsageMetric, modifier: Modifier = Modifier) {
-    val tone = MetricTone.of(metric, null, statusColors())
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        CellLabel(metric.label)
-        Text(
-            text = metric.value?.let { formatDecimal(it) } ?: (tone.label.ifEmpty { "—" }),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = tone.color,
-        )
-    }
+private fun formatAmount(value: BigDecimal?, metric: UsageMetric): String = when (metric.unit) {
+    ai.routin.mytoken.domain.model.UsageMetricUnit.Currency -> formatCurrency(value, metric.currencyCode)
+    else -> formatDecimal(value)
 }
 
 @Composable
-private fun ValueCell(metric: UsageMetric, modifier: Modifier = Modifier) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        CellLabel(metric.label)
-        Text(
-            text = formatDecimal(metric.value),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
+private fun MetricText(text: String, modifier: Modifier = Modifier) {
+    Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
 }

@@ -26,14 +26,14 @@ cd android
 
 | 模块 | 职责 |
 | --- | --- |
-| `:app` | MainActivity、底部导航（首页/凭证/设置）与子路由（详情/编辑器/迁移）、手写依赖图 `AppGraph`、后台刷新代理与用量提醒分发 |
+| `:app` | MainActivity、底部导航（首页/凭证/设置）与子路由（详情/编辑器/迁移）、单凭证桌面小组件、手写依赖图 `AppGraph`、后台刷新代理与用量提醒分发 |
 | `:domain` | 纯 Kotlin 模型与用例：`Credential`、`CredentialSecret`、`CredentialRepository`、`RefreshCredentialsUseCase`（含快照缓存读写与启动恢复） |
 | `:data` | Room（凭证元数据 + usage snapshot 缓存）、Keystore 加密 secret 存储、DataStore 偏好/提醒状态 |
 | `:core` | 传输加密原语（X25519+HKDF+AES-GCM）、AndroidKeystoreSecretStore、WorkManager 调度、提醒评估器、通知渠道 |
 | `:provider` | 各供应商用量适配器（Routin/DeepSeek/GLM/火山方舟/NewAPI）与 `ProviderRegistry` |
-| `:feature-home` | 首页用量仪表盘、按供应商分组、详情页（含签到入口） |
-| `:feature-credentials` | 凭证列表（搜索/启停/拖动排序/置顶）、凭证编辑器、独立于 Mac 的排序 DataStore |
-| `:feature-settings` | 刷新/首页显示/通知/数据迁移/关于设置 |
+| `:feature-home` | 首页用量仪表盘、详情页（含签到入口） |
+| `:feature-credentials` | 凭证列表（启停/拖动排序）、凭证编辑器、独立于 Mac 的排序 DataStore |
+| `:feature-settings` | 刷新/主题/通知/数据迁移/关于设置 |
 | `:feature-transfer` | 扫码（CameraX + ML Kit）、局域网握手、解密、导入预览与事务导入 |
 
 跨端迁移协议常量见 `shared/transfer-schema/wire-contract.md` 与
