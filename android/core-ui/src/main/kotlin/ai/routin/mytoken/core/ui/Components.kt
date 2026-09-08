@@ -255,7 +255,7 @@ fun LiquidGlassSurface(
 ) {
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val baseColor = if (isDark) Color(0xFF151921) else Color.White
-    val borderColor = if (isDark) Color.White.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.72f)
+    val borderColor = if (isDark) Color.White.copy(alpha = 0.20f) else Color.Black.copy(alpha = 0.18f)
     val backgroundBrush = remember(isDark, baseColor) {
         Brush.verticalGradient(
             colors = listOf(
@@ -267,9 +267,10 @@ fun LiquidGlassSurface(
     val borderBrush = remember(isDark, borderColor) {
         Brush.linearGradient(
             colors = listOf(
-                Color.White.copy(alpha = if (isDark) 0.36f else 0.90f),
-                borderColor.copy(alpha = 0.14f),
-                Color.White.copy(alpha = if (isDark) 0.22f else 0.64f),
+                // 浅色主题下白色描边不可见，改用黑色系细描边；深色保持白色高光。
+                if (isDark) Color.White.copy(alpha = 0.36f) else Color.Black.copy(alpha = 0.14f),
+                if (isDark) borderColor.copy(alpha = 0.14f) else Color.Black.copy(alpha = 0.05f),
+                if (isDark) Color.White.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.10f),
             )
         )
     }
@@ -277,7 +278,7 @@ fun LiquidGlassSurface(
         modifier = modifier
             .clip(shape)
             .background(brush = backgroundBrush)
-            .border(width = Dp.Hairline, brush = borderBrush, shape = shape),
+            .border(width = 1.dp, brush = borderBrush, shape = shape),
         contentAlignment = contentAlignment,
     ) {
         content()

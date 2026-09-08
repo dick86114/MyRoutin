@@ -2,6 +2,8 @@ package ai.routin.mytoken.feature.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -307,13 +309,14 @@ private fun ThemeChip(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun UpdateChannelSection(
     mirrorBase: String,
     onMirrorBaseChange: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = mirrorBase.isEmpty(),
                 onClick = { onMirrorBaseChange("") },
@@ -330,7 +333,7 @@ private fun UpdateChannelSection(
             )
         }
         if (mirrorBase.isNotEmpty()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DEFAULT_UPDATE_CDN_BASES.forEach { base ->
                     FilterChip(
                         selected = mirrorBase == base,
