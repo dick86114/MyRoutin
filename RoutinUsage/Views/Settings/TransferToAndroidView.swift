@@ -304,7 +304,7 @@ struct TransferToAndroidView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("迁移到 Android")
                     .font(.title2.weight(.semibold))
@@ -330,31 +330,30 @@ struct TransferToAndroidView: View {
                 .frame(minHeight: 180)
             }
 
-            if let payload = model.payload, let encoded = try? payload.encodedString() {
-                TransferQRCodeImageView(string: encoded)
-                    .frame(maxWidth: .infinity)
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text("剩余有效时间 \(countdownText(model.remainingSeconds(now: context.date)))")
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(.secondary)
+            if model.hasCredentials {
+                if let payload = model.payload, let encoded = try? payload.encodedString() {
+                    qrSection(payload: encoded)
                 }
+
+                statusSection
+                    .padding(.top, 12)
+
+                HStack {
+                    Spacer()
+                    Button(role: .destructive) {
+                        model.cancelTapped()
+                        onClose()
+                    } label: {
+                        Text("取消迁移")
+                    }
+                    .accessibilityLabel("取消迁移")
+                }
+                .padding(.top, 16)
             }
-
-            statusSection
-
-            Spacer()
-
-            Button(role: .destructive) {
-                model.cancelTapped()
-                onClose()
-            } label: {
-                Text("取消迁移")
-                    .frame(maxWidth: .infinity)
-            }
-            .accessibilityLabel("取消迁移")
         }
-        .padding(28)
-        .frame(width: 460, height: 640)
+        .padding(24)
+        .frame(width: 400)
+        .fixedSize(horizontal: false, vertical: true)
         .task { await model.start() }
         .onDisappear {
             Task { await model.stop() }
@@ -362,32 +361,99 @@ struct TransferToAndroidView: View {
     }
 
     private var credentialSummary: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(model.migrationSummaryText)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            HStack(spacing: 10) {
+
+            providerChips
+        }
+        .padding(.top, 12)
+    }
+
+    @ViewBuilder
+    private var providerChips: some View {
+        let summaries = model.providerSummaries
+        if summaries.count <= 3 {
+            HStack(spacing: 6) {
                 ForEach(model.providerSummaries) { summary in
-                    Text("\(summary.providerName) ×\(summary.credentialCount)")
-                        .font(.callout.weight(.medium))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(.quaternary, in: Capsule())
+                    providerChip(summary)
                 }
             }
-            .accessibilityElement(children: .combine)
+        } else {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 100), spacing: 6)],
+                alignment: .leading,
+                spacing: 6
+            ) {
+                ForEach(summaries) { providerChip($0) }
+            }
         }
+    }
+
+    private func providerChip(_ summary: TransferProviderSummary) -> some View {
+        HStack(spacing: 4) {
+            Text(summary.providerName)
+                .lineLimit(1)
+            Text("×\(summary.credentialCount)")
+                .foregroundStyle(.secondary)
+        }
+        .font(.caption.weight(.medium))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(.quaternary, in: Capsule())
+    }
+
+    private func qrSection(payload: String) -> some View {
+        VStack(spacing: 10) {
+            TransferQRCodeImageView(string: payload)
+
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let seconds = model.remainingSeconds(now: context.date)
+                HStack(spacing: 4) {
+                    Image(systemName: "clock")
+                        .font(.caption2)
+                    Text(countdownText(seconds))
+                        .font(.caption.monospacedDigit().weight(.medium))
+                }
+                .foregroundStyle(seconds < 60 ? Color.orange : Color.secondary)
+                .accessibilityLabel("剩余有效时间 \(countdownText(seconds))")
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(16)
+        .background {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.background)
+                .strokeBorder(.quaternary, lineWidth: 1)
+        }
+        .padding(.top, 16)
     }
 
     @ViewBuilder
     private var statusSection: some View {
         let (title, symbol) = statusDescription
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: symbol)
+                .foregroundStyle(statusColor)
+                .font(.callout)
             Text(title)
+                .font(.callout.weight(.medium))
                 .accessibilityLabel("连接状态：\(title)")
         }
-        .font(.callout)
+    }
+
+    private var statusColor: Color {
+        switch model.phase {
+        case .idle, .preparing, .waiting:
+            .secondary
+        case .connected, .sending:
+            .blue
+        case .sent:
+            .green
+        case .cancelled, .expired, .failed:
+            .red
+        }
     }
 
     private var statusDescription: (String, String) {
