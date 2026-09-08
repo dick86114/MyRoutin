@@ -34,7 +34,7 @@ final class UsagePopoverLayoutTests: XCTestCase {
         XCTAssertTrue(source.contains("ScrollView(.vertical, showsIndicators: false)"))
         XCTAssertTrue(source.contains("ThinVerticalScrollIndicator"))
         XCTAssertTrue(source.contains(".frame(width: 440)"))
-        XCTAssertTrue(source.contains(".frame(maxHeight: maxPopoverHeight)"))
+        XCTAssertTrue(source.contains(".frame(maxHeight: maxPopoverHeight, alignment: .top)"))
         XCTAssertTrue(source.contains("visibleHeight * 0.9"))
 
         let controller = try TestSourceReader.read([

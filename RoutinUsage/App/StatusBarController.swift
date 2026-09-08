@@ -100,7 +100,7 @@ final class StatusBarController: NSObject {
 
     private func configurePopover() {
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(
+        let hostingController = NSHostingController(
             rootView: StatusPopoverContent(
                 environment: environment,
                 openSettings: { [weak self] in
@@ -108,6 +108,10 @@ final class StatusBarController: NSObject {
                 }
             )
         )
+        // 让窗口尺寸始终跟随 SwiftUI 内容的理想高度，
+        // 避免后台数据变化后重新打开时窗口尺寸过期（内容居中、上下留白）。
+        hostingController.sizingOptions = [.preferredContentSize]
+        popover.contentViewController = hostingController
     }
 
     private func configureStatusButton() {
@@ -290,6 +294,17 @@ final class StatusBarController: NSObject {
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.makeKeyAndOrderFront(nil)
         positionPopoverWindow(window, anchoredTo: button)
+
+        // 打开瞬间 SwiftUI 可能还没用最新数据完成布局，fittingSize 会过期。
+        // 下一轮 runloop 再校准一次窗口尺寸和位置。
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.popover.isShown else { return }
+            let refreshedSize = self.popoverContentSize(for: button)
+            guard window.frame.size != refreshedSize else { return }
+            window.contentViewController?.preferredContentSize = refreshedSize
+            window.setContentSize(refreshedSize)
+            self.positionPopoverWindow(window, anchoredTo: button)
+        }
 
         if let popoverWindowResignObserver {
             NotificationCenter.default.removeObserver(popoverWindowResignObserver)

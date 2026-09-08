@@ -94,7 +94,8 @@ struct UsagePopoverView: View {
                 .padding(.vertical, 10)
         }
         .frame(width: 440)
-        .frame(maxHeight: maxPopoverHeight)
+        // 窗口偶尔高于内容时固定顶部对齐，避免内容悬浮居中。
+        .frame(maxHeight: maxPopoverHeight, alignment: .top)
         .liquidGlassWindowBackground()
         .overlay {
             updateReleaseOverlay
