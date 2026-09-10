@@ -178,4 +178,18 @@ class CredentialEditorValidationTest {
         assertTrue(input.metadata.keys.all { it.rawValue in allowlist })
         assertFalse(input.metadata.isEmpty())
     }
+
+    @Test
+    fun commandCodeRequiresBearerKeyAndKeepsWebsite() {
+        assertEquals("请输入 API Key", failure(ProviderId.CommandCode, name = "Command Code"))
+        val input = validate(
+            ProviderId.CommandCode,
+            name = "Command Code",
+            apiKey = "  cmd-key  ",
+            websiteURL = "https://commandcode.ai/",
+        )
+        assertEquals(CredentialKind.BearerApiKey, input.credentialKind)
+        assertEquals("cmd-key", (input.secret as CredentialSecret.BearerToken).token)
+        assertEquals("https://commandcode.ai/", input.metadata[CredentialMetadataKey.WebsiteURL])
+    }
 }

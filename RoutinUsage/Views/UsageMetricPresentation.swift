@@ -86,6 +86,8 @@ enum ProviderTheme {
             return .orange
         case .newAPI:
             return .purple
+        case .commandCode:
+            return .teal
         }
     }
 

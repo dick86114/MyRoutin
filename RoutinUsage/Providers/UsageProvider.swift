@@ -116,6 +116,16 @@ struct ProviderRegistry: Sendable {
                     CredentialField(id: "secret", label: "用户访问令牌", isSecret: true)
                 ]
             ]
+        ),
+        ProviderDescriptor(
+            id: .commandCode,
+            displayName: "Command Code",
+            shortCode: "CMD",
+            iconName: "command",
+            capabilities: [.balance, .quotaWindow, .resetTime],
+            credentialSchemas: [
+                .bearerAPIKey: [CredentialField(id: "secret", label: "API Key", isSecret: true)]
+            ]
         )
     ]
 }

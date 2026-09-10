@@ -12,7 +12,9 @@ struct CredentialDetailsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 header
                 summary
-                if state.configuration.providerID == .routin || state.configuration.providerID == .volcengine {
+                if state.configuration.providerID == .routin ||
+                   state.configuration.providerID == .volcengine ||
+                   state.configuration.providerID == .commandCode {
                     planDetails
                 } else if state.configuration.providerID == .glm || state.configuration.providerID == .deepseek {
                     modelDetails
@@ -104,12 +106,19 @@ struct CredentialDetailsView: View {
             Text("用量指标")
                 .font(.headline)
             if let snapshot = state.snapshot, !snapshot.normalizedMetrics.isEmpty {
-                NormalizedUsageMetricGrid(
-                    metrics: snapshot.normalizedMetrics,
-                    columns: 2,
-                    resetTimeStyle: .relativeDuration,
-                    now: .now
-                )
+                if state.configuration.providerID == .commandCode {
+                    CommandCodeUsageMetricsView(
+                        metrics: snapshot.normalizedMetrics,
+                        now: .now
+                    )
+                } else {
+                    NormalizedUsageMetricGrid(
+                        metrics: snapshot.normalizedMetrics,
+                        columns: 2,
+                        resetTimeStyle: .relativeDuration,
+                        now: .now
+                    )
+                }
             } else {
                 Text("暂无用量数据")
                     .font(.callout)
@@ -351,6 +360,9 @@ struct CredentialDetailsView: View {
     }
 
     private var planName: String {
+        if let planName = state.snapshot?.planName, !planName.isEmpty {
+            return planName
+        }
         if state.configuration.providerID == .volcengine {
             return state.configuration.metadata["planType"] == "coding" ? "Coding Plan" : "Agent Plan"
         }

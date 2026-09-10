@@ -71,7 +71,7 @@ UUID 字段在 JSON 中为大写带连字符字符串；Java 端发送/比较时
 
 - `schemaVersion` 恒为 1。
 - `credentials[].credentialId`：UUID 大写字符串；`providerId` ∈
-  {routin, deepseek, glm, volcengine, newAPI}；`credentialKind` ∈
+  {routin, deepseek, glm, volcengine, newAPI, commandCode}；`credentialKind` ∈
   {bearerAPIKey, apiKey, accessKeyPair}。
 - `metadata` 白名单键：`baseURL, userID, region, planType, usageKind,
   websiteURL`；其余键拒绝。

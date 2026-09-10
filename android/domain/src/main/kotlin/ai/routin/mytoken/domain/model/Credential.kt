@@ -8,7 +8,8 @@ enum class ProviderId(val rawValue: String) {
     DeepSeek("deepseek"),
     Glm("glm"),
     Volcengine("volcengine"),
-    NewAPI("newAPI");
+    NewAPI("newAPI"),
+    CommandCode("commandCode");
 
     companion object {
         fun fromRawValue(value: String): ProviderId? = entries.firstOrNull { it.rawValue == value }

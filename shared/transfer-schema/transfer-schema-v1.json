@@ -20,7 +20,7 @@
       "properties": {
         "schemaVersion": { "const": 1 },
         "credentialId": { "type": "string", "format": "uuid" },
-        "providerId": { "enum": ["routin", "deepseek", "glm", "volcengine", "newAPI"] },
+        "providerId": { "enum": ["routin", "deepseek", "glm", "volcengine", "newAPI", "commandCode"] },
         "credentialKind": { "enum": ["bearerAPIKey", "apiKey", "accessKeyPair"] },
         "name": { "type": "string" },
         "isEnabled": { "type": "boolean" },

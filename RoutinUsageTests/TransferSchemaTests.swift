@@ -151,14 +151,14 @@ final class TransferSchemaTests: XCTestCase {
         }
     }
 
-    func testschema和能力清单资源可解析且包含五个provider及Volcengine两个variant() throws {
+    func testschema和能力清单资源可解析且包含六个provider及Volcengine两个variant() throws {
         let schemaURL = try XCTUnwrap(fixtureBundle.url(forResource: "transfer-schema-v1", withExtension: "json"))
         let capabilityURL = try XCTUnwrap(fixtureBundle.url(forResource: "provider-capabilities", withExtension: "json"))
         let schema = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: schemaURL)) as? [String: Any])
         let capabilities = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: capabilityURL)) as? [String: Any])
         XCTAssertEqual(schema["$id"] as? String, "https://mytoken.routin.ai/schema/transfer/v1")
         let providers = try XCTUnwrap(capabilities["providers"] as? [[String: Any]])
-        XCTAssertEqual(providers.count, 5)
+        XCTAssertEqual(providers.count, 6)
         let volcengine = try XCTUnwrap(providers.first { $0["providerId"] as? String == "volcengine" })
         XCTAssertEqual((volcengine["variants"] as? [[String: Any]])?.count, 2)
     }

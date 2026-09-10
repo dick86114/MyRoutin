@@ -108,6 +108,28 @@ internal fun formatRemainingDuration(end: Instant, now: Instant): String {
     return parts.joinToString(" ")
 }
 
+internal data class CommandCodeDetailLine(
+    val text: String,
+    val highlight: Boolean = false,
+)
+
+internal fun commandCodeProgressDetailLines(
+    metric: UsageMetric,
+    now: Instant,
+): List<CommandCodeDetailLine> = buildList {
+    add(CommandCodeDetailLine("已用 ${formatCommandCodeAmount(metric.used)} / ${formatCommandCodeAmount(metric.limit)}"))
+    add(CommandCodeDetailLine("剩余 ${formatCommandCodeAmount(metric.remaining)}"))
+    metric.windowEnd?.let { end ->
+        add(CommandCodeDetailLine("重置 ${formatResetTime(end)}"))
+        add(
+            CommandCodeDetailLine(
+                text = "剩余 ${formatRemainingDuration(end, now)}",
+                highlight = end.isAfter(now) && Duration.between(now, end).toMinutes() < 60,
+            )
+        )
+    }
+}
+
 @Composable
 internal fun RemainingDurationText(end: Instant, colors: StatusColors, modifier: Modifier = Modifier) {
     val now = Instant.now()
@@ -124,6 +146,9 @@ internal fun formatSubscriptionTime(instant: Instant?): String {
     if (instant == null) return "-"
     return subscriptionFormatter.format(instant.atZone(ZoneId.systemDefault()))
 }
+
+internal fun formatCommandCodeAmount(value: BigDecimal?): String =
+    value?.setScale(2, java.math.RoundingMode.HALF_UP)?.toPlainString() ?: "-"
 
 internal fun formatCurrency(value: BigDecimal?, currencyCode: String?): String {
     val amount = value?.setScale(2, java.math.RoundingMode.HALF_UP)?.toPlainString() ?: "-"
@@ -384,4 +409,134 @@ private fun formatAmount(value: BigDecimal?, metric: UsageMetric): String = when
 @Composable
 private fun MetricText(text: String, modifier: Modifier = Modifier) {
     Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
+}
+
+@Composable
+internal fun CommandCodeMetrics(metrics: List<UsageMetric>, modifier: Modifier = Modifier) {
+    val byId = metrics.associateBy(UsageMetric::id)
+    val colors = statusColors()
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            CommandCodeProgressMetric(byId["five-hour"], "5 小时", colors, Modifier.weight(1f))
+            CommandCodeProgressMetric(byId["weekly"], "周", colors, Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            CommandCodeMonthlyMetric(byId["credit-progress"], colors, Modifier.weight(1f))
+            CommandCodeRequestMetric(byId["request-count"], Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            CommandCodeValueMetric(byId["purchased-remaining"], "购买剩余", colors, Modifier.weight(1f))
+            CommandCodeValueMetric(byId["free-remaining"], "赠送剩余", colors, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun CommandCodeProgressMetric(
+    metric: UsageMetric?,
+    fallbackLabel: String,
+    colors: StatusColors,
+    modifier: Modifier = Modifier,
+) {
+    if (metric == null) {
+        CommandCodePlaceholder(fallbackLabel, modifier)
+        return
+    }
+    val percent = progressPercent(metric)
+    val color = progressColor(percent, colors)
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(metric.label.ifEmpty { fallbackLabel }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
+        }
+        UsageProgressBar(percent = percent, color = color)
+        commandCodeProgressDetailLines(metric, Instant.now()).forEach { line ->
+            Text(
+                text = line.text,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (line.highlight) colors.normal else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CommandCodeMonthlyMetric(
+    metric: UsageMetric?,
+    colors: StatusColors,
+    modifier: Modifier = Modifier,
+) {
+    if (metric == null) {
+        CommandCodePlaceholder("月", modifier)
+        return
+    }
+    val percent = progressPercent(metric)
+    val color = progressColor(percent, colors)
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(metric.label.ifEmpty { "月" }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
+        }
+        UsageProgressBar(percent = percent, color = color)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "已用 ${formatCurrency(metric.used, metric.currencyCode)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "剩余 ${formatCurrency(metric.remaining, metric.currencyCode)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CommandCodeRequestMetric(metric: UsageMetric?, modifier: Modifier = Modifier) {
+    if (metric == null) {
+        CommandCodePlaceholder("累计请求", modifier)
+        return
+    }
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = metric.label.ifEmpty { "累计请求" },
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Text("${formatCompact(metric.value)} 次", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun CommandCodeValueMetric(
+    metric: UsageMetric?,
+    fallbackLabel: String,
+    colors: StatusColors,
+    modifier: Modifier = Modifier,
+) {
+    if (metric == null) {
+        CommandCodePlaceholder(fallbackLabel, modifier)
+        return
+    }
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(metric.label.ifEmpty { fallbackLabel }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            text = formatCurrency(metric.value, metric.currencyCode),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = statusColor(metric, null, colors),
+        )
+    }
+}
+
+@Composable
+private fun CommandCodePlaceholder(label: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("-", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    }
 }

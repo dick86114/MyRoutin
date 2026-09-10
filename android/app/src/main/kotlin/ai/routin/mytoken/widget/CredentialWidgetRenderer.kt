@@ -151,6 +151,7 @@ internal object CredentialWidgetRenderer {
             ProviderId.Glm -> glmItems(metrics)
             ProviderId.NewAPI -> newApiItems(metrics)
             ProviderId.Volcengine -> volcengineItems(metrics)
+            ProviderId.CommandCode -> commandCodeItems(metrics)
             else -> metrics.map { item(providerId, it) }
         }
     }
@@ -199,7 +200,20 @@ internal object CredentialWidgetRenderer {
         return selected.map { item(ProviderId.Volcengine, it) }
     }
 
+    private fun commandCodeItems(metrics: List<UsageMetric>): List<WidgetMetricDisplay> {
+        val byId = metrics.associateBy(UsageMetric::id)
+        return listOf(
+            "five-hour",
+            "weekly",
+            "credit-progress",
+            "request-count",
+            "purchased-remaining",
+            "free-remaining",
+        ).mapNotNull { id -> byId[id]?.let { item(ProviderId.CommandCode, it) } }
+    }
+
     private fun newApiItems(metrics: List<UsageMetric>): List<WidgetMetricDisplay> {
+
         val byId = metrics.associateBy(UsageMetric::id)
         val items = mutableListOf<WidgetMetricDisplay>()
         byId["quota-progress"]?.let { items += item(ProviderId.NewAPI, it) }

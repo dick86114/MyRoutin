@@ -39,6 +39,114 @@ final class UsagePresentationPolicyTests: XCTestCase {
         XCTAssertEqual(UsageMetricGridPolicy.layout(providerID: .newAPI, metrics: metrics).columns, 2)
     }
 
+    func test弹窗为CommandCode接入专用指标视图() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("RoutinUsage")
+                .appendingPathComponent("Views")
+                .appendingPathComponent("UsageRowView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("providerID == .commandCode"))
+        XCTAssertTrue(source.contains("CommandCodeUsageMetricsView("))
+        let detailSource = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("RoutinUsage")
+                .appendingPathComponent("Views")
+                .appendingPathComponent("Settings")
+                .appendingPathComponent("CredentialDetailsView.swift"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(detailSource.contains("CommandCodeUsageMetricsView("))
+        XCTAssertTrue(detailSource.contains("providerID == .commandCode"))
+    }
+
+    func testCommandCode指标按三行布局排列并隐藏额外摘要() {
+        let metrics = [
+            "credit-progress", "credit-balance", "monthly-remaining",
+            "purchased-remaining", "free-remaining", "period-spent",
+            "request-count", "five-hour", "weekly"
+        ].map { id in
+            NormalizedUsageMetric(
+                id: id,
+                label: id,
+                unit: .currency,
+                presentation: .value,
+                semantic: .value
+            )
+        }
+
+        let layout = CommandCodeMetricLayoutPolicy.layout(metrics: metrics)
+
+        XCTAssertEqual(layout.fiveHour?.id, "five-hour")
+        XCTAssertEqual(layout.weekly?.id, "weekly")
+        XCTAssertEqual(layout.monthly?.id, "credit-progress")
+        XCTAssertEqual(layout.requestCount?.id, "request-count")
+        XCTAssertEqual(layout.purchasedRemaining?.id, "purchased-remaining")
+        XCTAssertEqual(layout.freeRemaining?.id, "free-remaining")
+        XCTAssertEqual(layout.displayedMetrics.map(\.id), [
+            "five-hour", "weekly", "credit-progress", "request-count",
+            "purchased-remaining", "free-remaining"
+        ])
+    }
+
+    func testCommandCode周期详情按纵向顺序输出四行() throws {
+        let now = Date(timeIntervalSince1970: 1_789_048_800)
+        let metric = NormalizedUsageMetric(
+            id: "five-hour",
+            label: "5 小时",
+            used: 2.56,
+            limit: 14,
+            remaining: 11.44,
+            unit: .currency,
+            windowEnd: now.addingTimeInterval(23 * 60),
+            presentation: .progress,
+            semantic: .usedQuota,
+            currencyCode: "$"
+        )
+
+        let lines = CommandCodeMetricLayoutPolicy.progressDetailLines(for: metric, now: now)
+
+        XCTAssertEqual(lines.map(\.text), [
+            "已用 2.56 / 14.00",
+            "剩余 11.44",
+            "重置 \(UsageFormatter.resetTime(metric.windowEnd!, now: now))",
+            "剩余 23分钟"
+        ])
+        XCTAssertTrue(lines.last?.highlights == true)
+    }
+
+    func testCommandCode累计请求采用左标签右值() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("RoutinUsage")
+                .appendingPathComponent("Views")
+                .appendingPathComponent("CommandCodeUsageMetricsView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("Spacer(minLength: 4)"))
+        XCTAssertTrue(source.contains("numberText(metric.value)"))
+    }
+
+    func testCommandCode金额四舍五入保留两位小数() {
+        XCTAssertEqual(
+            CommandCodeMetricFormatter.amount(Decimal(string: "12.345")),
+            "12.35"
+        )
+        XCTAssertEqual(
+            CommandCodeMetricFormatter.amount(Decimal(string: "7.2")),
+            "7.20"
+        )
+    }
+
     func test弹窗按供应商使用统一栅格并隐藏GLMZCode指标() throws {
         let popoverRow = try String(
             contentsOf: URL(fileURLWithPath: #filePath)

@@ -172,7 +172,8 @@ final class AppEnvironment {
             DeepSeekUsageProvider(session: .shared),
             GLMUsageProvider(session: .shared),
             VolcenginePlanUsageProvider(session: .shared),
-            NewAPIUsageProvider(session: .shared)
+            NewAPIUsageProvider(session: .shared),
+            CommandCodeUsageProvider(session: .shared)
         ])
         routinWebSession.onLoginCompleted = {
             Task { @MainActor in

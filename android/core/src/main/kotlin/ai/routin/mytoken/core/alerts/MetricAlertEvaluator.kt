@@ -373,4 +373,5 @@ fun providerDisplayName(providerId: ProviderId): String = when (providerId) {
     ProviderId.Glm -> "智谱 GLM"
     ProviderId.Volcengine -> "火山方舟"
     ProviderId.NewAPI -> "New API"
+    ProviderId.CommandCode -> "Command Code"
 }

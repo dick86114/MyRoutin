@@ -31,6 +31,8 @@ enum UsageMetricGridPolicy {
             return UsageMetricGridLayout(metrics: metrics, columns: 2)
         case .newAPI:
             return UsageMetricGridLayout(metrics: metrics, columns: 2)
+        case .commandCode:
+            return UsageMetricGridLayout(metrics: metrics, columns: 2)
         }
     }
 }

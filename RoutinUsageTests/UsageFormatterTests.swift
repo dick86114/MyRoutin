@@ -736,6 +736,38 @@ final class UsageFormatterTests: XCTestCase {
         )
     }
 
+    func test无周期窗口的可访问性标签省略窗口倒计时() throws {
+        let snapshot = UsageSnapshot(
+            planName: "Provider",
+            kind: .periodic,
+            fiveHour: nil,
+            weekly: nil,
+            token: nil,
+            allowedModels: [],
+            fetchedAt: Date(timeIntervalSince1970: 1_786_320_000),
+            metrics: [NormalizedUsageMetric(
+                id: "credit-progress",
+                label: "账户额度",
+                used: 5,
+                limit: 15,
+                remaining: 10,
+                unit: .currency,
+                presentation: .progress,
+                semantic: .usedQuota,
+                currencyCode: "$"
+            )]
+        )
+        let state = makeState(snapshot: snapshot)
+        let label = UsageRowAccessibility.label(
+            state: state,
+            metric: nil,
+            dimension: .fiveHour
+        )
+
+        XCTAssertFalse(label.contains("5 小时剩余"))
+        XCTAssertFalse(label.contains("周剩余"))
+    }
+
     func test周期套餐可访问性标签包含两个倒计时与分组倍率() throws {
         let now = Date(timeIntervalSince1970: 1_786_320_000)
         let snapshot = UsageSnapshot(

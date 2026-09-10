@@ -116,6 +116,66 @@ class HomeScreenTest {
     }
 
     @Test
+    fun commandCodeCardUsesRequestedMetricLayout() {
+        val command = credential("Command Code", ProviderId.CommandCode)
+        fun metric(
+            id: String,
+            label: String,
+            used: Double? = null,
+            limit: Double? = null,
+            remaining: Double? = null,
+            value: Double? = null,
+            unit: UsageMetricUnit = UsageMetricUnit.Currency,
+        ) = UsageMetric(
+            id = id,
+            label = label,
+            used = used?.toBigDecimal(),
+            limit = limit?.toBigDecimal(),
+            remaining = remaining?.toBigDecimal(),
+            value = value?.toBigDecimal(),
+            unit = unit,
+            presentation = if (used != null) UsageMetricPresentation.Progress else UsageMetricPresentation.Value,
+            semantic = if (used != null) UsageMetricSemantic.UsedQuota else UsageMetricSemantic.Value,
+            currencyCode = if (unit == UsageMetricUnit.Currency) "$" else null,
+            healthState = UsageMetricHealthState.Normal,
+        )
+        val metrics = listOf(
+            metric("five-hour", "5 小时", used = 2.45, limit = 14.0, remaining = 11.55),
+            metric("weekly", "周", used = 2.45, limit = 35.0, remaining = 32.55),
+            metric("credit-progress", "月", used = 2.45, limit = 70.0, remaining = 67.55),
+            metric("purchased-remaining", "购买剩余", value = 0.0),
+            metric("free-remaining", "赠送剩余", value = 0.0),
+            metric("request-count", "累计请求", value = 474.0, unit = UsageMetricUnit.Request),
+        )
+        val commandCodeCard = CredentialCardUi(
+            credential = command,
+            status = RefreshStatus.Ready,
+            snapshot = UsageSnapshot(
+                credentialId = command.id,
+                fetchedAt = now,
+                metrics = metrics,
+                planName = "GOAT",
+                statusText = "有效",
+                usageKind = "periodic",
+                allowedModels = listOf("claude-sonnet-5"),
+            ),
+            isStale = false,
+            error = null,
+            freshness = Freshness(FreshnessLevel.JUST_NOW, "刚刚更新"),
+        )
+        composeRule.setContent {
+            MaterialTheme {
+                CredentialUsageCard(commandCodeCard, onOpen = {}, onRetry = {})
+            }
+        }
+
+        listOf("5 小时", "周", "月", "累计请求", "购买剩余", "赠送剩余").forEach {
+            composeRule.onNodeWithText(it).assertIsDisplayed()
+        }
+        composeRule.onNodeWithText("\$67.55", substring = true).assertIsDisplayed()
+    }
+
+    @Test
     fun filtersProvidersAndHidesDisabledCredentials() {
         val enabled = credential("启用", ProviderId.Routin)
         val disabled = credential("停用", ProviderId.DeepSeek)

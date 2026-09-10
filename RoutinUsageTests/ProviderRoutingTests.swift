@@ -28,7 +28,8 @@ final class ProviderRoutingTests: XCTestCase {
             RoutinUsageProvider(client: ScriptedUsageFetcher(responses: [:])),
             GLMUsageProvider(),
             NewAPIUsageProvider(),
-            VolcenginePlanUsageProvider()
+            VolcenginePlanUsageProvider(),
+            CommandCodeUsageProvider()
         ])
         let cases: [(
             name: String,
@@ -101,6 +102,23 @@ final class ProviderRoutingTests: XCTestCase {
                     "request-count"
                 ],
                 [0, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil]
+            ),
+            (
+                "Command Code",
+                KeyConfiguration(
+                    id: UUID(),
+                    name: "Command Code",
+                    keySuffix: "",
+                    sortOrder: 0,
+                    providerID: .commandCode,
+                    credentialKind: .bearerAPIKey
+                ),
+                [
+                    "credit-progress", "five-hour", "weekly", "credit-balance",
+                    "monthly-remaining", "purchased-remaining", "free-remaining",
+                    "period-spent", "request-count"
+                ],
+                [0, 1, 2, nil, nil, nil, nil, nil, nil]
             ),
             (
                 "火山 Coding Plan",

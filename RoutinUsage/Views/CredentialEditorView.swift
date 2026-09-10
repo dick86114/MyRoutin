@@ -109,6 +109,24 @@ enum CredentialEditorValidation {
                 secret: secret,
                 metadata: metadata.merging(websiteMetadata) { current, _ in current }
             )
+        case .commandCode:
+            let secret = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !secret.isEmpty else { throw UsageStoreError.invalidSecret }
+            var metadata: [String: String] = [:]
+            let threshold = balanceWarningThreshold.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !threshold.isEmpty {
+                guard Decimal(string: threshold) != nil else {
+                    throw UsageStoreError.invalidSecret
+                }
+                metadata["balanceWarningThreshold"] = threshold
+            }
+            return ValidatedCredentialInput(
+                providerID: .commandCode,
+                credentialKind: .bearerAPIKey,
+                name: normalizedName,
+                secret: secret,
+                metadata: metadata.merging(websiteMetadata) { current, _ in current }
+            )
         }
     }
 
@@ -305,13 +323,13 @@ struct CredentialEditorView: View {
                         .help(isSecretVisible ? "隐藏凭证" : "显示凭证")
                         .accessibilityLabel(isSecretVisible ? "隐藏凭证" : "显示凭证")
                     }
-                    if providerID == .deepseek || providerID == .newAPI {
+                    if providerID == .deepseek || providerID == .newAPI || providerID == .commandCode {
                         HStack(spacing: 8) {
                             TextField(
-                                providerID == .newAPI ? "低额度预警值（可选）" : "低余额预警值（可选）",
+                                providerID == .deepseek ? "低余额预警值（可选）" : "低额度预警值（可选）",
                                 text: $balanceWarningThreshold
                             )
-                            Text(providerID == .newAPI ? "额度" : "元")
+                            Text(providerID == .deepseek ? "元" : "额度")
                                 .foregroundStyle(.secondary)
                         }
                     }

@@ -14,6 +14,7 @@ object ProviderCatalog {
         ProviderId.Glm -> "智谱 GLM"
         ProviderId.Volcengine -> "火山方舟"
         ProviderId.NewAPI -> "New API"
+        ProviderId.CommandCode -> "Command Code"
     }
 
     fun accentColor(providerId: ProviderId): Color = when (providerId) {
@@ -22,5 +23,6 @@ object ProviderCatalog {
         ProviderId.Glm -> Color(0xFF2E7D32)
         ProviderId.Volcengine -> Color(0xFFEF6C00)
         ProviderId.NewAPI -> Color(0xFF6A1B9A)
+        ProviderId.CommandCode -> Color(0xFF00897B)
     }
 }

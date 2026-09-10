@@ -188,7 +188,8 @@ fun CredentialDetailScreen(
 
             UsageMetricsSection(card)
             if (card.credential.providerId == ai.routin.mytoken.domain.model.ProviderId.Routin ||
-                card.credential.providerId == ai.routin.mytoken.domain.model.ProviderId.Volcengine
+                card.credential.providerId == ai.routin.mytoken.domain.model.ProviderId.Volcengine ||
+                card.credential.providerId == ai.routin.mytoken.domain.model.ProviderId.CommandCode
             ) {
                 PlanDetailsSection(card)
             } else if (card.credential.providerId == ai.routin.mytoken.domain.model.ProviderId.Glm ||
@@ -214,7 +215,11 @@ private fun UsageMetricsSection(card: CredentialCardUi) {
         if (metrics.isEmpty()) {
             Text(text = "暂无用量数据", style = MaterialTheme.typography.bodyMedium)
         } else {
-            UsageMetricGrid(metrics = metrics)
+            if (card.credential.providerId == ai.routin.mytoken.domain.model.ProviderId.CommandCode) {
+                CommandCodeMetrics(metrics = metrics)
+            } else {
+                UsageMetricGrid(metrics = metrics)
+            }
         }
     }
 }
@@ -406,6 +411,7 @@ private fun planName(card: CredentialCardUi): String {
         ai.routin.mytoken.domain.model.ProviderId.Volcengine ->
             if (card.credential.metadata[CredentialMetadataKey.PlanType] == "coding") "Coding Plan" else "Agent Plan"
         ai.routin.mytoken.domain.model.ProviderId.NewAPI -> "API 额度"
+        ai.routin.mytoken.domain.model.ProviderId.CommandCode -> "Command Code"
     }
 }
 

@@ -113,6 +113,16 @@ object CredentialEditorValidation {
                     ) + websiteMetadata,
                 )
             }
+            ProviderId.CommandCode -> {
+                val secret = fields.apiKey.trim()
+                if (secret.isEmpty()) throw CredentialValidationException("请输入 API Key")
+                ValidatedCredentialInput(
+                    credentialKind = CredentialKind.BearerApiKey,
+                    name = normalizedName,
+                    secret = CredentialSecret.BearerToken(secret),
+                    metadata = websiteMetadata,
+                )
+            }
         }
     }
 

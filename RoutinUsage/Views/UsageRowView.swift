@@ -82,7 +82,8 @@ enum UsageRowAccessibility {
         ) {
             details.append(expiryText)
         }
-        if snapshot.kind == .periodic, state.configuration.providerID != .newAPI {
+        if snapshot.kind == .periodic, state.configuration.providerID != .newAPI,
+           snapshot.fiveHour != nil || snapshot.weekly != nil {
             details.append("5 小时剩余 \(remainingDuration(for: snapshot.fiveHour, now: now))")
             details.append("周剩余 \(remainingDuration(for: snapshot.weekly, now: now))")
         }
@@ -367,6 +368,12 @@ private extension UsageRowView {
     }
 
     func normalizedMetricsContent(snapshot: UsageSnapshot, now: Date) -> some View {
+        if state.configuration.providerID == .commandCode {
+            return AnyView(
+                CommandCodeUsageMetricsView(metrics: snapshot.normalizedMetrics, now: now)
+            )
+        }
+
         if state.configuration.providerID == .glm {
             return AnyView(
                 GLMUsageMetricsView(metrics: snapshot.normalizedMetrics, now: now)

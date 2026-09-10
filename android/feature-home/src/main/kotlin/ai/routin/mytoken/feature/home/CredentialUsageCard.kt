@@ -111,6 +111,7 @@ fun CredentialUsageCard(
                 ai.routin.mytoken.domain.model.ProviderId.Glm -> GLMMetrics(metrics)
                 ai.routin.mytoken.domain.model.ProviderId.NewAPI -> NewAPIMetrics(metrics)
                 ai.routin.mytoken.domain.model.ProviderId.Volcengine -> VolcengineMetrics(metrics)
+                ai.routin.mytoken.domain.model.ProviderId.CommandCode -> CommandCodeMetrics(metrics)
                 else -> UsageMetricGrid(metrics = metrics)
             }
 
