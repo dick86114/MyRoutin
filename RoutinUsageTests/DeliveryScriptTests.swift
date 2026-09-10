@@ -9,7 +9,7 @@ final class DeliveryScriptTests: XCTestCase {
         )
     }
 
-    func testXcode26校验脚本接受Xcode26与macOS26SDK() throws {
+    func testXcode校验脚本接受Xcode26与macOS26SDK() throws {
         let result = try runXcodeVerification(
             xcodeVersion: "Xcode 26.6\nBuild version 17F113",
             sdkVersion: "26.6"
@@ -20,14 +20,25 @@ final class DeliveryScriptTests: XCTestCase {
         XCTAssertTrue(result.output.contains("macOS SDK 26.6"), result.output)
     }
 
-    func testXcode26校验脚本拒绝旧版Xcode() throws {
+    func testXcode校验脚本接受Xcode27与macOS27SDK() throws {
+        let result = try runXcodeVerification(
+            xcodeVersion: "Xcode 27.0\nBuild version 18A100",
+            sdkVersion: "27.0"
+        )
+
+        XCTAssertEqual(result.status, 0, result.output)
+        XCTAssertTrue(result.output.contains("Xcode 27.0"), result.output)
+        XCTAssertTrue(result.output.contains("macOS SDK 27.0"), result.output)
+    }
+
+    func testXcode校验脚本拒绝旧版Xcode() throws {
         let result = try runXcodeVerification(
             xcodeVersion: "Xcode 16.4\nBuild version 16F6",
             sdkVersion: "15.5"
         )
 
         XCTAssertNotEqual(result.status, 0)
-        XCTAssertTrue(result.output.contains("需要 Xcode 26"), result.output)
+        XCTAssertTrue(result.output.contains("需要 Xcode 26 或更高版本"), result.output)
     }
 
     func test测试脚本将偏好设置隔离至临时目录() throws {
@@ -161,7 +172,7 @@ final class DeliveryScriptTests: XCTestCase {
         )
         let script = try XCTUnwrap(
             Bundle(for: DeliveryScriptTests.self)
-                .url(forResource: "verify-xcode-26", withExtension: "sh")
+                .url(forResource: "verify-xcode", withExtension: "sh")
         )
         let process = Process()
         let output = Pipe()

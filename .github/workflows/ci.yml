@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: 校验 Xcode 26 与 macOS 26 SDK
-        run: scripts/verify-xcode-26.sh
+        run: scripts/verify-xcode.sh
       - name: 安装 XcodeGen
         run: brew install xcodegen
       - name: 执行单元测试

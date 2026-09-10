@@ -460,22 +460,22 @@ final class ProjectBootstrapTests: XCTestCase {
         XCTAssertTrue(workflow.contains("generate_release_notes: false"))
     }
 
-    func test发布工作流显式选择并校验Xcode26() throws {
+    func test发布工作流显式选择并校验Xcode() throws {
         let workflow = try sourceText(at: ".github/workflows/release-macos.yml")
 
         XCTAssertTrue(
             workflow.contains("DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer")
         )
-        XCTAssertTrue(workflow.contains("scripts/verify-xcode-26.sh"))
+        XCTAssertTrue(workflow.contains("scripts/verify-xcode.sh"))
     }
 
-    func test持续集成显式选择并校验Xcode26() throws {
+    func test持续集成显式选择并校验Xcode() throws {
         let workflow = try sourceText(at: ".github/workflows/ci.yml")
 
         XCTAssertTrue(
             workflow.contains("DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer")
         )
-        XCTAssertTrue(workflow.contains("scripts/verify-xcode-26.sh"))
+        XCTAssertTrue(workflow.contains("scripts/verify-xcode.sh"))
     }
 
     func test单元测试运行时不初始化菜单栏控制器() throws {

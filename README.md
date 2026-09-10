@@ -19,7 +19,7 @@ MyToken 是一个 macOS 菜单栏用量监控工具，用于在本地查看多�
 ## 系统要求
 
 - macOS 14.0 或更高版本。
-- 本地构建需要 Xcode 26、macOS 26 SDK 和 XcodeGen。
+- 本地构建需要 Xcode 26 或更高版本、macOS 26 SDK 或更高版本和 XcodeGen。
 
 ```bash
 brew install xcodegen
@@ -108,7 +108,7 @@ xcodebuild test -project RoutinUsage.xcodeproj -scheme RoutinUsage
 scripts/build-dmg.sh
 ```
 
-产物位于 `build/dist/MyToken.dmg`。构建脚本会先校验 Xcode 26 和 macOS 26 SDK。
+产物位于 `build/dist/MyToken.dmg`。构建脚本会先校验 Xcode 26+ 和 macOS 26+ SDK。
 
 ## CI 与发布
 

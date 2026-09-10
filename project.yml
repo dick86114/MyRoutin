@@ -34,7 +34,7 @@ targets:
         buildPhase: resources
       - path: scripts/test.sh
         buildPhase: resources
-      - path: scripts/verify-xcode-26.sh
+      - path: scripts/verify-xcode.sh
         buildPhase: resources
       - path: project.yml
         buildPhase: resources

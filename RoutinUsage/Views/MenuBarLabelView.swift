@@ -190,7 +190,7 @@ enum MenuBarMultiUsageIcon {
         let trackRect = NSRect(x: rect.minX + 9.5, y: 4, width: 7.5, height: rect.height - 8)
         let track = NSBezierPath(roundedRect: trackRect, xRadius: 2.5, yRadius: 2.5)
         track.lineWidth = 1
-        whiteStroke().setStroke()
+        foregroundColor.setStroke()
         foregroundColor.withAlphaComponent(0.28).setFill()
         track.fill()
 
@@ -223,10 +223,6 @@ enum MenuBarMultiUsageIcon {
             NSGraphicsContext.restoreGraphicsState()
         }
         track.stroke()
-    }
-
-    private static func whiteStroke() -> NSColor {
-        .white.withAlphaComponent(0.9)
     }
 
     private static func foregroundColor(for appearance: NSAppearance?) -> NSColor {
