@@ -4,14 +4,18 @@ struct CredentialDetailsView: View {
     let state: KeyUsageState
     var onClose: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
+    @State private var copiedModelID: String?
+    @State private var copyResetTask: Task<Void, Never>?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
                 summary
-                if state.configuration.providerID == .routin {
-                    routinPlanDetails
+                if state.configuration.providerID == .routin || state.configuration.providerID == .volcengine {
+                    planDetails
+                } else if state.configuration.providerID == .glm || state.configuration.providerID == .deepseek {
+                    modelDetails
                 }
                 metrics
                 metadata
@@ -21,6 +25,18 @@ struct CredentialDetailsView: View {
         }
         .frame(minWidth: 480, minHeight: 420)
         .navigationTitle("凭证详情")
+        .onDisappear {
+            copyResetTask?.cancel()
+        }
+    }
+
+    @ViewBuilder
+    private var modelDetails: some View {
+        if let snapshot = state.snapshot {
+            detailSection("账户与模型", symbol: "person.crop.circle") {
+                allowedModelsSection(snapshot.allowedModels)
+            }
+        }
     }
 
     private var header: some View {
@@ -103,14 +119,14 @@ struct CredentialDetailsView: View {
     }
 
     @ViewBuilder
-    private var routinPlanDetails: some View {
+    private var planDetails: some View {
         if let snapshot = state.snapshot {
             VStack(alignment: .leading, spacing: 18) {
                 detailSection("套餐状态", symbol: "checklist") {
                     HStack(alignment: .firstTextBaseline, spacing: 20) {
                         detailColumn("套餐", snapshot.planName.isEmpty ? planName : snapshot.planName)
                         detailColumn("类型", snapshot.kind == .periodic ? "周期订阅" : "Token 资源包")
-                        detailColumn("状态", subscriptionStatus(snapshot.status))
+                        detailColumn("状态", displayStatus(snapshot))
                     }
                 }
 
@@ -119,15 +135,22 @@ struct CredentialDetailsView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 20) {
                             detailColumn(
                                 "订阅开始",
-                                UsageFormatter.fullDateTime(snapshot.subscriptionStartAt)
+                                snapshot.subscriptionStartAt.map { UsageFormatter.fullDateTime($0) } ?? "接口未返回"
                             )
                             detailColumn(
                                 "订阅结束",
-                                UsageFormatter.fullDateTime(snapshot.subscriptionEndAt)
+                                snapshot.subscriptionEndAt.map { UsageFormatter.fullDateTime($0) } ?? "接口未返回"
                             )
                         }
 
-                        if snapshot.kind == .periodic {
+                        HStack(alignment: .firstTextBaseline, spacing: 20) {
+                            detailColumn(
+                                "计费模式",
+                                snapshot.billingMode ?? "接口未返回"
+                            )
+                        }
+
+                        if snapshot.kind == .periodic, state.configuration.providerID == .routin {
                             HStack(alignment: .firstTextBaseline, spacing: 20) {
                                 detailColumn(
                                     "5 小时结束",
@@ -144,21 +167,54 @@ struct CredentialDetailsView: View {
 
                 detailSection("账户与模型", symbol: "person.crop.circle") {
                     VStack(alignment: .leading, spacing: 12) {
-                        detailColumn(
-                            "分组倍率",
-                            snapshot.groupMultipliers.isEmpty
-                                ? "—"
-                                : UsageFormatter.groupMultiplierText(snapshot.groupMultipliers)
-                        )
-                        detailColumn(
-                            "允许模型",
-                            snapshot.allowedModels.isEmpty
-                                ? "—"
-                                : snapshot.allowedModels.joined(separator: "、")
-                        )
+                        if state.configuration.providerID == .routin {
+                            detailColumn(
+                                "分组倍率",
+                                snapshot.groupMultipliers.isEmpty
+                                    ? "—"
+                                    : UsageFormatter.groupMultiplierText(snapshot.groupMultipliers)
+                            )
+                        }
+                        allowedModelsSection(snapshot.allowedModels)
                     }
                 }
             }
+        }
+    }
+
+    private func allowedModelsSection(_ models: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("允许模型")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                if !models.isEmpty {
+                    Text("\(models.count) 个 · 点击复制")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            if models.isEmpty {
+                Text("接口未返回")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.secondary)
+            } else {
+                ModelIDChipFlow(models: models, copiedModelID: copiedModelID, onCopied: copyModelID)
+            }
+        }
+    }
+
+    private func copyModelID(_ modelID: String) {
+        copyResetTask?.cancel()
+        copiedModelID = modelID
+        copyResetTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1_200))
+            guard !Task.isCancelled else { return }
+            copiedModelID = nil
         }
     }
 
@@ -202,6 +258,16 @@ struct CredentialDetailsView: View {
             }
         }
         return UsageFormatter.statusText(state: state)
+    }
+
+    private func displayStatus(_ snapshot: UsageSnapshot) -> String {
+        if let statusText = snapshot.statusText, !statusText.isEmpty {
+            return statusText
+        }
+        if state.configuration.providerID == .volcengine {
+            return "接口未返回"
+        }
+        return subscriptionStatus(snapshot.status)
     }
 
     private var metadata: some View {
@@ -248,6 +314,8 @@ struct CredentialDetailsView: View {
 
             Link(url.absoluteString, destination: url)
                 .foregroundStyle(Color.accentColor)
+                .multilineTextAlignment(.trailing)
+                .frame(maxWidth: .infinity, alignment: .trailing)
                 .help("在浏览器中打开 \(url.absoluteString)")
                 .accessibilityLabel("打开 \(metadataValue(for: "websiteURL", value: url.absoluteString))")
         }

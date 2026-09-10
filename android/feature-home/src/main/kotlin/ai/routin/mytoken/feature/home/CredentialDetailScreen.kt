@@ -187,8 +187,16 @@ fun CredentialDetailScreen(
             }
 
             UsageMetricsSection(card)
-            if (card.credential.providerId == ai.routin.mytoken.domain.model.ProviderId.Routin) {
-                RoutinPlanSection(card)
+            if (card.credential.providerId == ai.routin.mytoken.domain.model.ProviderId.Routin ||
+                card.credential.providerId == ai.routin.mytoken.domain.model.ProviderId.Volcengine
+            ) {
+                PlanDetailsSection(card)
+            } else if (card.credential.providerId == ai.routin.mytoken.domain.model.ProviderId.Glm ||
+                card.credential.providerId == ai.routin.mytoken.domain.model.ProviderId.DeepSeek
+            ) {
+                SectionCard(title = "账户与模型") {
+                    AllowedModelsSection(models = card.snapshot?.allowedModels.orEmpty())
+                }
             }
             MetadataSection(
                 metadata = card.credential.metadata,
@@ -212,29 +220,63 @@ private fun UsageMetricsSection(card: CredentialCardUi) {
 }
 
 @Composable
-private fun RoutinPlanSection(card: CredentialCardUi) {
+private fun PlanDetailsSection(card: CredentialCardUi) {
     val snapshot = card.snapshot ?: return
     val fiveHour = snapshot.metrics.firstOrNull { it.id == "fiveHour" }
     val weekly = snapshot.metrics.firstOrNull { it.id == "weekly" }
     SectionCard(title = "套餐状态") {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            DetailColumn("套餐", snapshot.planName.ifEmpty { "Plan Key" }, Modifier.weight(1f))
-            DetailColumn("类型", usageType(snapshot.usageKind), Modifier.weight(1f))
-            DetailColumn("状态", subscriptionStatus(card, snapshot.status), Modifier.weight(1f))
+            DetailColumn(
+                label = "套餐",
+                value = snapshot.planName.ifEmpty { planName(card) },
+                modifier = Modifier.weight(1f),
+            )
+            DetailColumn(
+                label = "类型",
+                value = if (card.credential.providerId == ai.routin.mytoken.domain.model.ProviderId.Volcengine) {
+                    "周期订阅"
+                } else {
+                    usageType(snapshot.usageKind)
+                },
+                modifier = Modifier.weight(1f),
+            )
+            DetailColumn(
+                label = "状态",
+                value = snapshot.statusText ?: subscriptionStatus(card, snapshot.status),
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 
     SectionCard(title = "订阅与周期") {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            DetailColumn("订阅开始", formatFullTime(snapshot.subscriptionStartAt), Modifier.weight(1f))
-            DetailColumn("订阅结束", formatFullTime(snapshot.subscriptionEndAt), Modifier.weight(1f))
+            DetailColumn(
+                label = "订阅开始",
+                value = snapshot.subscriptionStartAt?.let(::formatFullTime) ?: "接口未返回",
+                modifier = Modifier.weight(1f),
+            )
+            DetailColumn(
+                label = "订阅结束",
+                value = snapshot.subscriptionEndAt?.let(::formatFullTime) ?: "接口未返回",
+                modifier = Modifier.weight(1f),
+            )
         }
+        Row(modifier = Modifier.padding(top = 12.dp)) {
+            DetailColumn(
+                label = "计费模式",
+                value = snapshot.billingMode ?: "接口未返回",
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        if (card.credential.providerId == ai.routin.mytoken.domain.model.ProviderId.Routin) {
         Row(
             modifier = Modifier.padding(top = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             DetailColumn("5 小时结束", formatFullTime(fiveHour?.windowEnd), Modifier.weight(1f))
             DetailColumn("周结束", formatFullTime(weekly?.windowEnd), Modifier.weight(1f))
+        }
         }
     }
 
@@ -248,9 +290,8 @@ private fun RoutinPlanSection(card: CredentialCardUi) {
                 multipliers.joinToString("、") { "${it.name} ×${formatDecimal(it.multiplier)}" }
             },
         )
-        DetailColumn(
-            label = "允许模型",
-            value = snapshot.allowedModels.ifEmpty { listOf("-") }.joinToString("、"),
+        AllowedModelsSection(
+            models = snapshot.allowedModels,
             modifier = Modifier.padding(top = 10.dp),
         )
     }
@@ -280,7 +321,10 @@ private fun MetadataSection(
                         text = value,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.clickable {
+                        textAlign = TextAlign.End,
+                        modifier = Modifier
+                            .weight(1.4f)
+                            .clickable {
                             runCatching { uriHandler.openUri(value) }
                         },
                     )

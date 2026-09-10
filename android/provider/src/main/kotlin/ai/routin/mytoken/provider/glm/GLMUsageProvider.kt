@@ -34,7 +34,7 @@ import kotlinx.serialization.json.JsonObject
 
 /**
  * GLM Coding Plan usage adapter, aligned with the macOS GLMUsageProvider:
- * two GET requests (model usage + quota limit) with a raw Authorization header,
+ * three GET requests (model usage + quota limit + model list) with a raw Authorization header,
  * metric order [five-hour, weekly, model-calls, zcode-mcp].
  */
 class GLMUsageProvider(
@@ -69,9 +69,16 @@ class GLMUsageProvider(
             if (error is kotlinx.coroutines.CancellationException) throw error
             return Result.failure(error as? UsageProviderException ?: UsageProviderException.Transport())
         }
+        val models = runCatching {
+            val response = request(url = baseURL.trimEnd('/') + MODEL_LIST_PATH, key = key)
+            allowedModels(response)
+        }.getOrElse { error ->
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            emptyList()
+        }
 
         return runCatching {
-            mapResponses(modelResponse, quotaResponse, credential.id)
+            mapResponses(modelResponse, quotaResponse, credential.id, models)
         }.recoverCatching { error ->
             if (error is UsageProviderException) throw error
             throw UsageProviderException.InvalidResponse()
@@ -101,7 +108,12 @@ class GLMUsageProvider(
         return response
     }
 
-    private fun mapResponses(modelResponse: ProviderHttpResponse, quotaResponse: ProviderHttpResponse, credentialId: java.util.UUID): UsageSnapshot {
+    private fun mapResponses(
+        modelResponse: ProviderHttpResponse,
+        quotaResponse: ProviderHttpResponse,
+        credentialId: java.util.UUID,
+        allowedModels: List<String>,
+    ): UsageSnapshot {
         val modelRoot = ProviderJson.parse(modelResponse.body.decodeToString()).asObjectOrNull()
         val quotaRoot = ProviderJson.parse(quotaResponse.body.decodeToString()).asObjectOrNull()
 
@@ -117,8 +129,20 @@ class GLMUsageProvider(
             credentialId = credentialId,
             fetchedAt = clock.instant(),
             planName = "Coding Plan",
+            allowedModels = allowedModels,
             metrics = metrics
         )
+    }
+
+    private fun allowedModels(response: ProviderHttpResponse): List<String> {
+        if (response.statusCode !in 200..299) throw UsageProviderException.InvalidResponse()
+        val data = ProviderJson.parse(response.body.decodeToString())
+            .asObjectOrNull()
+            ?.arrayOrNull("data")
+            ?: return emptyList()
+        return data.mapNotNull { item ->
+            item.asObjectOrNull()?.stringOrNull("id")?.takeIf(String::isNotBlank)
+        }
     }
 
     private fun quotaMetrics(root: JsonObject?): List<UsageMetric> {
@@ -224,6 +248,7 @@ class GLMUsageProvider(
         const val DEFAULT_BASE_URL = "https://api.z.ai"
         private const val MODEL_USAGE_PATH = "/api/monitor/usage/model-usage"
         private const val QUOTA_LIMIT_PATH = "/api/monitor/usage/quota/limit"
+        private const val MODEL_LIST_PATH = "/api/coding/paas/v4/models"
 
         private val FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
     }

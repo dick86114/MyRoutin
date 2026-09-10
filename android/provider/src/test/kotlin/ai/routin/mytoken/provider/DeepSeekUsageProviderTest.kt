@@ -37,27 +37,42 @@ class DeepSeekUsageProviderTest {
 
     private fun ok(body: String) = ProviderHttpResponse(200, body.toByteArray())
 
+    private fun queueSuccess(modelsBody: String = """{"object":"list","data":[]}""") {
+        transport.responses += ok(readFixture("usage/deepseek-balance.json"))
+        transport.responses += ok(modelsBody)
+    }
+
     @Test
     fun fetchUsage_sendsBearerGetRequest() = runTest {
-        transport.responses += ok(readFixture("usage/deepseek-balance.json"))
+        queueSuccess()
 
         val result = provider.fetchUsage(credential(), secret)
 
         assertTrue(result.isSuccess)
-        val request = transport.requests.single()
+        assertEquals(2, transport.requests.size)
+        val request = transport.requests.first()
         assertEquals("GET", request.method)
         assertEquals("https://api.deepseek.com/user/balance", request.url)
         assertEquals("Bearer sk-deepseek-secret", request.headers["Authorization"])
         assertEquals("application/json", request.headers["Accept"])
+
+        val models = transport.requests[1]
+        assertEquals("https://api.deepseek.com/models", models.url)
+        assertEquals("Bearer sk-deepseek-secret", models.headers["Authorization"])
     }
 
     @Test
     fun fetchUsage_mapsBalanceMetrics() = runTest {
-        transport.responses += ok(readFixture("usage/deepseek-balance.json"))
+        queueSuccess(
+            """
+            {"object":"list","data":[{"id":"deepseek-v4-flash"},{"id":"deepseek-v4-pro"},{"id":""}]}
+            """.trimIndent()
+        )
 
         val snapshot = provider.fetchUsage(credential(), secret).getOrThrow()
 
         assertEquals(fixedClock.instant(), snapshot.fetchedAt)
+        assertEquals(listOf("deepseek-v4-flash", "deepseek-v4-pro"), snapshot.allowedModels)
         assertEquals(listOf("balance", "grantedBalance", "toppedUpBalance", "availability"), snapshot.metrics.map { it.id })
 
         val balance = snapshot.metrics[0]
@@ -86,6 +101,17 @@ class DeepSeekUsageProviderTest {
         assertEquals(UsageMetricPresentation.Status, availability.presentation)
         assertEquals(UsageMetricSemantic.Status, availability.semantic)
         assertEquals(UsageMetricHealthState.Normal, availability.healthState)
+    }
+
+    @Test
+    fun fetchUsage_keepsEmptyModelsWhenModelRequestFails() = runTest {
+        transport.responses += ok(readFixture("usage/deepseek-balance.json"))
+        transport.responses += ProviderHttpResponse(404, "{}".toByteArray())
+
+        val snapshot = provider.fetchUsage(credential(), secret).getOrThrow()
+
+        assertTrue(snapshot.allowedModels.isEmpty())
+        assertEquals(4, snapshot.metrics.size)
     }
 
     @Test

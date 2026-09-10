@@ -27,8 +27,8 @@ import java.math.BigDecimal
 import java.time.Clock
 
 /**
- * DeepSeek balance adapter, aligned with the macOS DeepSeekUsageProvider:
- * GET /user/balance with Bearer auth; maps balance/granted/topped-up/availability metrics.
+ * DeepSeek adapter, aligned with the macOS DeepSeekUsageProvider: GET /user/balance
+ * with Bearer auth and a best-effort GET /models request for the allowed model list.
  */
 class DeepSeekUsageProvider(
     private val transport: HttpTransport,
@@ -62,13 +62,34 @@ class DeepSeekUsageProvider(
             return Result.failure(UsageProviderException.Transport())
         }
 
-        return runCatching { mapResponse(response, credential) }.recoverCatching { error ->
+        val allowedModels = runCatching {
+            val modelsResponse = transport.execute(
+                ProviderHttpRequest(
+                    method = "GET",
+                    url = MODELS_ENDPOINT,
+                    headers = mapOf(
+                        "Authorization" to "Bearer $key",
+                        "Accept" to "application/json"
+                    )
+                )
+            )
+            readModelIds(modelsResponse)
+        }.getOrElse { error ->
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            emptyList()
+        }
+
+        return runCatching { mapResponse(response, credential, allowedModels) }.recoverCatching { error ->
             if (error is UsageProviderException) throw error
             throw UsageProviderException.InvalidResponse()
         }
     }
 
-    private fun mapResponse(response: ProviderHttpResponse, credential: Credential): UsageSnapshot {
+    private fun mapResponse(
+        response: ProviderHttpResponse,
+        credential: Credential,
+        allowedModels: List<String>,
+    ): UsageSnapshot {
         val body = response.body.decodeToString()
         if (response.statusCode !in 200..299) {
             throw classifyStatus(response.statusCode)
@@ -93,6 +114,7 @@ class DeepSeekUsageProvider(
             credentialId = credential.id,
             fetchedAt = clock.instant(),
             planName = "API 余额",
+            allowedModels = allowedModels,
             metrics = listOf(
                 UsageMetric(
                     id = "balance",
@@ -137,6 +159,17 @@ class DeepSeekUsageProvider(
         )
     }
 
+    private fun readModelIds(response: ProviderHttpResponse): List<String> {
+        if (response.statusCode !in 200..299) throw UsageProviderException.InvalidResponse()
+        val data = ProviderJson.parse(response.body.decodeToString())
+            .asObjectOrNull()
+            ?.arrayOrNull("data")
+            ?: return emptyList()
+        return data.mapNotNull { item ->
+            item.asObjectOrNull()?.stringOrNull("id")?.takeIf(String::isNotBlank)
+        }
+    }
+
     private fun classifyStatus(statusCode: Int): UsageProviderException = when (statusCode) {
         401, 403 -> UsageProviderException.Unauthorized()
         429 -> UsageProviderException.RateLimited()
@@ -146,5 +179,6 @@ class DeepSeekUsageProvider(
 
     companion object {
         const val DEFAULT_ENDPOINT = "https://api.deepseek.com/user/balance"
+        const val MODELS_ENDPOINT = "https://api.deepseek.com/models"
     }
 }

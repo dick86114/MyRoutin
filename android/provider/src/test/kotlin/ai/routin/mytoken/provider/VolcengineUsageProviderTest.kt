@@ -19,6 +19,7 @@ import java.time.ZoneOffset
 import java.util.UUID
 import kotlinx.coroutines.test.runTest
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.Test
 
@@ -45,14 +46,31 @@ class VolcengineUsageProviderTest {
 
     private fun ok(body: String) = ProviderHttpResponse(200, body.toByteArray())
 
+    private fun queueVolcengine(
+        usageBody: String,
+        planBody: String = """{"Result":{"PlanType":"Max","Status":"Running"}}""",
+        modelBody: String = """{"Result":{"Datas":[]}}""",
+    ) {
+        transport.responses += ok(planBody)
+        transport.responses += ok(usageBody)
+        transport.responses += ok(modelBody)
+    }
+
     @Test
     fun fetchUsage_sendsSignedAgentPlanRequestByDefault() = runTest {
-        transport.responses += ok(readFixture("usage/volcengine-usage.json"))
+        queueVolcengine(readFixture("usage/volcengine-usage.json"))
 
         val result = provider.fetchUsage(credential(planType = "agent"), secret)
 
         assertTrue(result.isSuccess)
-        val request = transport.requests.single()
+        assertEquals(3, transport.requests.size)
+
+        val plan = transport.requests[0]
+        assertEquals("POST", plan.method)
+        assertEquals("https://open.volcengineapi.com/?Action=GetPersonalPlan&Version=2024-01-01", plan.url)
+        assertEquals("""{"Plan":"AgentPlan"}""".toByteArray().toList(), plan.body!!.toList())
+
+        val request = transport.requests[1]
         assertEquals("POST", request.method)
         assertEquals("https://open.volcengineapi.com/?Action=GetAgentPlanAFPUsage&Version=2024-01-01", request.url)
         assertEquals("{}".toByteArray().toList(), request.body!!.toList())
@@ -65,24 +83,69 @@ class VolcengineUsageProviderTest {
             "20260907T040000Z",
             request.headers["X-Date"]
         )
+
+        val models = transport.requests[2]
+        assertEquals("https://open.volcengineapi.com/?Action=ListArkAgentPlanModel&Version=2024-01-01", models.url)
+        assertEquals("""{"Plan":"AgentPlan"}""".toByteArray().toList(), models.body!!.toList())
     }
 
     @Test
     fun fetchUsage_usesCodingPlanActionForCodingPlanType() = runTest {
-        transport.responses += ok(readFixture("usage/volcengine-coding-usage.json"))
+        queueVolcengine(readFixture("usage/volcengine-coding-usage.json"))
 
         val result = provider.fetchUsage(credential(planType = "coding"), secret)
 
         assertTrue(result.isSuccess)
-        assertEquals(
-            "https://open.volcengineapi.com/?Action=GetCodingPlanUsage&Version=2024-01-01",
-            transport.requests.single().url
+        assertEquals("https://open.volcengineapi.com/?Action=GetPersonalPlan&Version=2024-01-01", transport.requests[0].url)
+        assertEquals("https://open.volcengineapi.com/?Action=GetCodingPlanUsage&Version=2024-01-01", transport.requests[1].url)
+        assertEquals("https://open.volcengineapi.com/?Action=ListArkCodingPlanModel&Version=2024-01-01", transport.requests[2].url)
+        assertEquals("""{"Plan":"CodingPlan"}""".toByteArray().toList(), transport.requests[0].body!!.toList())
+        assertEquals("""{"Plan":"CodingPlan"}""".toByteArray().toList(), transport.requests[2].body!!.toList())
+    }
+
+    @Test
+    fun fetchUsage_mapsPersonalPlanAndModelListDynamically() = runTest {
+        queueVolcengine(
+            usageBody = readFixture("usage/volcengine-usage.json"),
+            planBody = """
+                {"Result":{"PlanType":"medium","Status":"Running",
+                "StartTime":"2026-08-01T00:00:00Z","EndTime":"2026-09-01T00:00:00Z","AutoRenew":true}}
+            """.trimIndent(),
+            modelBody = """
+                {"Result":{"Datas":[{"ModelID":"ark-code-latest"},{"ModelID":"kimi-k2.7-code"}]}}
+            """.trimIndent()
         )
+
+        val snapshot = provider.fetchUsage(credential(planType = "agent"), secret).getOrThrow()
+
+        assertEquals("medium Plan", snapshot.planName)
+        assertEquals("Running", snapshot.statusText)
+        assertEquals("自动续费", snapshot.billingMode)
+        assertEquals(Instant.parse("2026-08-01T00:00:00Z"), snapshot.subscriptionStartAt)
+        assertEquals(Instant.parse("2026-09-01T00:00:00Z"), snapshot.subscriptionEndAt)
+        assertEquals(listOf("ark-code-latest", "kimi-k2.7-code"), snapshot.allowedModels)
+    }
+
+    @Test
+    fun fetchUsage_keepsMissingPlanFieldsMissing() = runTest {
+        queueVolcengine(
+            usageBody = """{"Result":{"AFPFiveHour":{"Quota":"100","Used":"10"}}}""",
+            planBody = """{"Result":{"PlanType":"medium"}}""",
+            modelBody = """{"Result":{"Datas":[]}}"""
+        )
+
+        val snapshot = provider.fetchUsage(credential(planType = "agent"), secret).getOrThrow()
+
+        assertNull(snapshot.statusText)
+        assertNull(snapshot.billingMode)
+        assertNull(snapshot.subscriptionStartAt)
+        assertNull(snapshot.subscriptionEndAt)
+        assertTrue(snapshot.allowedModels.isEmpty())
     }
 
     @Test
     fun fetchUsage_mapsAfpWindowMetrics() = runTest {
-        transport.responses += ok(readFixture("usage/volcengine-usage.json"))
+        queueVolcengine(readFixture("usage/volcengine-usage.json"))
 
         val snapshot = provider.fetchUsage(credential(planType = "coding"), secret).getOrThrow()
 
@@ -116,7 +179,7 @@ class VolcengineUsageProviderTest {
 
     @Test
     fun fetchUsage_skipsWindowsWithoutQuota() = runTest {
-        transport.responses += ok(
+        queueVolcengine(
             """
             {"Result":{"AFPFiveHour":{"Quota":0,"Used":0},
             "AFPWeekly":{"Quota":"35000","Used":"3252.2867"}}}
@@ -130,7 +193,7 @@ class VolcengineUsageProviderTest {
 
     @Test
     fun fetchUsage_fallsBackToQuotaUsageItems() = runTest {
-        transport.responses += ok(readFixture("usage/volcengine-coding-usage.json"))
+        queueVolcengine(readFixture("usage/volcengine-coding-usage.json"))
 
         val snapshot = provider.fetchUsage(credential(planType = "coding"), secret).getOrThrow()
 
@@ -147,7 +210,7 @@ class VolcengineUsageProviderTest {
 
     @Test
     fun fetchUsage_highUsageMarksCritical() = runTest {
-        transport.responses += ok("""{"Result":{"QuotaUsage":[{"Level":"5h","Percent":85}]}}""")
+        queueVolcengine("""{"Result":{"QuotaUsage":[{"Level":"5h","Percent":85}]}}""")
 
         val snapshot = provider.fetchUsage(credential(planType = "coding"), secret).getOrThrow()
 
@@ -156,7 +219,7 @@ class VolcengineUsageProviderTest {
 
     @Test
     fun fetchUsage_missingResultFailsWithInvalidResponse() = runTest {
-        transport.responses += ok("""{"ResponseMetadata":{}}""")
+        queueVolcengine("""{"ResponseMetadata":{}}""")
 
         val result = provider.fetchUsage(credential(planType = "coding"), secret)
 
@@ -165,7 +228,7 @@ class VolcengineUsageProviderTest {
 
     @Test
     fun fetchUsage_emptyMetricsFailsWithInvalidResponse() = runTest {
-        transport.responses += ok("""{"Result":{}}""")
+        queueVolcengine("""{"Result":{}}""")
 
         val result = provider.fetchUsage(credential(planType = "coding"), secret)
 
@@ -174,7 +237,9 @@ class VolcengineUsageProviderTest {
 
     @Test
     fun fetchUsage_errorBodyMapsToProviderMessageWithoutSecret() = runTest {
+        transport.responses += ok(planResponse())
         transport.responses += ProviderHttpResponse(400, readFixture("usage/volcengine-error.json").toByteArray())
+        transport.responses += ok("""{"Result":{"Datas":[]}}""")
 
         val error = provider.fetchUsage(credential(planType = "agent"), secret).exceptionOrNull()
 
@@ -186,7 +251,9 @@ class VolcengineUsageProviderTest {
 
     @Test
     fun fetchUsage_401WithoutErrorBodyMapsToUnauthorized() = runTest {
+        transport.responses += ok(planResponse())
         transport.responses += ProviderHttpResponse(401, "{}".toByteArray())
+        transport.responses += ok("""{"Result":{"Datas":[]}}""")
 
         val result = provider.fetchUsage(credential(planType = "agent"), secret)
 
@@ -195,7 +262,9 @@ class VolcengineUsageProviderTest {
 
     @Test
     fun fetchUsage_429MapsToRateLimited() = runTest {
+        transport.responses += ok(planResponse())
         transport.responses += ProviderHttpResponse(429, "{}".toByteArray())
+        transport.responses += ok("""{"Result":{"Datas":[]}}""")
 
         val result = provider.fetchUsage(credential(planType = "agent"), secret)
 
@@ -204,7 +273,9 @@ class VolcengineUsageProviderTest {
 
     @Test
     fun fetchUsage_5xxMapsToProviderUnavailable() = runTest {
+        transport.responses += ok(planResponse())
         transport.responses += ProviderHttpResponse(500, "{}".toByteArray())
+        transport.responses += ok("""{"Result":{"Datas":[]}}""")
 
         val result = provider.fetchUsage(credential(planType = "agent"), secret)
 
@@ -213,7 +284,7 @@ class VolcengineUsageProviderTest {
 
     @Test
     fun fetchUsage_malformedSuccessBodyFailsWithInvalidResponse() = runTest {
-        transport.responses += ok("{ nope")
+        queueVolcengine("{ nope")
 
         val result = provider.fetchUsage(credential(planType = "agent"), secret)
 
@@ -248,4 +319,6 @@ class VolcengineUsageProviderTest {
 
     private fun readFixture(name: String): String =
         javaClass.classLoader!!.getResourceAsStream(name)!!.readBytes().decodeToString()
+
+    private fun planResponse() = """{"Result":{"PlanType":"Max","Status":"Running"}}"""
 }

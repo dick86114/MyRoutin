@@ -241,6 +241,10 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     /// 按接口返回顺序配对的订阅分组和计费倍率；旧缓存缺少时为空。
     let groupMultipliers: [UsageGroupMultiplier]
     let status: Int?
+    /// 供应商接口返回的原始状态文本；旧缓存和数值状态可能没有该字段。
+    let statusText: String?
+    /// 供应商接口返回的计费或续费模式；无法从接口读取时保持 nil。
+    let billingMode: String?
     let subscriptionStartAt: Date?
     let subscriptionEndAt: Date?
     let metrics: [NormalizedUsageMetric]
@@ -308,6 +312,8 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
             groupMultiplier: groupMultiplier,
             groupMultipliers: groupMultipliers,
             status: status,
+            statusText: statusText,
+            billingMode: billingMode,
             subscriptionStartAt: subscriptionStartAt,
             subscriptionEndAt: subscriptionEndAt,
             providerID: providerID,
@@ -329,6 +335,8 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         groupMultiplier: Decimal? = nil,
         groupMultipliers: [UsageGroupMultiplier] = [],
         status: Int? = nil,
+        statusText: String? = nil,
+        billingMode: String? = nil,
         subscriptionStartAt: Date? = nil,
         subscriptionEndAt: Date? = nil,
         providerID: ProviderID? = nil,
@@ -349,6 +357,8 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         self.groupMultiplier = groupMultiplier
         self.groupMultipliers = groupMultipliers
         self.status = status
+        self.statusText = statusText
+        self.billingMode = billingMode
         self.subscriptionStartAt = subscriptionStartAt
         self.subscriptionEndAt = subscriptionEndAt
         self.metrics = metrics
@@ -369,6 +379,8 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         case groupMultiplier
         case groupMultipliers
         case status
+        case statusText
+        case billingMode
         case subscriptionStartAt
         case subscriptionEndAt
         case metrics
@@ -390,6 +402,8 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         groupMultiplier = try container.decodeIfPresent(Decimal.self, forKey: .groupMultiplier)
         groupMultipliers = try container.decodeIfPresent([UsageGroupMultiplier].self, forKey: .groupMultipliers) ?? []
         status = try container.decodeIfPresent(Int.self, forKey: .status)
+        statusText = try container.decodeIfPresent(String.self, forKey: .statusText)
+        billingMode = try container.decodeIfPresent(String.self, forKey: .billingMode)
         subscriptionStartAt = try container.decodeIfPresent(Date.self, forKey: .subscriptionStartAt)
         subscriptionEndAt = try container.decodeIfPresent(Date.self, forKey: .subscriptionEndAt)
         let decodedMetrics = try container.decodeIfPresent([NormalizedUsageMetric].self, forKey: .metrics) ?? []

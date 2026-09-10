@@ -46,6 +46,7 @@ class GLMUsageProviderTest {
     private fun queueSuccess() {
         transport.responses += ok(readFixture("usage/glm-model-usage.json"))
         transport.responses += ok(readFixture("usage/glm-quota-limit.json"))
+        transport.responses += ok("""{"data":[{"id":"glm-5.3"},{"id":"glm-5.3-flash"},{"id":""}]}""")
     }
 
     @Test
@@ -55,7 +56,7 @@ class GLMUsageProviderTest {
         val result = provider.fetchUsage(credential(), secret)
 
         assertTrue(result.isSuccess)
-        assertEquals(2, transport.requests.size)
+        assertEquals(3, transport.requests.size)
 
         val modelUsage = transport.requests[0]
         assertEquals("GET", modelUsage.method)
@@ -74,6 +75,10 @@ class GLMUsageProviderTest {
                 "?startTime=2026-09-06%2012:34:56&endTime=2026-09-07%2012:59:59",
             quotaLimit.url
         )
+
+        val models = transport.requests[2]
+        assertEquals("https://api.z.ai/api/coding/paas/v4/models", models.url)
+        assertEquals("glm-secret-key", models.headers["Authorization"])
     }
 
     @Test
@@ -94,6 +99,7 @@ class GLMUsageProviderTest {
         val snapshot = provider.fetchUsage(credential(), secret).getOrThrow()
 
         assertEquals(fixedClock.instant(), snapshot.fetchedAt)
+        assertEquals(listOf("glm-5.3", "glm-5.3-flash"), snapshot.allowedModels)
         assertEquals(
             listOf("five-hour", "weekly", "model-calls", "zcode-mcp"),
             snapshot.metrics.map { it.id }
@@ -133,6 +139,18 @@ class GLMUsageProviderTest {
         assertEquals(UsageMetricUnit.Request, zcodeMcp.unit)
         assertEquals(UsageMetricPresentation.Value, zcodeMcp.presentation)
         assertEquals(UsageMetricSemantic.UsedQuota, zcodeMcp.semantic)
+    }
+
+    @Test
+    fun fetchUsage_keepsEmptyModelsWhenModelRequestFails() = runTest {
+        transport.responses += ok(readFixture("usage/glm-model-usage.json"))
+        transport.responses += ok(readFixture("usage/glm-quota-limit.json"))
+        transport.responses += ProviderHttpResponse(404, "{}".toByteArray())
+
+        val snapshot = provider.fetchUsage(credential(), secret).getOrThrow()
+
+        assertTrue(snapshot.allowedModels.isEmpty())
+        assertEquals(4, snapshot.metrics.size)
     }
 
     @Test

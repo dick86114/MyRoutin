@@ -39,40 +39,7 @@ struct VolcenginePlanUsageProvider: UsageProvider {
     }
 
     func validate(_ credential: ProviderCredential, now: Date) async throws -> UsageSnapshot? {
-        try await validatePersonalPlan(credential, now: now)
         return try await fetchUsage(credential, now: now)
-    }
-
-    private func validatePersonalPlan(_ credential: ProviderCredential, now: Date) async throws {
-        guard let accessKeyID = credential.metadata["accessKeyID"],
-              let region = credential.metadata["region"],
-              !accessKeyID.isEmpty,
-              !region.isEmpty,
-              !credential.secret.isEmpty
-        else {
-            throw UsageProviderError.invalidCredential
-        }
-
-        let requestedPlan = credential.metadata["planType"] == "coding" ? "CodingPlan" : "AgentPlan"
-        let body = try JSONSerialization.data(withJSONObject: ["Plan": requestedPlan])
-        let data = try await sendRequest(
-            action: "GetPersonalPlan",
-            body: body,
-            accessKeyID: accessKeyID,
-            secretAccessKey: credential.secret,
-            region: region,
-            now: now
-        )
-        do {
-            let response = try JSONDecoder().decode(VolcenginePersonalPlanResponse.self, from: data)
-            guard response.result != nil else {
-                throw UsageProviderError.providerMessage("火山方舟：未找到已购买的\(requestedPlan)套餐")
-            }
-        } catch let error as UsageProviderError {
-            throw error
-        } catch {
-            throw UsageProviderError.invalidResponse
-        }
     }
 
     func fetchUsage(_ credential: ProviderCredential, now: Date) async throws -> UsageSnapshot? {
@@ -87,10 +54,29 @@ struct VolcenginePlanUsageProvider: UsageProvider {
             throw UsageProviderError.invalidCredential
         }
 
+        let isCoding = credential.metadata["planType"] == "coding"
+        let requestedPlan = isCoding ? "CodingPlan" : "AgentPlan"
+        let plan = try await fetchPersonalPlan(
+            accessKeyID: accessKeyID,
+            secretAccessKey: credential.secret,
+            region: region,
+            requestedPlan: requestedPlan,
+            now: now
+        )
+
         let body = Data("{}".utf8)
         let data = try await sendRequest(
-            action: credential.metadata["planType"] == "coding" ? "GetCodingPlanUsage" : "GetAgentPlanAFPUsage",
+            action: isCoding ? "GetCodingPlanUsage" : "GetAgentPlanAFPUsage",
             body: body,
+            accessKeyID: accessKeyID,
+            secretAccessKey: credential.secret,
+            region: region,
+            now: now
+        )
+        let modelBody = try JSONSerialization.data(withJSONObject: ["Plan": requestedPlan])
+        let modelData = try await sendRequest(
+            action: isCoding ? "ListArkCodingPlanModel" : "ListArkAgentPlanModel",
+            body: modelBody,
             accessKeyID: accessKeyID,
             secretAccessKey: credential.secret,
             region: region,
@@ -99,6 +85,7 @@ struct VolcenginePlanUsageProvider: UsageProvider {
 
         do {
             let payload = try JSONDecoder().decode(VolcengineUsageResponse.self, from: data)
+            let modelPayload = try JSONDecoder().decode(VolcenginePlanModelResponse.self, from: modelData)
             guard let result = payload.result else { throw UsageProviderError.invalidResponse }
             let windows: [(String, String, VolcengineUsageWindow?)] = [
                 ("fiveHour", "近 5 小时用量", result.afpFiveHour),
@@ -141,13 +128,17 @@ struct VolcenginePlanUsageProvider: UsageProvider {
             guard !metrics.isEmpty else { throw UsageProviderError.invalidResponse }
             let configuredPlan = credential.metadata["planType"] == "coding" ? "Coding Plan" : "Agent Plan"
             return UsageSnapshot(
-                planName: result.planType.map { "\($0) Plan" } ?? configuredPlan,
+                planName: plan.planType.map { "\($0) Plan" } ?? result.planType.map { "\($0) Plan" } ?? configuredPlan,
                 kind: .periodic,
                 fiveHour: nil,
                 weekly: nil,
                 token: nil,
-                allowedModels: [],
+                allowedModels: (modelPayload.result?.models.compactMap(\.modelID) ?? []).filter { !$0.isEmpty },
                 fetchedAt: now,
+                statusText: plan.status,
+                billingMode: plan.autoRenew.map { $0 ? "自动续费" : "单次订阅" },
+                subscriptionStartAt: Self.personalPlanDate(plan.startTime),
+                subscriptionEndAt: Self.personalPlanDate(plan.endTime),
                 providerID: .volcengine,
                 credentialID: credential.credentialID,
                 metrics: metrics
@@ -157,6 +148,52 @@ struct VolcenginePlanUsageProvider: UsageProvider {
         } catch {
             throw UsageProviderError.invalidResponse
         }
+    }
+
+    private func fetchPersonalPlan(
+        accessKeyID: String,
+        secretAccessKey: String,
+        region: String,
+        requestedPlan: String,
+        now: Date
+    ) async throws -> VolcenginePersonalPlanResult {
+        let body = try JSONSerialization.data(withJSONObject: ["Plan": requestedPlan])
+        let data = try await sendRequest(
+            action: "GetPersonalPlan",
+            body: body,
+            accessKeyID: accessKeyID,
+            secretAccessKey: secretAccessKey,
+            region: region,
+            now: now
+        )
+
+        do {
+            let response = try JSONDecoder().decode(VolcenginePersonalPlanResponse.self, from: data)
+            guard let result = response.result else {
+                throw UsageProviderError.providerMessage("火山方舟：未找到已购买的\(requestedPlan)套餐")
+            }
+            return result
+        } catch let error as UsageProviderError {
+            throw error
+        } catch {
+            throw UsageProviderError.invalidResponse
+        }
+    }
+
+    private static func personalPlanDate(_ value: String?) -> Date? {
+        guard let value, !value.isEmpty else { return nil }
+
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractionalFormatter.date(from: value) { return date }
+
+        let formatter = ISO8601DateFormatter()
+        if let date = formatter.date(from: value) { return date }
+
+        if let seconds = TimeInterval(value) {
+            return Date(timeIntervalSince1970: value.count >= 13 ? seconds / 1_000 : seconds)
+        }
+        return nil
     }
 
     private static func makeURL(endpoint: URL, action: String) -> URL? {

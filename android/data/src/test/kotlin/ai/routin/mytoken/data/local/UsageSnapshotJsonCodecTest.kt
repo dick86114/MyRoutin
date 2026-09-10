@@ -94,6 +94,36 @@ class UsageSnapshotJsonCodecTest {
     }
 
     @Test
+    fun roundTrip_preservesPlanTextAndBillingMode() {
+        val snapshot = snapshot().copy(
+            statusText = "Running",
+            billingMode = "自动续费",
+            subscriptionStartAt = Instant.parse("2026-08-01T00:00:00Z"),
+            subscriptionEndAt = Instant.parse("2026-09-01T00:00:00Z"),
+            allowedModels = listOf("ark-code-latest", "glm-5.3"),
+        )
+
+        assertEquals(snapshot, UsageSnapshotJsonCodec.decode(credentialId, UsageSnapshotJsonCodec.encode(snapshot)))
+    }
+
+    @Test
+    fun decode_acceptsLegacyCacheWithoutPlanTextAndBillingMode() {
+        val json = """
+            {
+              "fetchedAt": "2026-09-07T04:00:00Z",
+              "metrics": [],
+              "allowedModels": ["glm-5.3"]
+            }
+        """.trimIndent()
+
+        val snapshot = UsageSnapshotJsonCodec.decode(credentialId, json)
+
+        assertNull(snapshot?.statusText)
+        assertNull(snapshot?.billingMode)
+        assertEquals(listOf("glm-5.3"), snapshot?.allowedModels)
+    }
+
+    @Test
     fun decode_returnsNullForUnknownEnumValue() {
         val json = """
             {

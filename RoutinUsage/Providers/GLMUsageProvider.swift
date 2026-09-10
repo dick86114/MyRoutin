@@ -80,8 +80,17 @@ struct GLMUsageProvider: UsageProvider {
             url: root.appendingPathComponent("/api/monitor/usage/quota/limit"),
             credential: credential
         )
+        async let allowedModels = fetchAllowedModels(root: root, credential: credential)
 
         let (modelValue, quotaValue) = try await (model, quota)
+        let models: [String]
+        do {
+            models = try await allowedModels
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            models = []
+        }
         let quotaMetrics = Self.quotaMetrics(from: quotaValue)
         var metrics = quotaMetrics.filter { $0.id != "zcode-mcp" }
         if let modelCallMetric = Self.modelCallMetric(from: modelValue) {
@@ -100,7 +109,7 @@ struct GLMUsageProvider: UsageProvider {
             fiveHour: nil,
             weekly: nil,
             token: nil,
-            allowedModels: [],
+            allowedModels: models,
             fetchedAt: now,
             providerID: .glm,
             credentialID: credential.credentialID,
@@ -140,6 +149,30 @@ struct GLMUsageProvider: UsageProvider {
             return try JSONDecoder().decode(GLMJSONValue.self, from: data)
         } catch {
             throw UsageProviderError.invalidResponse
+        }
+    }
+
+    private func fetchAllowedModels(root: URL, credential: ProviderCredential) async throws -> [String] {
+        let url = root.appendingPathComponent("/api/coding/paas/v4/models")
+        let value = try await request(url: url, credential: credential)
+        return Self.allowedModels(from: value)
+    }
+
+    private static func allowedModels(from value: GLMJSONValue) -> [String] {
+        let items: [GLMJSONValue]
+        switch value {
+        case let .object(object):
+            guard case let .array(values)? = object["data"] else { return [] }
+            items = values
+        case let .array(values):
+            items = values
+        default:
+            return []
+        }
+
+        return items.compactMap { item -> String? in
+            guard case let .object(object) = item else { return nil }
+            return object["id"]?.stringValue().flatMap { $0.isEmpty ? nil : $0 }
         }
     }
 

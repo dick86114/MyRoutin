@@ -49,6 +49,8 @@ object UsageSnapshotJsonCodec {
             .putOpt("subscriptionStartAt", snapshot.subscriptionStartAt?.toString())
             .putOpt("subscriptionEndAt", snapshot.subscriptionEndAt?.toString())
             .putOpt("status", snapshot.status)
+            .putOpt("statusText", snapshot.statusText)
+            .putOpt("billingMode", snapshot.billingMode)
             .putOpt("usageKind", snapshot.usageKind)
             .put("allowedModels", JSONArray(snapshot.allowedModels))
             .put(
@@ -98,6 +100,8 @@ object UsageSnapshotJsonCodec {
             subscriptionStartAt = root.optNullableString("subscriptionStartAt")?.let(Instant::parse),
             subscriptionEndAt = root.optNullableString("subscriptionEndAt")?.let(Instant::parse),
             status = if (root.has("status") && !root.isNull("status")) root.getInt("status") else null,
+            statusText = root.optNullableString("statusText"),
+            billingMode = root.optNullableString("billingMode"),
             usageKind = root.optNullableString("usageKind"),
             allowedModels = root.optJSONArray("allowedModels")
                 ?.let { array -> (0 until array.length()).mapNotNull { array.optString(it).takeIf(String::isNotEmpty) } }

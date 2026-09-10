@@ -2,6 +2,7 @@ import Foundation
 
 struct DeepSeekUsageProvider: UsageProvider {
     static let endpoint = URL(string: "https://api.deepseek.com/user/balance")!
+    static let modelsEndpoint = URL(string: "https://api.deepseek.com/models")!
 
     let descriptor: ProviderDescriptor
     private let session: URLSession
@@ -80,6 +81,15 @@ struct DeepSeekUsageProvider: UsageProvider {
             }
         }
 
+        let allowedModels: [String]
+        do {
+            allowedModels = try await fetchAllowedModels(credential)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            allowedModels = []
+        }
+
         do {
             let payload = try JSONDecoder().decode(DeepSeekBalanceResponse.self, from: data)
             guard let balance = payload.balanceInfos.first else {
@@ -107,7 +117,7 @@ struct DeepSeekUsageProvider: UsageProvider {
                 fiveHour: nil,
                 weekly: nil,
                 token: nil,
-                allowedModels: [],
+                allowedModels: allowedModels,
                 fetchedAt: now,
                 providerID: .deepseek,
                 credentialID: credential.credentialID,
@@ -159,6 +169,35 @@ struct DeepSeekUsageProvider: UsageProvider {
             throw UsageProviderError.invalidResponse
         }
     }
+
+    private func fetchAllowedModels(_ credential: ProviderCredential) async throws -> [String] {
+        var request = URLRequest(url: Self.modelsEndpoint)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 15
+        request.setValue("Bearer \(credential.secret)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw UsageProviderError.transport
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw UsageProviderError.invalidResponse
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw UsageProviderError.invalidResponse
+        }
+        let payload = try JSONDecoder().decode(DeepSeekModelsResponse.self, from: data)
+        return payload.models
+            .compactMap(\.id)
+            .filter { !$0.isEmpty }
+    }
 }
 
 private struct DeepSeekBalanceResponse: Decodable {
@@ -183,4 +222,16 @@ private struct DeepSeekBalanceInfo: Decodable {
         case grantedBalance = "granted_balance"
         case toppedUpBalance = "topped_up_balance"
     }
+}
+
+private struct DeepSeekModelsResponse: Decodable {
+    let models: [DeepSeekModelIdentifier]
+
+    private enum CodingKeys: String, CodingKey {
+        case models = "data"
+    }
+}
+
+private struct DeepSeekModelIdentifier: Decodable {
+    let id: String?
 }

@@ -4,12 +4,16 @@ import XCTest
 final class DeepSeekUsageProviderTests: XCTestCase {
     func test余额响应转换为余额型指标且不生成百分比() async throws {
         let stub = URLProtocolStub.makeSession { request in
+            let path = request.url?.path ?? ""
             let response = try XCTUnwrap(HTTPURLResponse(
                 url: try XCTUnwrap(request.url),
                 statusCode: 200,
                 httpVersion: nil,
                 headerFields: ["Content-Type": "application/json"]
             ))
+            if path == "/models" {
+                return (response, Data(#"{"object":"list","data":[{"id":"deepseek-v4-flash"},{"id":"deepseek-v4-pro"}]}"#.utf8))
+            }
             return (response, Data(#"{"is_available":true,"balance_infos":[{"currency":"CNY","total_balance":"12.36","granted_balance":"2.36","topped_up_balance":"10.00"}]}"#.utf8))
         }
         let provider = DeepSeekUsageProvider(session: stub.session)
@@ -25,12 +29,36 @@ final class DeepSeekUsageProviderTests: XCTestCase {
         let balance = try XCTUnwrap(snapshot.metrics.first(where: { $0.id == "balance" }))
 
         XCTAssertEqual(snapshot.providerID, .deepseek)
+        XCTAssertEqual(snapshot.allowedModels, ["deepseek-v4-flash", "deepseek-v4-pro"])
         XCTAssertEqual(balance.presentation, .balance)
         XCTAssertEqual(balance.value, Decimal(string: "12.36"))
         XCTAssertNil(balance.limit)
         XCTAssertNil(balance.used)
         XCTAssertEqual(balance.currencyCode, "CNY")
         XCTAssertEqual(balance.healthState, .normal)
+    }
+
+    func test模型清单失败时保留空列表并继续显示余额() async throws {
+        let stub = URLProtocolStub.makeSession { request in
+            let path = request.url?.path ?? ""
+            let statusCode = path == "/models" ? 404 : 200
+            let body = #"{"is_available":true,"balance_infos":[{"currency":"CNY","total_balance":"12.36","granted_balance":"2.36","topped_up_balance":"10.00"}]}"#
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: statusCode,
+                httpVersion: nil,
+                headerFields: nil
+            ))
+            return (response, Data(body.utf8))
+        }
+        let provider = DeepSeekUsageProvider(session: stub.session)
+        let credential = ProviderCredential(providerID: .deepseek, kind: .apiKey, secret: "sk-test")
+
+        let fetched = try await provider.fetchUsage(credential, now: .now)
+        let snapshot = try XCTUnwrap(fetched)
+
+        XCTAssertTrue(snapshot.allowedModels.isEmpty)
+        XCTAssertTrue(snapshot.metrics.contains(where: { $0.id == "balance" }))
     }
 
     func test认证失败映射为统一未授权错误() async {

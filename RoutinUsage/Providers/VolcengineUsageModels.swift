@@ -107,13 +107,44 @@ struct VolcenginePersonalPlanResponse: Decodable, Sendable {
 struct VolcenginePersonalPlanResult: Decodable, Sendable {
     let planType: String?
     let status: String?
+    let autoRenew: Bool?
     let startTime: String?
     let endTime: String?
 
     private enum CodingKeys: String, CodingKey {
         case planType = "PlanType"
         case status = "Status"
+        case autoRenew = "AutoRenew"
         case startTime = "StartTime"
         case endTime = "EndTime"
+    }
+}
+
+struct VolcenginePlanModelResponse: Decodable, Sendable {
+    let result: VolcenginePlanModelResult?
+
+    private enum CodingKeys: String, CodingKey {
+        case result = "Result"
+    }
+}
+
+struct VolcenginePlanModelResult: Decodable, Sendable {
+    let models: [VolcenginePlanModel]
+
+    private enum CodingKeys: String, CodingKey {
+        case models = "Datas"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        models = try container.decodeIfPresent([VolcenginePlanModel].self, forKey: .models) ?? []
+    }
+}
+
+struct VolcenginePlanModel: Decodable, Sendable {
+    let modelID: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case modelID = "ModelID"
     }
 }

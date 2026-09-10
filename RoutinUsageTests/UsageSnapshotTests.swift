@@ -59,6 +59,8 @@ final class UsageSnapshotTests: XCTestCase {
         XCTAssertNil(snapshot.providerID)
         XCTAssertNil(snapshot.credentialID)
         XCTAssertEqual(snapshot.metrics, [])
+        XCTAssertNil(snapshot.billingMode)
+        XCTAssertNil(snapshot.statusText)
     }
 
     func test旧Routin额度字段可以按通用指标读取() {
