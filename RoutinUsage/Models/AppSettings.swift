@@ -152,7 +152,9 @@ final class AppSettings {
     }
 
     func setUsagePreferences(_ preferences: CredentialUsagePreferences, for id: UUID) {
-        credentialUsagePreferences[id.uuidString] = preferences
+        let key = id.uuidString
+        guard credentialUsagePreferences[key] != preferences else { return }
+        credentialUsagePreferences[key] = preferences
         persistCredentialUsagePreferences()
     }
 

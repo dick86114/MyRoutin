@@ -247,6 +247,43 @@ final class CommandCodeUsageProviderTests: XCTestCase {
         }
     }
 
+    func testCommandCode默认提醒包含月五小时和周() {
+        let provider = CommandCodeUsageProvider()
+        let configuration = KeyConfiguration(
+            id: UUID(),
+            name: "Command Code",
+            keySuffix: "",
+            sortOrder: 0,
+            providerID: .commandCode,
+            credentialKind: .bearerAPIKey
+        )
+        let metrics = ["credit-progress", "five-hour", "weekly"].map { id in
+            NormalizedUsageMetric(
+                id: id,
+                label: id,
+                used: 1,
+                limit: 10,
+                remaining: 9,
+                unit: .currency,
+                presentation: .progress,
+                semantic: .usedQuota
+            )
+        }
+
+        let preferences = MetricAlertRuleResolver.reconcile(
+            existing: .defaultValue,
+            metrics: metrics,
+            capabilities: provider.metricCapabilities(for: configuration),
+            legacyThresholds: .init()
+        )
+
+        XCTAssertEqual(preferences.alertRules.map(\.metricID), [
+            "credit-progress",
+            "five-hour",
+            "weekly"
+        ])
+    }
+
     func test菜单栏额度指标标题使用月() {
         let provider = CommandCodeUsageProvider()
         let configuration = KeyConfiguration(

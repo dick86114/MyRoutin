@@ -27,7 +27,6 @@ final class CredentialAlertSettingsModel {
             capabilities: capabilities,
             legacyThresholds: .init()
         )
-        persist()
     }
 
     var notificationsEnabled: Bool {

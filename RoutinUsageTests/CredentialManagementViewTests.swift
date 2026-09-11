@@ -11,6 +11,9 @@ final class CredentialManagementViewTests: XCTestCase {
         XCTAssertTrue(source.contains("bell.badge"))
         XCTAssertTrue(source.contains("提醒设置"))
         XCTAssertTrue(source.contains("CredentialAlertSettingsView"))
+        XCTAssertTrue(source.contains("CredentialAlertSettingsPresentation"))
+        XCTAssertTrue(source.contains(".sheet(item: $alertSettingsPresentation)"))
+        XCTAssertTrue(source.contains("model: presentation.model"))
     }
 
     func test过滤状态供应商和搜索组合只保留匹配凭证() throws {
@@ -279,6 +282,9 @@ final class CredentialManagementViewTests: XCTestCase {
         XCTAssertTrue(source.contains("detailsOverlay"))
         XCTAssertTrue(source.contains("onTapGesture {"))
         XCTAssertTrue(source.contains("closeDetails()"))
+        XCTAssertTrue(source.contains("CredentialDetailsView(state: state, onClose: closeDetails)"))
+        XCTAssertTrue(source.contains(".frame(width: 640)"))
+        XCTAssertTrue(source.contains(".frame(minHeight: 500, maxHeight: 720)"))
         XCTAssertTrue(source.contains("accessibilitySummary("))
         XCTAssertTrue(usageRowSource.contains(".saturation(state.configuration.isEnabled ? 1 : 0)"))
         XCTAssertTrue(rowSource.contains("credentialContent"))

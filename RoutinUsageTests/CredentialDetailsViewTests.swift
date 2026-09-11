@@ -21,6 +21,9 @@ final class CredentialDetailsViewTests: XCTestCase {
         XCTAssertTrue(source.contains("case \"planType\": \"计划类型\""))
         XCTAssertTrue(source.contains("case \"websiteURL\": \"官网地址\""))
         XCTAssertTrue(source.contains("detailLinkRow(metadataLabel(for: key), url)"))
+        XCTAssertTrue(source.contains("ScrollView(.vertical, showsIndicators: false)"))
+        XCTAssertTrue(source.contains(".frame(minWidth: 640, minHeight: 520)"))
+        XCTAssertTrue(source.contains("HStack(alignment: .top, spacing: 16)"))
     }
 
     func test火山详情显示动态订阅信息且官网地址右对齐() throws {

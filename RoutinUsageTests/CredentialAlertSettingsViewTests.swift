@@ -54,7 +54,7 @@ final class CredentialAlertSettingsViewTests: XCTestCase {
 
         XCTAssertTrue(model.notificationsEnabled)
         XCTAssertEqual(model.rules.map(\.metricID), [usedMetric.id])
-        XCTAssertEqual(saved?.alertRules.count, 1)
+        XCTAssertNil(saved)
 
         var rule = try! XCTUnwrap(model.rules.first)
         rule.isEnabled = false
@@ -64,7 +64,7 @@ final class CredentialAlertSettingsViewTests: XCTestCase {
         XCTAssertFalse(saved?.alertRules.first?.isEnabled ?? true)
     }
 
-    func test凭证提醒设置窗口提供关闭按钮() throws {
+    func test凭证提醒设置窗口右上角提供关闭按钮() throws {
         let source = try String(
             contentsOf: URL(fileURLWithPath: #filePath)
                 .deletingLastPathComponent()
@@ -77,7 +77,15 @@ final class CredentialAlertSettingsViewTests: XCTestCase {
         )
 
         XCTAssertTrue(source.contains("@Environment(\\.dismiss)"))
-        XCTAssertTrue(source.contains("Button(\"关闭\")"))
+        XCTAssertTrue(source.contains("Image(systemName: \"xmark\")"))
+        XCTAssertTrue(source.contains("Text(title).font(.title3.weight(.semibold))"))
+        XCTAssertTrue(source.contains("Spacer()"))
         XCTAssertTrue(source.contains(".keyboardShortcut(.cancelAction)"))
+        XCTAssertFalse(source.contains("Button(\"关闭\")"))
+        XCTAssertTrue(source.contains("LazyVGrid("))
+        XCTAssertTrue(source.contains(".frame(width: 680)"))
+        XCTAssertTrue(source.contains(".fixedSize(horizontal: false, vertical: true)"))
+        XCTAssertFalse(source.contains("Form {"))
+        XCTAssertFalse(source.contains("ScrollView"))
     }
 }

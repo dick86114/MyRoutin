@@ -24,11 +24,17 @@ extension KeyUsageState: Identifiable {
     var id: UUID { configuration.id }
 }
 
+private struct CredentialAlertSettingsPresentation: Identifiable {
+    let id: UUID
+    let title: String
+    let model: CredentialAlertSettingsModel
+}
+
 struct CredentialManagementView: View {
     @Bindable var environment: AppEnvironment
     @State private var model: CredentialManagementModel
     @State private var editor: EditorPresentation?
-    @State private var alertSettingsState: KeyUsageState?
+    @State private var alertSettingsPresentation: CredentialAlertSettingsPresentation?
     @State private var detailsState: KeyUsageState?
     @State private var showsTransferToAndroid = false
 
@@ -59,10 +65,10 @@ struct CredentialManagementView: View {
                 showsTransferToAndroid = false
             }
         }
-        .sheet(item: $alertSettingsState) { state in
+        .sheet(item: $alertSettingsPresentation) { presentation in
             CredentialAlertSettingsView(
-                title: "\(state.configuration.displayName) 提醒设置",
-                model: alertSettingsModel(for: state)
+                title: presentation.title,
+                model: presentation.model
             )
         }
         .confirmationDialog(
@@ -242,10 +248,10 @@ struct CredentialManagementView: View {
                     }
 
                 CredentialDetailsView(state: state, onClose: closeDetails)
-                    .frame(width: 560)
-                    .frame(minHeight: 420, maxHeight: 660)
+                    .frame(width: 640)
+                    .frame(minHeight: 500, maxHeight: 720)
                     .liquidGlassSurface(cornerRadius: 18)
-                    .padding(36)
+                    .padding(16)
                     .contentShape(Rectangle())
                     .onTapGesture {}
             }
@@ -291,7 +297,11 @@ struct CredentialManagementView: View {
                 .accessibilityLabel("编辑 \(state.configuration.displayName)")
 
                 Button {
-                    alertSettingsState = state
+                    alertSettingsPresentation = CredentialAlertSettingsPresentation(
+                        id: state.configuration.id,
+                        title: "\(state.configuration.displayName) 提醒设置",
+                        model: alertSettingsModel(for: state)
+                    )
                 } label: {
                     Image(systemName: alertIcon(for: state))
                 }

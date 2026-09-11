@@ -34,7 +34,7 @@ struct CommandCodeUsageProvider: UsageProvider {
                 semantic: .usedQuota,
                 isMenuBarSelectable: true,
                 menuBarPriority: 1,
-                defaultAlertEnabled: false,
+                defaultAlertEnabled: true,
                 defaultAbsoluteAlertThreshold: nil
             ),
             UsageMetricCapability(
@@ -44,7 +44,7 @@ struct CommandCodeUsageProvider: UsageProvider {
                 semantic: .usedQuota,
                 isMenuBarSelectable: true,
                 menuBarPriority: 2,
-                defaultAlertEnabled: false,
+                defaultAlertEnabled: true,
                 defaultAbsoluteAlertThreshold: nil
             ),
             valueCapability(metricID: "credit-balance", label: "剩余额度"),

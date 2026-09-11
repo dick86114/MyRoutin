@@ -91,6 +91,28 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertTrue(didChange)
     }
 
+    @MainActor
+    func test重复设置相同用量偏好不触发观察者() throws {
+        let context = try makeContext()
+        defer { context.cleanUp() }
+        let id = UUID()
+        let settings = AppSettings(defaults: context.defaults)
+        var preferences = settings.usagePreferences(for: id)
+        preferences.menuBarMetricID = "weekly"
+        settings.setUsagePreferences(preferences, for: id)
+        var didChange = false
+
+        withObservationTracking {
+            _ = settings.usagePreferences(for: id)
+        } onChange: {
+            didChange = true
+        }
+
+        settings.setUsagePreferences(preferences, for: id)
+
+        XCTAssertFalse(didChange)
+    }
+
     func test菜单栏样式可持久化并重新载入() throws {
         let context = try makeContext()
         defer { context.cleanUp() }

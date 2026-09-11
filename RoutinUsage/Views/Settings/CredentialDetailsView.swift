@@ -8,8 +8,8 @@ struct CredentialDetailsView: View {
     @State private var copyResetTask: Task<Void, Never>?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 16) {
                 header
                 summary
                 if state.configuration.providerID == .routin ||
@@ -23,9 +23,9 @@ struct CredentialDetailsView: View {
                 metadata
             }
             .padding(24)
-            .frame(minWidth: 440, alignment: .leading)
+            .frame(minWidth: 600, alignment: .leading)
         }
-        .frame(minWidth: 480, minHeight: 420)
+        .frame(minWidth: 640, minHeight: 520)
         .navigationTitle("凭证详情")
         .onDisappear {
             copyResetTask?.cancel()
@@ -87,14 +87,31 @@ struct CredentialDetailsView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("状态")
                 .font(.headline)
-            detailRow(
-                "最近更新",
-                state.lastSuccessAt.map { UsageFormatter.fullDateTime($0) } ?? "尚未成功更新"
-            )
-            detailRow("当前状态", UsageFormatter.statusText(state: state))
-            if let snapshot = state.snapshot {
-                detailRow("套餐", snapshot.planName.isEmpty ? planName : snapshot.planName)
-                detailRow("数据时间", UsageFormatter.fullDateTime(snapshot.fetchedAt))
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), alignment: .leading),
+                    GridItem(.flexible(), alignment: .leading)
+                ],
+                alignment: .leading,
+                spacing: 12
+            ) {
+                detailColumn(
+                    "最近更新",
+                    state.lastSuccessAt.map { UsageFormatter.fullDateTime($0) } ?? "尚未成功更新"
+                )
+                if state.configuration.providerID != .routin,
+                   state.configuration.providerID != .volcengine,
+                   state.configuration.providerID != .commandCode {
+                    detailColumn("当前状态", UsageFormatter.statusText(state: state))
+                }
+                if let snapshot = state.snapshot {
+                    if state.configuration.providerID != .routin,
+                       state.configuration.providerID != .volcengine,
+                       state.configuration.providerID != .commandCode {
+                        detailColumn("套餐", snapshot.planName.isEmpty ? planName : snapshot.planName)
+                    }
+                    detailColumn("数据时间", UsageFormatter.fullDateTime(snapshot.fetchedAt))
+                }
             }
         }
         .padding(14)
@@ -131,44 +148,44 @@ struct CredentialDetailsView: View {
     private var planDetails: some View {
         if let snapshot = state.snapshot {
             VStack(alignment: .leading, spacing: 18) {
-                detailSection("套餐状态", symbol: "checklist") {
-                    HStack(alignment: .firstTextBaseline, spacing: 20) {
-                        detailColumn("套餐", snapshot.planName.isEmpty ? planName : snapshot.planName)
-                        detailColumn("类型", snapshot.kind == .periodic ? "周期订阅" : "Token 资源包")
-                        detailColumn("状态", displayStatus(snapshot))
-                    }
-                }
-
-                detailSection("订阅与周期", symbol: "calendar") {
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack(alignment: .firstTextBaseline, spacing: 20) {
-                            detailColumn(
-                                "订阅开始",
-                                snapshot.subscriptionStartAt.map { UsageFormatter.fullDateTime($0) } ?? "接口未返回"
-                            )
-                            detailColumn(
-                                "订阅结束",
-                                snapshot.subscriptionEndAt.map { UsageFormatter.fullDateTime($0) } ?? "接口未返回"
-                            )
+                HStack(alignment: .top, spacing: 16) {
+                    detailSection("套餐状态", symbol: "checklist") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(alignment: .firstTextBaseline, spacing: 20) {
+                                detailColumn("套餐", snapshot.planName.isEmpty ? planName : snapshot.planName)
+                                detailColumn("类型", snapshot.kind == .periodic ? "周期订阅" : "Token 资源包")
+                            }
+                            detailColumn("状态", displayStatus(snapshot))
                         }
+                    }
 
-                        HStack(alignment: .firstTextBaseline, spacing: 20) {
+                    detailSection("订阅与周期", symbol: "calendar") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(alignment: .firstTextBaseline, spacing: 20) {
+                                detailColumn(
+                                    "订阅开始",
+                                    snapshot.subscriptionStartAt.map { UsageFormatter.fullDateTime($0) } ?? "接口未返回"
+                                )
+                                detailColumn(
+                                    "订阅结束",
+                                    snapshot.subscriptionEndAt.map { UsageFormatter.fullDateTime($0) } ?? "接口未返回"
+                                )
+                            }
                             detailColumn(
                                 "计费模式",
                                 snapshot.billingMode ?? "接口未返回"
                             )
-                        }
-
-                        if snapshot.kind == .periodic, state.configuration.providerID == .routin {
-                            HStack(alignment: .firstTextBaseline, spacing: 20) {
-                                detailColumn(
-                                    "5 小时结束",
-                                    UsageFormatter.fullDateTime(snapshot.fiveHour?.windowEnd)
-                                )
-                                detailColumn(
-                                    "周结束",
-                                    UsageFormatter.fullDateTime(snapshot.weekly?.windowEnd)
-                                )
+                            if snapshot.kind == .periodic, state.configuration.providerID == .routin {
+                                HStack(alignment: .firstTextBaseline, spacing: 20) {
+                                    detailColumn(
+                                        "5 小时结束",
+                                        UsageFormatter.fullDateTime(snapshot.fiveHour?.windowEnd)
+                                    )
+                                    detailColumn(
+                                        "周结束",
+                                        UsageFormatter.fullDateTime(snapshot.weekly?.windowEnd)
+                                    )
+                                }
                             }
                         }
                     }
@@ -240,6 +257,7 @@ struct CredentialDetailsView: View {
         }
         .padding(14)
         .liquidGlassControlSurface()
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func detailColumn(_ label: String, _ value: String) -> some View {
