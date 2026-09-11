@@ -84,8 +84,7 @@ enum CommandCodeMetricFormatter {
     }
 
     static func number(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
-        return formatted(value, minimumFractionDigits: 0, maximumFractionDigits: 2)
+        UsageFormatter.numberText(value)
     }
 
     private static func formatted(
@@ -255,8 +254,7 @@ struct CommandCodeUsageMetricsView: View {
     }
 
     private func percentText(_ metric: NormalizedUsageMetric) -> String {
-        guard let percent = metric.displayedPercent else { return "—" }
-        return "\(Int(percent.rounded()))%"
+        UsageFormatter.displayPercentText(metric.displayedPercent)
     }
 
     private func amountText(_ value: Decimal?) -> String {

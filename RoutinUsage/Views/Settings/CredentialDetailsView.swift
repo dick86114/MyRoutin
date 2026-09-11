@@ -282,7 +282,10 @@ struct CredentialDetailsView: View {
     private var metadata: some View {
         let visible = state.configuration.metadata
             .filter { key, _ in
-                !["accessKeyID", "secretAccessKey", "apiKey", "token", "password", "cookie"].contains(key)
+                let isSecretField = ["accessKeyID", "secretAccessKey", "apiKey", "token", "password", "cookie"].contains(key)
+                let isLegacyCommandCodeThreshold = state.configuration.providerID == .commandCode
+                    && key == "balanceWarningThreshold"
+                return !isSecretField && !isLegacyCommandCodeThreshold
             }
             .sorted { $0.key < $1.key }
 

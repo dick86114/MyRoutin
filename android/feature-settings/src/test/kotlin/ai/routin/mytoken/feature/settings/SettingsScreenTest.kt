@@ -32,6 +32,22 @@ class SettingsScreenTest {
     private val displayStore = FakeDisplaySettingsStore()
 
     private fun setContent(onOpenTransfer: () -> Unit = {}) {
+        val releaseHistoryState = AppReleaseHistoryUiState.Loaded(
+            listOf(
+                AppReleaseHistoryItem(
+                    version = "0.1.0",
+                    releaseNotes = "当前版本修复内容",
+                    releaseUrl = "https://example.com/0.1.0",
+                    publishedAt = "2026-09-11T00:00:00Z",
+                ),
+                AppReleaseHistoryItem(
+                    version = "0.0.9",
+                    releaseNotes = "历史版本修复内容",
+                    releaseUrl = "https://example.com/0.0.9",
+                    publishedAt = "2026-09-01T00:00:00Z",
+                ),
+            ),
+        )
         composeRule.setContent {
             MaterialTheme {
                 SettingsScreen(
@@ -41,6 +57,7 @@ class SettingsScreenTest {
                         display = displayStore.state.value,
                     ),
                     appVersion = "0.1.0",
+                    releaseHistoryState = releaseHistoryState,
                     onAutoRefreshChange = { refreshStore.state.value = refreshStore.state.value.copy(autoRefreshEnabled = it) },
                     onIntervalChange = { refreshStore.state.value = refreshStore.state.value.copy(refreshIntervalMinutes = it) },
                     onWifiOnlyChange = { refreshStore.state.value = refreshStore.state.value.copy(wifiOnly = it) },
@@ -118,6 +135,12 @@ class SettingsScreenTest {
         }
         composeRule.onNodeWithText("关于").assertIsDisplayed()
         composeRule.onNodeWithText("MyToken 0.1.0", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("当前版本更新日志").assertIsDisplayed()
+        composeRule.onNodeWithText("当前版本修复内容").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("release_history_button").performClick()
+        composeRule.onNodeWithText("历史版本更新日志").assertIsDisplayed()
+        composeRule.onNodeWithText("历史版本修复内容").assertIsDisplayed()
 
         // macOS-only settings must not appear on Android.
         composeRule.onNodeWithText("菜单栏").assertDoesNotExist()

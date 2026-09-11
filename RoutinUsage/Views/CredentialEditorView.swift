@@ -112,20 +112,12 @@ enum CredentialEditorValidation {
         case .commandCode:
             let secret = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !secret.isEmpty else { throw UsageStoreError.invalidSecret }
-            var metadata: [String: String] = [:]
-            let threshold = balanceWarningThreshold.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !threshold.isEmpty {
-                guard Decimal(string: threshold) != nil else {
-                    throw UsageStoreError.invalidSecret
-                }
-                metadata["balanceWarningThreshold"] = threshold
-            }
             return ValidatedCredentialInput(
                 providerID: .commandCode,
                 credentialKind: .bearerAPIKey,
                 name: normalizedName,
                 secret: secret,
-                metadata: metadata.merging(websiteMetadata) { current, _ in current }
+                metadata: websiteMetadata
             )
         }
     }
@@ -323,7 +315,7 @@ struct CredentialEditorView: View {
                         .help(isSecretVisible ? "隐藏凭证" : "显示凭证")
                         .accessibilityLabel(isSecretVisible ? "隐藏凭证" : "显示凭证")
                     }
-                    if providerID == .deepseek || providerID == .newAPI || providerID == .commandCode {
+                    if providerID == .deepseek {
                         HStack(spacing: 8) {
                             TextField(
                                 providerID == .deepseek ? "低余额预警值（可选）" : "低额度预警值（可选）",

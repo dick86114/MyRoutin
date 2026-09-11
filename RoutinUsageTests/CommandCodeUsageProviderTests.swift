@@ -207,9 +207,10 @@ final class CommandCodeUsageProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(provider.metricCapabilities(for: configuration).first?.label, "月")
+        XCTAssertNil(provider.metricCapabilities(for: configuration).first?.defaultAbsoluteAlertThreshold)
     }
 
-    func test凭证配置保留CommandCode密钥和预警值() throws {
+    func test凭证配置保留CommandCode密钥但不保存预警值() throws {
         let result = try CredentialEditorValidation.validate(
             providerID: .commandCode,
             name: "我的 Command Code",
@@ -223,7 +224,22 @@ final class CommandCodeUsageProviderTests: XCTestCase {
         XCTAssertEqual(result.providerID, .commandCode)
         XCTAssertEqual(result.credentialKind, .bearerAPIKey)
         XCTAssertEqual(result.secret, "cmd-api-key")
-        XCTAssertEqual(result.metadata["balanceWarningThreshold"], "12.5")
+        XCTAssertNil(result.metadata["balanceWarningThreshold"])
+    }
+
+    func testCommandCode添加凭证表单不显示预警值字段() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("RoutinUsage")
+                .appendingPathComponent("Views")
+                .appendingPathComponent("CredentialEditorView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("if providerID == .deepseek {"))
+        XCTAssertFalse(source.contains("providerID == .deepseek || providerID == .newAPI || providerID == .commandCode"))
     }
 }
 

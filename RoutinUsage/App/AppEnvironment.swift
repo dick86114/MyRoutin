@@ -66,6 +66,7 @@ final class AppEnvironment {
     let routinWebSession: RoutinWebSession?
     var showsOnboarding = false
     private(set) var updateStatus: AppUpdateStatus = .idle
+    private(set) var releaseHistoryState: AppReleaseHistoryState = .idle
     private(set) var updateCompletionNotice: String?
 
     @ObservationIgnored private let refreshScheduler: any RefreshScheduling
@@ -83,6 +84,7 @@ final class AppEnvironment {
     @ObservationIgnored private var hasRequestedNotificationAuthorization = false
     @ObservationIgnored private var notificationAuthorizationTask: Task<Void, Never>?
     @ObservationIgnored private var updateCheckTask: Task<Void, Never>?
+    @ObservationIgnored private var releaseHistoryTask: Task<Void, Never>?
     @ObservationIgnored private var updateCheckGeneration = 0
     @ObservationIgnored private var updateStatusBeforeChecking: AppUpdateStatus?
 
@@ -305,6 +307,38 @@ final class AppEnvironment {
     func checkForUpdates() async {
         await logWriter.log(level: .info, event: "update_check_requested", details: "source=user")
         guard let task = beginUpdateCheckIfNeeded(requiresStarted: false) else { return }
+        await task.value
+    }
+
+    /// 关于页首次出现时加载完整发布日志，后续复用同一份内存结果。
+    func loadReleaseHistoryIfNeeded(force: Bool = false) async {
+        if !force {
+            switch releaseHistoryState {
+            case .loading, .loaded:
+                return
+            case .idle, .failed:
+                break
+            }
+        }
+        if let releaseHistoryTask {
+            await releaseHistoryTask.value
+            return
+        }
+        releaseHistoryState = .loading
+        let updateService = updateService
+        let task = Task { [weak self] in
+            do {
+                let releases = try await updateService.fetchReleaseHistory()
+                guard !Task.isCancelled else { return }
+                self?.releaseHistoryState = .loaded(releases)
+            } catch is CancellationError {
+                return
+            } catch {
+                self?.releaseHistoryState = .failed("更新日志加载失败，请稍后重试")
+            }
+            self?.releaseHistoryTask = nil
+        }
+        releaseHistoryTask = task
         await task.value
     }
 
@@ -566,12 +600,15 @@ final class AppEnvironment {
         notificationAuthorizationTask = nil
         refreshScheduler.stop()
         updateCheckScheduler.stop()
+        releaseHistoryTask?.cancel()
+        releaseHistoryTask = nil
         codexGroupDetectionScheduler.stop()
         cancelActiveUpdateCheck()
     }
 
     deinit {
         updateCheckTask?.cancel()
+        releaseHistoryTask?.cancel()
     }
 }
 

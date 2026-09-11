@@ -67,15 +67,15 @@ class VolcengineUsageProviderTest {
 
         val plan = transport.requests[0]
         assertEquals("POST", plan.method)
-        assertEquals("https://open.volcengineapi.com/?Action=GetPersonalPlan&Version=2024-01-01", plan.url)
+        assertEquals("https://ark.cn-beijing.volcengineapi.com/?Action=GetPersonalPlan&Version=2024-01-01", plan.url)
         assertEquals("""{"Plan":"AgentPlan"}""".toByteArray().toList(), plan.body!!.toList())
 
         val request = transport.requests[1]
         assertEquals("POST", request.method)
-        assertEquals("https://open.volcengineapi.com/?Action=GetAgentPlanAFPUsage&Version=2024-01-01", request.url)
+        assertEquals("https://ark.cn-beijing.volcengineapi.com/?Action=GetAFPUsage&Version=2024-01-01", request.url)
         assertEquals("{}".toByteArray().toList(), request.body!!.toList())
         assertEquals("application/json", request.headers["Content-Type"])
-        assertEquals("open.volcengineapi.com", request.headers["Host"])
+        assertEquals("ark.cn-beijing.volcengineapi.com", request.headers["Host"])
         val authorization = request.headers["Authorization"]!!
         assertTrue(authorization.startsWith("HMAC-SHA256 Credential=access-key/20260907/cn-beijing/ark/request"))
         assertTrue(authorization.contains("SignedHeaders=content-type;host;x-content-sha256;x-date"))
@@ -85,7 +85,7 @@ class VolcengineUsageProviderTest {
         )
 
         val models = transport.requests[2]
-        assertEquals("https://open.volcengineapi.com/?Action=ListArkAgentPlanModel&Version=2024-01-01", models.url)
+        assertEquals("https://ark.cn-beijing.volcengineapi.com/?Action=ListArkAgentPlanModel&Version=2024-01-01", models.url)
         assertEquals("""{"Plan":"AgentPlan"}""".toByteArray().toList(), models.body!!.toList())
     }
 
@@ -96,9 +96,9 @@ class VolcengineUsageProviderTest {
         val result = provider.fetchUsage(credential(planType = "coding"), secret)
 
         assertTrue(result.isSuccess)
-        assertEquals("https://open.volcengineapi.com/?Action=GetPersonalPlan&Version=2024-01-01", transport.requests[0].url)
-        assertEquals("https://open.volcengineapi.com/?Action=GetCodingPlanUsage&Version=2024-01-01", transport.requests[1].url)
-        assertEquals("https://open.volcengineapi.com/?Action=ListArkCodingPlanModel&Version=2024-01-01", transport.requests[2].url)
+        assertEquals("https://ark.cn-beijing.volcengineapi.com/?Action=GetPersonalPlan&Version=2024-01-01", transport.requests[0].url)
+        assertEquals("https://ark.cn-beijing.volcengineapi.com/?Action=GetCodingPlanUsage&Version=2024-01-01", transport.requests[1].url)
+        assertEquals("https://ark.cn-beijing.volcengineapi.com/?Action=ListArkCodingPlanModel&Version=2024-01-01", transport.requests[2].url)
         assertEquals("""{"Plan":"CodingPlan"}""".toByteArray().toList(), transport.requests[0].body!!.toList())
         assertEquals("""{"Plan":"CodingPlan"}""".toByteArray().toList(), transport.requests[2].body!!.toList())
     }
@@ -197,15 +197,29 @@ class VolcengineUsageProviderTest {
 
         val snapshot = provider.fetchUsage(credential(planType = "coding"), secret).getOrThrow()
 
-        assertEquals(listOf("coding-0"), snapshot.metrics.map { it.id })
+        assertEquals(listOf("fiveHour"), snapshot.metrics.map { it.id })
         val metric = snapshot.metrics[0]
-        assertEquals("5h", metric.label)
+        assertEquals("近 5 小时用量", metric.label)
         assertEquals(0, metric.used!!.compareTo(BigDecimal("10")))
         assertEquals(0, metric.limit!!.compareTo(BigDecimal("100")))
         assertEquals(0, metric.remaining!!.compareTo(BigDecimal("90")))
         assertEquals(UsageMetricPresentation.Progress, metric.presentation)
         assertEquals(UsageMetricSemantic.UsedQuota, metric.semantic)
         assertEquals(Instant.ofEpochSecond(1893456000L), metric.windowEnd)
+    }
+
+    @Test
+    fun fetchUsage_mapsCodingPlanPeriodsToCanonicalMetricIds() = runTest {
+        queueVolcengine("""{"Result":{"QuotaUsage":[
+            {"Level":"session","Percent":10},
+            {"Level":"weekly","Percent":20},
+            {"Level":"monthly","Percent":30}
+        ]}}""")
+
+        val snapshot = provider.fetchUsage(credential(planType = "coding"), secret).getOrThrow()
+
+        assertEquals(listOf("fiveHour", "weekly", "monthly"), snapshot.metrics.map { it.id })
+        assertEquals(listOf("近 5 小时用量", "近一周用量", "近一月用量"), snapshot.metrics.map { it.label })
     }
 
     @Test

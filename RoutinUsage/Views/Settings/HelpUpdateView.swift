@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HelpUpdateView: View {
     @Bindable var environment: AppEnvironment
+    @State private var showingReleaseHistory = false
 
     var body: some View {
         ScrollView {
@@ -12,12 +13,19 @@ struct HelpUpdateView: View {
                 )
 
                 currentVersionSection
-                updateChannelSection
-                updateStatusSection
+                updateSection
                 feedbackSection
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .task {
+            await environment.loadReleaseHistoryIfNeeded()
+        }
+        .sheet(isPresented: $showingReleaseHistory) {
+            ReleaseHistorySheet(state: environment.releaseHistoryState) {
+                await environment.loadReleaseHistoryIfNeeded(force: true)
+            }
         }
     }
 
@@ -29,12 +37,68 @@ struct HelpUpdateView: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("当前版本 \(RoutinUsageApp.currentVersion)")
+
+            Divider()
+
+            Text("当前版本更新日志")
+                .font(.headline)
+
+            currentReleaseNotes
+
+            HStack {
+                Button("查看历史版本") {
+                    showingReleaseHistory = true
+                }
+                .liquidGlassButton()
+                .accessibilityLabel("查看历史版本更新日志")
+
+                Spacer(minLength: 0)
+            }
         }
     }
 
-    private var updateChannelSection: some View {
+    @ViewBuilder
+    private var currentReleaseNotes: some View {
+        switch environment.releaseHistoryState {
+        case .idle, .loading:
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("正在加载更新日志")
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+        case let .failed(message):
+            VStack(alignment: .leading, spacing: 10) {
+                Text(message)
+                    .foregroundStyle(.red)
+
+                Button("重试") {
+                    Task { await environment.loadReleaseHistoryIfNeeded(force: true) }
+                }
+                .liquidGlassButton()
+            }
+        case let .loaded(releases):
+            if let current = releases.first(where: { $0.version == RoutinUsageApp.currentVersion }) {
+                UpdateNotesView(notes: current.notes)
+
+                Link("查看该版本发布页", destination: current.releaseURL)
+                    .font(.caption)
+                    .accessibilityLabel("查看当前版本发布页")
+            } else {
+                Text("此版本未提供更新日志")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var updateSection: some View {
         @Bindable var settings = environment.settings
         return settingSection {
+            Text("应用更新")
+                .font(.headline)
+
             Picker("更新通道", selection: $settings.updateChannel) {
                 Text("GitHub 直连").tag(UpdateChannel.direct)
                 Text("CDN 加速").tag(UpdateChannel.cdn)
@@ -54,54 +118,56 @@ struct HelpUpdateView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Divider()
+
+            updateStatusContent
         }
     }
 
     @ViewBuilder
-    private var updateStatusSection: some View {
-        settingSection {
-            switch environment.updateStatus {
-            case .idle:
-                HStack(spacing: 12) {
-                    Button("检查更新") {
-                        Task { await environment.checkForUpdates() }
-                    }
-                    .liquidGlassButton()
-                    .accessibilityLabel("检查更新")
+    private var updateStatusContent: some View {
+        switch environment.updateStatus {
+        case .idle:
+            HStack(spacing: 12) {
+                Button("检测更新") {
+                    Task { await environment.checkForUpdates() }
+                }
+                .liquidGlassButton()
+                .accessibilityLabel("检测更新")
 
-                    Spacer(minLength: 0)
-                }
-            case .checking:
-                HStack {
-                    Text("正在检查更新")
-                    Spacer(minLength: 8)
-                    ProgressView()
-                        .controlSize(.small)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("正在检查更新")
-            case let .available(update):
-                availableUpdate(update)
-            case let .downloading(progress):
-                downloadingUpdate(progress)
-            case let .completed(version):
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                        .accessibilityHidden(true)
-                    Text("更新完成，当前版本 \(version)")
-                }
-                .accessibilityElement(children: .combine)
-            case let .failed(message):
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(message)
-                        .foregroundStyle(.red)
+                Spacer(minLength: 0)
+            }
+        case .checking:
+            HStack {
+                Text("正在检查更新")
+                Spacer(minLength: 8)
+                ProgressView()
+                    .controlSize(.small)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("正在检查更新")
+        case let .available(update):
+            availableUpdate(update)
+        case let .downloading(progress):
+            downloadingUpdate(progress)
+        case let .completed(version):
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .accessibilityHidden(true)
+                Text("更新完成，当前版本 \(version)")
+            }
+            .accessibilityElement(children: .combine)
+        case let .failed(message):
+            VStack(alignment: .leading, spacing: 12) {
+                Text(message)
+                    .foregroundStyle(.red)
 
-                    Button("重试") {
-                        Task { await environment.checkForUpdates() }
-                    }
-                    .liquidGlassButton()
+                Button("重试") {
+                    Task { await environment.checkForUpdates() }
                 }
+                .liquidGlassButton()
             }
         }
     }
@@ -185,5 +251,104 @@ struct HelpUpdateView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
         .liquidGlassSurface(cornerRadius: 16)
+    }
+}
+
+private struct ReleaseHistorySheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let state: AppReleaseHistoryState
+    let onRetry: () async -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("历史版本更新日志")
+                    .font(.title2.weight(.semibold))
+
+                Spacer(minLength: 16)
+
+                Button("完成") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+            }
+            .padding(20)
+
+            Divider()
+
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .frame(minWidth: 560, minHeight: 520)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch state {
+        case .idle, .loading:
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("正在加载更新日志")
+                    .foregroundStyle(.secondary)
+            }
+            .padding(24)
+        case let .failed(message):
+            VStack(alignment: .leading, spacing: 12) {
+                Text(message)
+                    .foregroundStyle(.red)
+
+                Button("重试") {
+                    Task { await onRetry() }
+                }
+                .liquidGlassButton()
+            }
+            .padding(24)
+        case let .loaded(releases):
+            if releases.isEmpty {
+                Text("暂无历史版本更新日志")
+                    .foregroundStyle(.secondary)
+                    .padding(24)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(releases.enumerated()), id: \.element.id) { index, release in
+                            releaseRow(release)
+
+                            if index < releases.count - 1 {
+                                Divider()
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                }
+            }
+        }
+    }
+
+    private func releaseRow(_ release: AppReleaseHistoryItem) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("v\(release.version)")
+                    .font(.headline)
+
+                Spacer(minLength: 12)
+
+                if let publishedAt = release.publishedAt {
+                    Text(publishedAt.formatted(date: .abbreviated, time: .omitted))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+
+            UpdateNotesView(notes: release.notes)
+
+            Link("在 GitHub 查看", destination: release.releaseURL)
+                .font(.caption)
+        }
+        .padding(.vertical, 16)
+        .accessibilityElement(children: .contain)
     }
 }

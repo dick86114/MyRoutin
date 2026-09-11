@@ -18,7 +18,7 @@ final class VolcenginePlanUsageProviderTests: XCTestCase {
             switch action {
             case "GetPersonalPlan":
                 return (response, Data(#"{"Result":{"PlanType":"Max","Status":"Running"}}"#.utf8))
-            case "GetAgentPlanAFPUsage":
+            case "GetAFPUsage":
                 XCTAssertEqual(request.httpMethod, "POST")
                 XCTAssertNotNil(request.value(forHTTPHeaderField: "Authorization"))
                 let body = #"{"Result":{"PlanType":"Max","AFPFiveHour":{"Quota":"10000","Used":"0","ResetTime":1893456000000},"AFPDaily":{"Quota":"50000","Used":"0"},"AFPWeekly":{"Quota":"35000","Used":"3252.2867","ResetTime":1893456000000},"AFPMonthly":{"Quota":"100000","Used":"41222.3834","ResetTime":1893456000000}}}"#
@@ -66,7 +66,7 @@ final class VolcenginePlanUsageProviderTests: XCTestCase {
             case "GetPersonalPlan":
                 let body = #"{"Result":{"PlanType":"medium","Status":"Running","StartTime":"2026-08-01T00:00:00Z","EndTime":"2026-09-01T00:00:00Z","AutoRenew":true}}"#
                 return (response, Data(body.utf8))
-            case "GetAgentPlanAFPUsage":
+            case "GetAFPUsage":
                 let body = #"{"Result":{"PlanType":"medium","AFPFiveHour":{"Quota":"100","Used":"10","ResetTime":1893456000000},"AFPWeekly":{"Quota":"200","Used":"20"},"AFPMonthly":{"Quota":"300","Used":"30"}}}"#
                 return (response, Data(body.utf8))
             case "ListArkAgentPlanModel":
@@ -83,7 +83,7 @@ final class VolcenginePlanUsageProviderTests: XCTestCase {
         let fetched = try await provider.fetchUsage(credential, now: Date(timeIntervalSince1970: 1_700_000_000))
         let snapshot = try XCTUnwrap(fetched)
 
-        XCTAssertEqual(actions.current, ["GetPersonalPlan", "GetAgentPlanAFPUsage", "ListArkAgentPlanModel"])
+        XCTAssertEqual(actions.current, ["GetPersonalPlan", "GetAFPUsage", "ListArkAgentPlanModel"])
         XCTAssertEqual(snapshot.planName, "medium Plan")
         XCTAssertEqual(snapshot.statusText, "Running")
         XCTAssertEqual(snapshot.billingMode, "自动续费")
@@ -133,7 +133,7 @@ final class VolcenginePlanUsageProviderTests: XCTestCase {
                 return (response, Data(#"{"Result":{"PlanType":"CodingPlan","Status":"Running"}}"#.utf8))
             case "GetCodingPlanUsage":
                 XCTAssertTrue(request.url?.absoluteString.contains("Action=GetCodingPlanUsage") == true)
-                let body = #"{"Result":{"QuotaUsage":[{"Level":"5h","Percent":10,"ResetTimestamp":1893456000}]}}"#
+                let body = #"{"Result":{"QuotaUsage":[{"Level":"session","Percent":10,"ResetTimestamp":1893456000},{"Level":"weekly","Percent":20},{"Level":"monthly","Percent":30}]}}"#
                 return (response, Data(body.utf8))
             default:
                 return (response, Data(#"{"Result":{"Datas":[]}}"#.utf8))
@@ -149,6 +149,40 @@ final class VolcenginePlanUsageProviderTests: XCTestCase {
 
         let fetched = try await provider.fetchUsage(credential, now: Date(timeIntervalSince1970: 1_700_000_000))
         XCTAssertEqual(fetched?.planName, "CodingPlan Plan")
+        XCTAssertEqual(fetched?.metrics.map(\.id), ["fiveHour", "weekly", "monthly"])
+        XCTAssertEqual(fetched?.metrics.map(\.label), ["近 5 小时用量", "近一周用量", "近一月用量"])
+    }
+
+    func test默认请求使用方舟区域端点() async throws {
+        let actions = ActionRecorder()
+        let stub = URLProtocolStub.makeSession { request in
+            let action = Self.action(from: request)
+            actions.append(action)
+            XCTAssertEqual(request.url?.host, "ark.cn-beijing.volcengineapi.com")
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            ))
+
+            switch action {
+            case "GetPersonalPlan":
+                return (response, Data(#"{"Result":{"PlanType":"Pro","Status":"Running"}}"#.utf8))
+            case "GetCodingPlanUsage":
+                return (response, Data(#"{"Result":{"QuotaUsage":[{"Level":"session","Percent":10,"ResetTimestamp":1893456000}]}}"#.utf8))
+            case "ListArkCodingPlanModel":
+                return (response, Data(#"{"Result":{"Datas":[]}}"#.utf8))
+            default:
+                XCTFail("出现未预期的 Action：\(action)")
+                return (response, Data())
+            }
+        }
+        let provider = VolcenginePlanUsageProvider(session: stub.session)
+
+        _ = try await provider.fetchUsage(Self.credential(planType: "coding"), now: Date(timeIntervalSince1970: 1_700_000_000))
+
+        XCTAssertEqual(actions.current, ["GetPersonalPlan", "GetCodingPlanUsage", "ListArkCodingPlanModel"])
     }
 
     func testCoding刷新动态获取Coding套餐和允许模型() async throws {
@@ -202,7 +236,7 @@ final class VolcenginePlanUsageProviderTests: XCTestCase {
             switch action {
             case "GetPersonalPlan":
                 return (response, Data(#"{"Result":{"PlanType":"medium"}}"#.utf8))
-            case "GetAgentPlanAFPUsage":
+            case "GetAFPUsage":
                 return (response, Data(#"{"Result":{"PlanType":"medium","AFPFiveHour":{"Quota":"100","Used":"10"}}}"#.utf8))
             default:
                 return (response, Data(#"{"Result":{"Datas":[]}}"#.utf8))
@@ -232,7 +266,7 @@ final class VolcenginePlanUsageProviderTests: XCTestCase {
             if action.contains("GetPersonalPlan") {
                 return (response, Data(#"{"Result":{"PlanType":"Max","Status":"Running"}}"#.utf8))
             }
-            if action.contains("GetAgentPlanAFPUsage") {
+            if action.contains("GetAFPUsage") {
                 return (response, Data(#"{"Result":{"PlanType":"Max","AFPFiveHour":{"Quota":"100","Used":"10"}}}"#.utf8))
             }
             return (response, Data(#"{"Result":{"Datas":[]}}"#.utf8))

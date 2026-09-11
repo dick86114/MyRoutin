@@ -20,7 +20,6 @@ import java.math.RoundingMode
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 import kotlin.math.roundToInt
 
 internal data class WidgetMetricDisplay(
@@ -288,7 +287,7 @@ internal object CredentialWidgetRenderer {
         val percent = progressPercent(metric)
         return WidgetMetricDisplay(
             label = metric.label,
-            value = "${percent?.roundToInt() ?: 0}%",
+            value = formatPercent(percent),
             detail = if (showAmounts) {
                 buildString {
                     append("已用 ")
@@ -364,7 +363,7 @@ internal object CredentialWidgetRenderer {
 
     private fun formatPlain(value: BigDecimal?): String {
         if (value == null) return "-"
-        val stripped = value.stripTrailingZeros()
+        val stripped = value.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros()
         return if (stripped.compareTo(BigDecimal.ZERO) == 0) "0" else stripped.toPlainString()
     }
 
@@ -381,12 +380,22 @@ internal object CredentialWidgetRenderer {
     }
 
     private fun formatCompact(value: BigDecimal?): String {
-        val number = value?.toDouble() ?: return "-"
+        if (value == null) return "-"
+        val absolute = value.abs()
         return when {
-            number >= 1_000_000 || number <= -1_000_000 -> String.format(Locale.US, "%.1fM", number / 1_000_000)
-            number >= 1_000 || number <= -1_000 -> String.format(Locale.US, "%.1fK", number / 1_000)
+            absolute >= BigDecimal("1000000000") ->
+                formatPlain(value.divide(BigDecimal("1000000000"), 8, RoundingMode.HALF_UP)) + "B"
+            absolute >= BigDecimal("1000000") ->
+                formatPlain(value.divide(BigDecimal("1000000"), 8, RoundingMode.HALF_UP)) + "M"
+            absolute >= BigDecimal("1000") ->
+                formatPlain(value.divide(BigDecimal("1000"), 8, RoundingMode.HALF_UP)) + "K"
             else -> formatPlain(value)
         }
+    }
+
+    private fun formatPercent(value: Double?): String {
+        if (value == null || !value.isFinite()) return "-"
+        return formatPlain(BigDecimal.valueOf(value)) + "%"
     }
 
     private fun formatCurrency(value: BigDecimal?, currencyCode: String?): String {

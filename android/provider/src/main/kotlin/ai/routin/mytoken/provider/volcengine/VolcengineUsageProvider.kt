@@ -238,10 +238,11 @@ class VolcengineUsageProvider(
                 quotaUsage.forEachIndexed { index, item ->
                     val obj = item.asObjectOrNull() ?: return@forEachIndexed
                     val percent = obj.decimalOrNull("Percent") ?: return@forEachIndexed
+                    val rawLevel = obj.stringOrNull("Level") ?: "Coding Plan"
                     add(
                         UsageMetric(
-                            id = "coding-$index",
-                            label = obj.stringOrNull("Level") ?: "Coding Plan",
+                            id = codingMetricID(rawLevel) ?: "coding-$index",
+                            label = codingMetricLabel(rawLevel) ?: rawLevel,
                             used = percent,
                             limit = BigDecimal(100),
                             remaining = BigDecimal(100).subtract(percent).max(BigDecimal.ZERO),
@@ -278,6 +279,21 @@ class VolcengineUsageProvider(
         val endTime: Instant?,
     )
 
+    /** 将 Coding Plan 接口返回的周期名称映射到全局视图使用的指标 ID。 */
+    private fun codingMetricID(level: String): String? = when (level.trim().lowercase()) {
+        "session", "5h", "fivehour", "five_hour", "five-hour" -> "fiveHour"
+        "weekly", "week", "1w", "7d", "seven_day" -> "weekly"
+        "monthly", "month", "1m", "30d" -> "monthly"
+        else -> null
+    }
+
+    private fun codingMetricLabel(level: String): String? = when (level.trim().lowercase()) {
+        "session", "5h", "fivehour", "five_hour", "five-hour" -> "近 5 小时用量"
+        "weekly", "week", "1w", "7d", "seven_day" -> "近一周用量"
+        "monthly", "month", "1m", "30d" -> "近一月用量"
+        else -> null
+    }
+
     /**
      * Extracts the provider error message the same way as the macOS implementation
      * (`Error` / `error` / `ResponseMetadata` objects with `Code` / `Message` fields).
@@ -302,13 +318,13 @@ class VolcengineUsageProvider(
     }
 
     private fun hostOf(url: String): String =
-        runCatching { java.net.URI(url).host }.getOrNull() ?: "open.volcengineapi.com"
+        runCatching { java.net.URI(url).host }.getOrNull() ?: "ark.cn-beijing.volcengineapi.com"
 
     companion object {
-        const val DEFAULT_ENDPOINT = "https://open.volcengineapi.com"
+        const val DEFAULT_ENDPOINT = "https://ark.cn-beijing.volcengineapi.com"
         private const val VERSION = "2024-01-01"
         private const val ACTION_PERSONAL_PLAN = "GetPersonalPlan"
-        private const val ACTION_AGENT_USAGE = "GetAgentPlanAFPUsage"
+        private const val ACTION_AGENT_USAGE = "GetAFPUsage"
         private const val ACTION_CODING_USAGE = "GetCodingPlanUsage"
         private const val ACTION_AGENT_MODEL_LIST = "ListArkAgentPlanModel"
         private const val ACTION_CODING_MODEL_LIST = "ListArkCodingPlanModel"

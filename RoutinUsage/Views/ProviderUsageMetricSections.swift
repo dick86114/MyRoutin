@@ -114,13 +114,11 @@ struct VolcengineCodingPlanMetricsView: View {
     }
 
     private func percentText(_ metric: NormalizedUsageMetric?) -> String {
-        guard let percent = metric?.displayedPercent else { return "—" }
-        return "\(Int(percent.rounded()))%"
+        UsageFormatter.displayPercentText(metric?.displayedPercent)
     }
 
     private func decimalText(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
-        return NSDecimalNumber(decimal: value).stringValue
+        UsageFormatter.numberText(value)
     }
 
     private func color(_ metric: NormalizedUsageMetric?) -> Color {
@@ -192,7 +190,9 @@ struct NewAPIUsageMetricsView: View {
 
     private func quotaCard(_ metric: NormalizedUsageMetric) -> some View {
         let percent = metric.displayedPercent ?? 0
-        let percentText = metric.limit == 0 ? "—" : "\(Int(percent.rounded()))%"
+        let percentText = metric.limit == 0
+            ? "—"
+            : UsageFormatter.displayPercentText(metric.displayedPercent)
 
         return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {

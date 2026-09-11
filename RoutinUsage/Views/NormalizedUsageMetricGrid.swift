@@ -105,7 +105,7 @@ private struct NormalizedUsageMetricCell: View {
 
     private var progressCell: some View {
         let percent = metric.displayedPercent ?? 0
-        let percentText = "\(Int(percent.rounded()))%"
+        let percentText = UsageFormatter.displayPercentText(metric.displayedPercent)
         let usesFullWidthDetails = spansAllColumns || metric.id == "monthly"
 
         return VStack(alignment: .leading, spacing: 4) {
@@ -356,7 +356,6 @@ private struct NormalizedUsageMetricCell: View {
     }
 
     private func decimalText(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
-        return NSDecimalNumber(decimal: value).stringValue
+        UsageFormatter.numberText(value)
     }
 }

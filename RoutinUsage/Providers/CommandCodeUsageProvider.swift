@@ -13,8 +13,6 @@ struct CommandCodeUsageProvider: UsageProvider {
 
     func metricCapabilities(for configuration: KeyConfiguration) -> [UsageMetricCapability] {
         guard configuration.credentialKind == .bearerAPIKey else { return [] }
-        let warningThreshold = configuration.metadata["balanceWarningThreshold"]
-            .flatMap { Decimal(string: $0) }
         return [
             UsageMetricCapability(
                 metricID: "credit-progress",
@@ -24,7 +22,7 @@ struct CommandCodeUsageProvider: UsageProvider {
                 isMenuBarSelectable: true,
                 menuBarPriority: 0,
                 defaultAlertEnabled: true,
-                defaultAbsoluteAlertThreshold: warningThreshold
+                defaultAbsoluteAlertThreshold: nil
             ),
             UsageMetricCapability(
                 metricID: "five-hour",
@@ -142,11 +140,9 @@ struct CommandCodeUsageProvider: UsageProvider {
             totalPool = totalSpent + totalRemaining
         }
         let totalUsed = max(0, totalPool - totalRemaining)
-        let warningThreshold = credential.metadata["balanceWarningThreshold"]
-            .flatMap { Decimal(string: $0) }
         let health = UsageMetricHealthEvaluator.balanceState(
             balance: totalRemaining,
-            warningThreshold: warningThreshold,
+            warningThreshold: nil,
             isAvailable: true
         )
 

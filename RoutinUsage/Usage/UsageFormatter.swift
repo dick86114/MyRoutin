@@ -72,6 +72,27 @@ enum UsageFormatter {
         return compactMetricValue(value)
     }
 
+    /// 凭证用量展示统一四舍五入到最多两位小数。
+    static func numberText(_ value: Decimal?, grouping: Bool = false) -> String {
+        guard let value else { return "—" }
+        return numberText(value, grouping: grouping)
+    }
+
+    /// 凭证内的百分比统一四舍五入到最多两位小数，菜单栏仍使用整数百分比。
+    static func displayPercentText(_ value: Double?) -> String {
+        guard let value, value.isFinite else { return "—" }
+        let formatter = NumberFormatter()
+        formatter.locale = stableLocale
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        formatter.roundingMode = .halfUp
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        let text = formatter.string(from: NSNumber(value: value))
+            ?? NSDecimalNumber(value: value).stringValue
+        return text + "%"
+    }
+
     static func fullAmount(_ metric: UsageMetric) -> String {
         guard metric.unit == .token else {
             return amount(metric)
@@ -234,7 +255,7 @@ enum UsageFormatter {
     /// 将已按名称配对的分组倍率合并为单行文本。
     static func groupMultiplierText(_ groups: [UsageGroupMultiplier]) -> String {
         groups.map { group in
-            "\(group.name) ×\(NSDecimalNumber(decimal: group.multiplier).stringValue)"
+            "\(group.name) ×\(numberText(group.multiplier))"
         }
         .joined(separator: "、")
     }
@@ -255,7 +276,7 @@ enum UsageFormatter {
     ) -> [GroupMultiplierSegment] {
         groups.map { group in
             GroupMultiplierSegment(
-                text: "\(group.name) ×\(NSDecimalNumber(decimal: group.multiplier).stringValue)",
+                text: "\(group.name) ×\(numberText(group.multiplier))",
                 isHighlighted: group.name == highlightedGroupName
             )
         }
@@ -332,6 +353,7 @@ enum UsageFormatter {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.numberStyle = .decimal
         formatter.usesGroupingSeparator = false
+        formatter.roundingMode = .halfUp
         formatter.minimumFractionDigits = 2
         formatter.maximumFractionDigits = 2
         let text = formatter.string(from: NSDecimalNumber(decimal: value))
@@ -341,16 +363,7 @@ enum UsageFormatter {
 
     /// Token 消耗需要保留完整数值，避免 compact 格式让用户无法核对后台总量。
     static func exactTokenText(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
-        let formatter = NumberFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.numberStyle = .decimal
-        formatter.usesGroupingSeparator = true
-        formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = 0
-        let text = formatter.string(from: NSDecimalNumber(decimal: value))
-            ?? NSDecimalNumber(decimal: value).stringValue
-        return text
+        numberText(value, grouping: true)
     }
 }
 
@@ -373,23 +386,22 @@ private extension UsageFormatter {
     static func compactToken(_ value: Decimal) -> String {
         let number = NSDecimalNumber(decimal: value).doubleValue
         let absolute = abs(number)
-        let scaled: Double
+        let divisor: Decimal
         let suffix: String
         if absolute >= 1_000_000_000 {
-            scaled = number / 1_000_000_000
+            divisor = 1_000_000_000
             suffix = "B"
         } else if absolute >= 1_000_000 {
-            scaled = number / 1_000_000
+            divisor = 1_000_000
             suffix = "M"
         } else if absolute >= 1_000 {
-            scaled = number / 1_000
+            divisor = 1_000
             suffix = "K"
         } else {
-            scaled = number
+            divisor = 1
             suffix = ""
         }
-        let text = String(format: "%.1f", locale: stableLocale, scaled)
-        return text.replacingOccurrences(of: ".0", with: "") + suffix
+        return numberText(value / divisor) + suffix
     }
 
     static func compactMetricValue(_ value: Decimal) -> String {
@@ -397,12 +409,17 @@ private extension UsageFormatter {
     }
 
     static func fullToken(_ value: Decimal) -> String {
+        numberText(value, grouping: true)
+    }
+
+    static func numberText(_ value: Decimal, grouping: Bool) -> String {
         let formatter = NumberFormatter()
         formatter.locale = stableLocale
         formatter.numberStyle = .decimal
-        formatter.usesGroupingSeparator = true
+        formatter.usesGroupingSeparator = grouping
         formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = 3
+        formatter.maximumFractionDigits = 2
+        formatter.roundingMode = .halfUp
         return formatter.string(from: NSDecimalNumber(decimal: value))
             ?? NSDecimalNumber(decimal: value).stringValue
     }

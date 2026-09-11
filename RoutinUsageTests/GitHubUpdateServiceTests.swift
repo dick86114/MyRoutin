@@ -220,6 +220,80 @@ final class GitHubUpdateServiceTests: XCTestCase {
         XCTAssertEqual(finalProgress, 1, accuracy: 0.001)
     }
 
+    func test历史版本只保留macOS发布并按版本倒序去重() async throws {
+        let body = """
+        [
+          {"tag_name":"android-v9.0.0","html_url":"https://github.com/dick86114/MyToken/releases/tag/android-v9.0.0","assets":[],"body":"Android"},
+          {"tag_name":"macos-v5.2.0","html_url":"https://github.com/dick86114/MyToken/releases/tag/macos-v5.2.0","assets":[],"body":"旧版本","published_at":"2026-08-01T10:00:00Z"},
+          {"tag_name":"v5.4.0","html_url":"https://github.com/dick86114/MyToken/releases/tag/v5.4.0","assets":[],"body":"主发布"},
+          {"tag_name":"macos-v5.3.0","html_url":"https://github.com/dick86114/MyToken/releases/tag/macos-v5.3.0","assets":[],"body":"中间版本"}
+        ]
+        """
+        let stub = URLProtocolStub.makeSession { request in
+            let response = try XCTUnwrap(
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)
+            )
+            return (response, Data(body.utf8))
+        }
+        let service = GitHubUpdateService(session: stub.session, currentVersion: "5.4.0")
+
+        let releases = try await service.fetchReleaseHistory()
+
+        XCTAssertEqual(releases.map(\.version), ["5.4.0", "5.3.0", "5.2.0"])
+        XCTAssertEqual(releases.first?.notes, "主发布")
+        XCTAssertEqual(releases.last?.publishedAt, Date(timeIntervalSince1970: 1_785_578_400))
+        XCTAssertFalse(releases.contains { $0.notes == "Android" })
+    }
+
+    func test历史版本在API限流时回退到AtomFeed() async throws {
+        let atom = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <entry>
+            <id>tag:github.com,2008:Repository/1/macos-v5.4.0</id>
+            <updated>2026-09-09T12:00:00Z</updated>
+            <link rel="alternate" href="https://github.com/dick86114/MyToken/releases/tag/macos-v5.4.0" />
+            <title>MyToken v5.4.0</title>
+            <content type="html">&lt;p&gt;当前版本&lt;/p&gt;</content>
+          </entry>
+          <entry>
+            <id>tag:github.com,2008:Repository/1/macos-v5.3.0</id>
+            <updated>2026-08-01T10:00:00Z</updated>
+            <link rel="alternate" href="https://github.com/dick86114/MyToken/releases/tag/macos-v5.3.0" />
+            <title>MyToken v5.3.0</title>
+            <content type="html">&lt;p&gt;旧版本&lt;/p&gt;</content>
+          </entry>
+          <entry>
+            <id>tag:github.com,2008:Repository/1/android-v9.0.0</id>
+            <updated>2026-09-10T12:00:00Z</updated>
+            <link rel="alternate" href="https://github.com/dick86114/MyToken/releases/tag/android-v9.0.0" />
+            <title>MyToken Android v9.0.0</title>
+            <content type="html">&lt;p&gt;Android&lt;/p&gt;</content>
+          </entry>
+        </feed>
+        """
+        let stub = URLProtocolStub.makeSession { request in
+            let url = try XCTUnwrap(request.url)
+            if url == GitHubUpdateService.releasesURL {
+                let response = try XCTUnwrap(
+                    HTTPURLResponse(url: url, statusCode: 403, httpVersion: nil, headerFields: nil)
+                )
+                return (response, Data())
+            }
+            let response = try XCTUnwrap(
+                HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+            )
+            return (response, Data(atom.utf8))
+        }
+        let service = GitHubUpdateService(session: stub.session, currentVersion: "5.4.0")
+
+        let releases = try await service.fetchReleaseHistory()
+
+        XCTAssertEqual(releases.map(\.version), ["5.4.0", "5.3.0"])
+        XCTAssertEqual(releases.first?.notes, "<p>当前版本</p>")
+        XCTAssertFalse(releases.contains { $0.notes == "<p>Android</p>" })
+    }
+
     func test更新完成标记只会被新进程消费一次() throws {
         let suiteName = "GitHubUpdateServiceTests.notice-(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

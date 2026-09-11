@@ -146,6 +146,7 @@ fun MyTokenApp(
     val listState by credentialListViewModel.state.collectAsStateWithLifecycle()
     val settingsState by settingsViewModel.state.collectAsStateWithLifecycle()
     val updateState by settingsViewModel.updateState.collectAsStateWithLifecycle()
+    val releaseHistoryState by settingsViewModel.releaseHistoryState.collectAsStateWithLifecycle()
 
     val pagerState = rememberPagerState(initialPage = selectedTab, pageCount = { 3 })
     LaunchedEffect(pagerState) {
@@ -244,6 +245,7 @@ fun MyTokenApp(
                                 state = settingsState,
                                 appVersion = appVersion,
                                 updateState = updateState,
+                                releaseHistoryState = releaseHistoryState,
                                 onAutoRefreshChange = settingsViewModel::setAutoRefreshEnabled,
                                 onIntervalChange = settingsViewModel::setRefreshIntervalMinutes,
                                 onWifiOnlyChange = settingsViewModel::setWifiOnly,
@@ -258,6 +260,7 @@ fun MyTokenApp(
                                 notificationPermissionGranted = notificationPermissionGranted,
                                 onRequestNotificationPermission = onRequestNotificationPermission,
                                 onCheckForUpdates = settingsViewModel::checkForUpdates,
+                                onLoadReleaseHistory = settingsViewModel::loadReleaseHistory,
                                 onDownloadAndInstall = settingsViewModel::downloadAndInstall,
                                 onOpenInstallPermissionSettings = settingsViewModel::openInstallPermissionSettings,
                                 onInstallDownloadedUpdate = settingsViewModel::installDownloadedUpdate,

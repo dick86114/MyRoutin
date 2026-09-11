@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.math.RoundingMode
 import java.math.BigDecimal
 import java.time.Duration
 import java.time.Instant
@@ -27,7 +28,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.max
-import kotlin.math.roundToInt
 
 internal data class MetricTone(val color: Color)
 
@@ -51,7 +51,8 @@ private fun StatusColors.secondaryFallback(): Color = neutral
 
 internal fun formatDecimal(value: BigDecimal?): String {
     if (value == null) return "-"
-    val stripped = value.stripTrailingZeros()
+    val rounded = value.setScale(2, RoundingMode.HALF_UP)
+    val stripped = rounded.stripTrailingZeros()
     return if (stripped.compareTo(BigDecimal.ZERO) == 0) "0" else stripped.toPlainString()
 }
 
@@ -69,12 +70,21 @@ internal fun formatGrouped(value: BigDecimal?): String {
 
 internal fun formatCompact(value: BigDecimal?): String {
     if (value == null) return "-"
-    val number = value.toDouble()
+    val absolute = value.abs()
     return when {
-        number >= 1_000_000 || number <= -1_000_000 -> String.format("%.1fM", number / 1_000_000)
-        number >= 1_000 || number <= -1_000 -> String.format("%.1fK", number / 1_000)
+        absolute >= BigDecimal("1000000000") ->
+            formatDecimal(value.divide(BigDecimal("1000000000"), 8, RoundingMode.HALF_UP)) + "B"
+        absolute >= BigDecimal("1000000") ->
+            formatDecimal(value.divide(BigDecimal("1000000"), 8, RoundingMode.HALF_UP)) + "M"
+        absolute >= BigDecimal("1000") ->
+            formatDecimal(value.divide(BigDecimal("1000"), 8, RoundingMode.HALF_UP)) + "K"
         else -> formatDecimal(value)
     }
+}
+
+internal fun formatPercent(value: Double?): String {
+    if (value == null || !value.isFinite()) return "-"
+    return formatDecimal(BigDecimal.valueOf(value)) + "%"
 }
 
 internal fun progressPercent(metric: UsageMetric): Double? {
@@ -219,7 +229,7 @@ private fun ProgressCell(metric: UsageMetric, colors: StatusColors, modifier: Mo
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(metric.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
+            Text(formatPercent(percent), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
         }
         UsageProgressBar(percent = percent, color = color)
         MetricText("已用 ${formatAmount(metric.used, metric)} / ${formatAmount(metric.limit, metric)}")
@@ -277,7 +287,7 @@ internal fun GLMMetrics(metrics: List<UsageMetric>, modifier: Modifier = Modifie
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(metric.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                            Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
+                            Text(formatPercent(percent), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
                         }
                         UsageProgressBar(percent = percent, color = color)
                         metric.windowEnd?.let {
@@ -319,7 +329,7 @@ internal fun VolcengineMetrics(metrics: List<UsageMetric>, modifier: Modifier = 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(it.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                    Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
+                    Text(formatPercent(percent), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
                 }
                 UsageProgressBar(percent = percent, color = color)
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -354,7 +364,7 @@ internal fun NewAPIMetrics(metrics: List<UsageMetric>, modifier: Modifier = Modi
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(it.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                    Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
+                    Text(formatPercent(percent), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
                 }
                 UsageProgressBar(percent = percent, color = color)
                 Row {
@@ -447,7 +457,7 @@ private fun CommandCodeProgressMetric(
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(metric.label.ifEmpty { fallbackLabel }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
+            Text(formatPercent(percent), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
         }
         UsageProgressBar(percent = percent, color = color)
         commandCodeProgressDetailLines(metric, Instant.now()).forEach { line ->
@@ -475,7 +485,7 @@ private fun CommandCodeMonthlyMetric(
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(metric.label.ifEmpty { "月" }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            Text("${percent?.roundToInt() ?: 0}%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
+            Text(formatPercent(percent), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color)
         }
         UsageProgressBar(percent = percent, color = color)
         Row(verticalAlignment = Alignment.CenterVertically) {

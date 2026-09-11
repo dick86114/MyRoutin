@@ -82,11 +82,18 @@ class FakeUpdateSettingsStore(initial: UpdateSettings = UpdateSettings()) : Upda
 
 class FakeAppUpdateController : AppUpdateController {
     override val state = MutableStateFlow<AppUpdateUiState>(AppUpdateUiState.Idle)
+    override val releaseHistoryState =
+        MutableStateFlow<AppReleaseHistoryUiState>(AppReleaseHistoryUiState.Idle)
     var checked = 0
+    var releaseHistoryLoaded = 0
     var downloaded: Pair<String, String>? = null
 
     override fun checkForUpdates() {
         checked += 1
+    }
+
+    override fun loadReleaseHistory() {
+        releaseHistoryLoaded += 1
     }
 
     override fun downloadAndInstall(version: String, downloadUrl: String) {

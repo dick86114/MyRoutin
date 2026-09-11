@@ -75,6 +75,16 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun releaseHistoryLoadForwardsToController() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+
+        vm.loadReleaseHistory()
+
+        assertEquals(1, updateController.releaseHistoryLoaded)
+    }
+
+    @Test
     fun refreshIntervalOutsideAllowedValuesIsIgnored() = runTest(dispatcher) {
         val vm = viewModel()
         advanceUntilIdle()

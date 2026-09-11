@@ -23,6 +23,22 @@ struct AppUpdate: Equatable, Sendable {
     }
 }
 
+struct AppReleaseHistoryItem: Identifiable, Equatable, Sendable {
+    let version: String
+    let releaseURL: URL
+    let notes: String
+    let publishedAt: Date?
+
+    var id: String { version }
+}
+
+enum AppReleaseHistoryState: Equatable, Sendable {
+    case idle
+    case loading
+    case loaded([AppReleaseHistoryItem])
+    case failed(String)
+}
+
 enum UpdateCompletionNotice {
     private static let versionKey = "updateCompletionVersion"
 
@@ -50,6 +66,10 @@ protocol UpdateChecking: Sendable {
         _ update: AppUpdate,
         progress: @escaping @Sendable (Double?) async -> Void
     ) async throws -> URL
+}
+
+extension UpdateChecking {
+    func fetchReleaseHistory() async throws -> [AppReleaseHistoryItem] { [] }
 }
 
 struct NoUpdateService: UpdateChecking {
@@ -110,84 +130,23 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
             details: "version=\(currentVersion) mirror=\(mirrorBaseProvider() ?? "direct")"
         )
         let mirror = mirrorBaseProvider()
-        var request = URLRequest(
-            url: Self.releasesURL,
-            cachePolicy: .reloadIgnoringLocalCacheData,
-            timeoutInterval: 30
-        )
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("MyToken/\(currentVersion)", forHTTPHeaderField: "User-Agent")
-        let data: Data
-        let response: URLResponse
+        let releases: [ReleaseDTO]
         do {
-            (data, response) = try await session.data(for: request)
-        } catch is CancellationError {
-            await logWriter.log(level: .warning, event: "update_check_cancelled", details: "source=api")
-            throw CancellationError()
+            releases = try await fetchReleases(mirror: mirror)
         } catch {
-            await logWriter.log(
-                level: .error,
-                event: "update_check_network_failed",
-                details: String(describing: error)
-            )
-            // CDN 模式下 API 直连失败时，改走镜像的 Atom 源完成检测。
-            if mirror != nil {
-                return try await checkForUpdateFromAtom(mirror: mirror)
-            }
-            throw UpdateServiceError.unavailable
-        }
-        guard let http = response as? HTTPURLResponse else {
-            await logWriter.log(level: .error, event: "update_check_invalid_response", details: "source=api")
-            throw UpdateServiceError.unavailable
-        }
-        await logWriter.log(
-            level: .info,
-            event: "update_check_response",
-            details: "source=api status=\(http.statusCode)"
-        )
-        if http.statusCode == 403 || http.statusCode == 429 {
-            // GitHub API 的未登录请求按出口 IP 共享限额，桌面用户很容易撞到 403。
-            // Atom feed 不走同一套 API 限额，且足够提供版本和发布页信息。
-            await logWriter.log(
-                level: .warning,
-                event: "update_check_rate_limited",
-                details: "status=\(http.statusCode)"
-            )
+            // GitHub API 可能限流，Atom 源无论是否启用镜像都应作为回退路径。
             return try await checkForUpdateFromAtom(mirror: mirror)
         }
-        guard (200..<300).contains(http.statusCode) else {
-            throw UpdateServiceError.unavailable
-        }
-        let release: ReleaseDTO
-        do {
-            let decoder = JSONDecoder()
-            if data.first == 91 { // 兼容历史测试与旧服务返回的单个 Release 对象。
-                let releases = try decoder.decode([ReleaseDTO].self, from: data)
-                // 主发布走 `v` 前缀、平台发布走 `macos-v` 前缀，两种都可能是最新
-                // macOS 包；按版本号取最大，不依赖列表顺序。
-                let macOSCandidates = releases
-                    .filter { Self.isMacOSRelease(tagName: $0.tagName) }
-                    .filter { $0.assets.contains { $0.name.hasSuffix(".dmg") } }
-                guard let platformRelease = macOSCandidates.max(by: {
-                    Self.compare(
-                        Self.normalize($0.tagName),
-                        Self.normalize($1.tagName)
-                    ) == .orderedAscending
-                }) else {
-                    await logWriter.log(level: .info, event: "update_check_succeeded", details: "result=no_macos_release")
-                    return nil
-                }
-                release = platformRelease
-            } else {
-                release = try decoder.decode(ReleaseDTO.self, from: data)
-            }
-        } catch {
-            await logWriter.log(
-                level: .error,
-                event: "update_check_decode_failed",
-                details: String(describing: error)
-            )
-            throw UpdateServiceError.invalidResponse
+        let macOSReleases = releases
+            .filter { Self.isMacOSRelease(tagName: $0.tagName) }
+        let release = macOSReleases
+            .filter { $0.assets.contains { $0.name.hasSuffix(".dmg") } }
+            .max(by: {
+                Self.compare(Self.normalize($0.tagName), Self.normalize($1.tagName)) == .orderedAscending
+            })
+        guard let release else {
+            await logWriter.log(level: .info, event: "update_check_succeeded", details: "result=no_macos_release")
+            return nil
         }
         let version = Self.normalize(release.tagName)
         guard Self.compare(version, currentVersion) == .orderedDescending else {
@@ -213,43 +172,96 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
         )
     }
 
-    private func checkForUpdateFromAtom(mirror: String?) async throws -> AppUpdate? {
-        await logWriter.log(level: .info, event: "update_check_atom_started", details: nil)
+    func fetchReleaseHistory() async throws -> [AppReleaseHistoryItem] {
+        let mirror = mirrorBaseProvider()
+        let releases: [ReleaseDTO]
+        do {
+            releases = try await fetchReleases(mirror: mirror)
+        } catch {
+            return try await fetchReleaseHistoryFromAtom(mirror: mirror)
+        }
+        var seen = Set<String>()
+        return releases
+            .filter { Self.isMacOSRelease(tagName: $0.tagName) }
+            .compactMap { release -> AppReleaseHistoryItem? in
+                let version = Self.normalize(release.tagName)
+                guard !version.isEmpty, seen.insert(version).inserted,
+                      let releaseURL = URL(string: rewrittenString(release.htmlURL ?? "", mirror: mirror)) else {
+                    return nil
+                }
+                return AppReleaseHistoryItem(
+                    version: version,
+                    releaseURL: releaseURL,
+                    notes: release.body ?? "",
+                    publishedAt: Self.parseISO8601(release.publishedAt)
+                )
+            }
+            .sorted {
+                Self.compare($0.version, $1.version) == .orderedDescending
+            }
+    }
+
+    private func fetchReleases(mirror: String?) async throws -> [ReleaseDTO] {
         var request = URLRequest(
-            url: rewritten(Self.releasesAtomURL, mirror: mirror),
+            url: Self.releasesURL,
             cachePolicy: .reloadIgnoringLocalCacheData,
             timeoutInterval: 30
         )
-        request.setValue("application/atom+xml", forHTTPHeaderField: "Accept")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("MyToken/\(currentVersion)", forHTTPHeaderField: "User-Agent")
-
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
         } catch is CancellationError {
-            await logWriter.log(level: .warning, event: "update_check_cancelled", details: "source=atom")
+            await logWriter.log(level: .warning, event: "update_check_cancelled", details: "source=api")
             throw CancellationError()
         } catch {
             await logWriter.log(
                 level: .error,
-                event: "update_check_atom_network_failed",
+                event: "update_check_network_failed",
                 details: String(describing: error)
             )
             throw UpdateServiceError.unavailable
         }
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            await logWriter.log(level: .error, event: "update_check_atom_failed", details: "response=invalid")
+        guard let http = response as? HTTPURLResponse else {
+            await logWriter.log(level: .error, event: "update_check_invalid_response", details: "source=api")
             throw UpdateServiceError.unavailable
         }
         await logWriter.log(
             level: .info,
             event: "update_check_response",
-            details: "source=atom status=\(http.statusCode)"
+            details: "source=api status=\(http.statusCode)"
         )
+        if http.statusCode == 403 || http.statusCode == 429 {
+            await logWriter.log(
+                level: .warning,
+                event: "update_check_rate_limited",
+                details: "status=\(http.statusCode)"
+            )
+            throw UpdateServiceError.unavailable
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw UpdateServiceError.unavailable
+        }
+        do {
+            if data.first == 91 {
+                return try JSONDecoder().decode([ReleaseDTO].self, from: data)
+            }
+            return [try JSONDecoder().decode(ReleaseDTO.self, from: data)]
+        } catch {
+            await logWriter.log(
+                level: .error,
+                event: "update_check_decode_failed",
+                details: String(describing: error)
+            )
+            throw UpdateServiceError.invalidResponse
+        }
+    }
 
-        let parser = AtomReleaseParser()
-        guard let release = parser.parse(data: data) else {
+    private func checkForUpdateFromAtom(mirror: String?) async throws -> AppUpdate? {
+        let releases = try await fetchAtomReleases(mirror: mirror)
+        guard let release = releases.first(where: { Self.isMacOSRelease(tagName: $0.version) }) else {
             await logWriter.log(level: .error, event: "update_check_atom_decode_failed", details: nil)
             throw UpdateServiceError.invalidResponse
         }
@@ -296,6 +308,72 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
 
     /// Atom feed 不包含资产列表，只能按命名约定探测下载地址：
     /// 优先新命名的版本化文件（GitHub macOS CI runner 为 arm64），再回退旧的固定文件名。
+    private func fetchReleaseHistoryFromAtom(mirror: String?) async throws -> [AppReleaseHistoryItem] {
+        let releases = try await fetchAtomReleases(mirror: mirror)
+        var seen = Set<String>()
+        return releases
+            .compactMap { release -> AppReleaseHistoryItem? in
+                guard Self.isMacOSRelease(tagName: release.version) else { return nil }
+                let version = Self.normalize(release.version)
+                guard !version.isEmpty, seen.insert(version).inserted,
+                      let releaseURL = URL(string: rewrittenString(release.releaseURL, mirror: mirror)) else {
+                    return nil
+                }
+                return AppReleaseHistoryItem(
+                    version: version,
+                    releaseURL: releaseURL,
+                    notes: release.notes,
+                    publishedAt: release.publishedAt
+                )
+            }
+            .sorted {
+                Self.compare($0.version, $1.version) == .orderedDescending
+            }
+    }
+
+    private func fetchAtomReleases(mirror: String?) async throws -> [AtomRelease] {
+        await logWriter.log(level: .info, event: "update_check_atom_started", details: nil)
+        var request = URLRequest(
+            url: rewritten(Self.releasesAtomURL, mirror: mirror),
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: 30
+        )
+        request.setValue("application/atom+xml", forHTTPHeaderField: "Accept")
+        request.setValue("MyToken/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch is CancellationError {
+            await logWriter.log(level: .warning, event: "update_check_cancelled", details: "source=atom")
+            throw CancellationError()
+        } catch {
+            await logWriter.log(
+                level: .error,
+                event: "update_check_atom_network_failed",
+                details: String(describing: error)
+            )
+            throw UpdateServiceError.unavailable
+        }
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            await logWriter.log(level: .error, event: "update_check_atom_failed", details: "response=invalid")
+            throw UpdateServiceError.unavailable
+        }
+        await logWriter.log(
+            level: .info,
+            event: "update_check_response",
+            details: "source=atom status=\(http.statusCode)"
+        )
+
+        let releases = AtomReleaseParser().parseAll(data: data)
+        guard !releases.isEmpty else {
+            await logWriter.log(level: .error, event: "update_check_atom_decode_failed", details: nil)
+            throw UpdateServiceError.invalidResponse
+        }
+        return releases
+    }
+
     private static func resolveDMGAssetName(
         version: String,
         tag: String,
@@ -478,21 +556,13 @@ private final class AtomReleaseParser: NSObject, XMLParserDelegate {
     private var releaseURL: String?
     private var publishedText: String?
     private var notes = ""
-    private var stoppedAfterFirstEntry = false
-    func parse(data: Data) -> AtomRelease? {
+    private var releases: [AtomRelease] = []
+
+    func parseAll(data: Data) -> [AtomRelease] {
         let parser = XMLParser(data: data)
         parser.delegate = self
-        // Atom Feed 按最新版本排序。解析完第一条后停止，避免旧版本字段覆盖新版本。
         _ = parser.parse()
-        guard stoppedAfterFirstEntry, let version, let releaseURL else { return nil }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return AtomRelease(
-            version: version,
-            releaseURL: releaseURL,
-            notes: notes,
-            publishedAt: publishedText.flatMap(formatter.date(from:))
-        )
+        return releases
     }
 
     func parser(
@@ -547,10 +617,17 @@ private final class AtomReleaseParser: NSObject, XMLParserDelegate {
             }
         case "entry":
             inEntry = false
-            let isMacOSRelease = version?.range(of: "^(macos-)?v[0-9]+\\.[0-9]+\\.[0-9]+$", options: .regularExpression) != nil
-            if isMacOSRelease {
-                stoppedAfterFirstEntry = true
-                parser.abortParsing()
+            if let version, let releaseURL {
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions = [.withInternetDateTime]
+                releases.append(
+                    AtomRelease(
+                        version: version,
+                        releaseURL: releaseURL,
+                        notes: notes,
+                        publishedAt: publishedText.flatMap(formatter.date(from:))
+                    )
+                )
             }
         default:
             break

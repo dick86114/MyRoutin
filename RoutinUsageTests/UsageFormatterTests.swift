@@ -7,8 +7,19 @@ final class UsageFormatterTests: XCTestCase {
     func test统一指标数值使用紧凑格式() {
         XCTAssertEqual(UsageFormatter.compactMetricValue(120_000), "120K")
         XCTAssertEqual(UsageFormatter.compactMetricValue(4_500), "4.5K")
+        XCTAssertEqual(UsageFormatter.compactMetricValue(4_567), "4.57K")
+        XCTAssertEqual(UsageFormatter.compactMetricValue(Decimal(string: "0.1342")), "0.13")
         XCTAssertEqual(UsageFormatter.compactMetricValue(42), "42")
         XCTAssertEqual(UsageFormatter.compactMetricValue(nil), "—")
+    }
+
+    func test凭证数值和百分比最多保留两位小数() {
+        XCTAssertEqual(UsageFormatter.numberText(Decimal(string: "12.345")), "12.35")
+        XCTAssertEqual(UsageFormatter.numberText(Decimal(string: "12.344")), "12.34")
+        XCTAssertEqual(UsageFormatter.numberText(7), "7")
+        XCTAssertEqual(UsageFormatter.displayPercentText(0.1342), "0.13%")
+        XCTAssertEqual(UsageFormatter.displayPercentText(67.555), "67.56%")
+        XCTAssertEqual(UsageFormatter.displayPercentText(42), "42%")
     }
 
     func testNewAPI货币单位保留两位小数() {
@@ -26,6 +37,10 @@ final class UsageFormatterTests: XCTestCase {
         XCTAssertEqual(
             UsageFormatter.exactTokenText(7_362_665),
             "7,362,665"
+        )
+        XCTAssertEqual(
+            UsageFormatter.exactTokenText(Decimal(string: "1234.567")),
+            "1,234.57"
         )
         XCTAssertEqual(UsageFormatter.exactTokenText(nil), "—")
     }
@@ -347,6 +362,12 @@ final class UsageFormatterTests: XCTestCase {
                 UsageGroupMultiplier(name: "Codex Pro", multiplier: 2),
             ]),
             "Codex ×1、Codex Pro ×2"
+        )
+        XCTAssertEqual(
+            UsageFormatter.groupMultiplierText([
+                UsageGroupMultiplier(name: "Fast", multiplier: Decimal(string: "1.3333")!),
+            ]),
+            "Fast ×1.33"
         )
     }
 
@@ -710,7 +731,7 @@ final class UsageFormatterTests: XCTestCase {
                 metric: metric,
                 dimension: .fiveHour,
             ),
-            "主账号，已使用 68%，$6.80 / $10.00，5 小时剩余 —，周剩余 —"
+            "主账号，已使用 67.5%，$6.80 / $10.00，5 小时剩余 —，周剩余 —"
         )
         XCTAssertEqual(
             UsageRowAccessibility.hint(),
@@ -728,7 +749,7 @@ final class UsageFormatterTests: XCTestCase {
                 metric: metric,
                 dimension: .fiveHour,
             ),
-            "主账号，已使用 68%，$6.80 / $10.00，5 小时剩余 —，周剩余 —"
+            "主账号，已使用 67.5%，$6.80 / $10.00，5 小时剩余 —，周剩余 —"
         )
         XCTAssertEqual(
             UsageRowAccessibility.hint(),

@@ -9,7 +9,7 @@ struct VolcenginePlanUsageProvider: UsageProvider {
     init(
         session: URLSession = .shared,
         signer: VolcengineRequestSigner = VolcengineRequestSigner(),
-        endpoint: URL = URL(string: "https://open.volcengineapi.com/")!
+        endpoint: URL = URL(string: "https://ark.cn-beijing.volcengineapi.com/")!
     ) {
         self.session = session
         self.signer = signer
@@ -66,7 +66,7 @@ struct VolcenginePlanUsageProvider: UsageProvider {
 
         let body = Data("{}".utf8)
         let data = try await sendRequest(
-            action: isCoding ? "GetCodingPlanUsage" : "GetAgentPlanAFPUsage",
+            action: isCoding ? "GetCodingPlanUsage" : "GetAFPUsage",
             body: body,
             accessKeyID: accessKeyID,
             secretAccessKey: credential.secret,
@@ -112,8 +112,8 @@ struct VolcenginePlanUsageProvider: UsageProvider {
                 metrics = result.quotaUsage.enumerated().map { index, item in
                     let percent = NSDecimalNumber(decimal: item.percent).doubleValue
                     return NormalizedUsageMetric(
-                        id: "coding-\(index)",
-                        label: item.level,
+                        id: Self.codingMetricID(for: item.level) ?? "coding-\(index)",
+                        label: Self.codingMetricLabel(for: item.level) ?? item.level,
                         used: item.percent,
                         limit: 100,
                         remaining: max(0, 100 - item.percent),
@@ -196,6 +196,33 @@ struct VolcenginePlanUsageProvider: UsageProvider {
         return nil
     }
 
+    /// 将 Coding Plan 接口返回的周期名称映射到全局视图使用的指标 ID。
+    private static func codingMetricID(for level: String) -> String? {
+        switch level.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "session", "5h", "fivehour", "five_hour", "five-hour":
+            return "fiveHour"
+        case "weekly", "week", "1w", "7d", "seven_day":
+            return "weekly"
+        case "monthly", "month", "1m", "30d":
+            return "monthly"
+        default:
+            return nil
+        }
+    }
+
+    private static func codingMetricLabel(for level: String) -> String? {
+        switch level.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "session", "5h", "fivehour", "five_hour", "five-hour":
+            return "近 5 小时用量"
+        case "weekly", "week", "1w", "7d", "seven_day":
+            return "近一周用量"
+        case "monthly", "month", "1m", "30d":
+            return "近一月用量"
+        default:
+            return nil
+        }
+    }
+
     private static func makeURL(endpoint: URL, action: String) -> URL? {
         URL(string: endpoint.absoluteString + "?Action=\(action)&Version=2024-01-01")
     }
@@ -222,7 +249,7 @@ struct VolcenginePlanUsageProvider: UsageProvider {
         request.httpBody = body
         var headers = [
             "Content-Type": "application/json",
-            "Host": url.host ?? "open.volcengineapi.com"
+            "Host": url.host ?? "ark.cn-beijing.volcengineapi.com"
         ]
         headers = signer.sign(
             method: "POST",

@@ -62,8 +62,8 @@ enum UsageRowAccessibility {
             summary = prefix + UsageFormatter.statusText(state: state, dimension: dimension)
                 + "，没有缓存"
         } else if let metric,
-                  let percentText = UsageFormatter.percentText(metric) {
-            summary = prefix + "已使用 \(percentText)，\(UsageFormatter.fullAmount(metric))"
+                  metric.percent.isFinite {
+            summary = prefix + "已使用 \(UsageFormatter.displayPercentText(metric.percent))，\(UsageFormatter.fullAmount(metric))"
         } else {
             summary = prefix + UsageFormatter.statusText(state: state, dimension: dimension)
         }
@@ -133,8 +133,8 @@ private extension UsageRowView {
                 if validMetric(state.snapshot?.token) != nil || hasGroupMultipliers || state.snapshot?.metrics.isEmpty == false {
                     VStack(alignment: .trailing, spacing: 3) {
                         if let metric = validMetric(state.snapshot?.token),
-                           let percentText = UsageFormatter.percentText(metric) {
-                            Text(percentText)
+                           metric.percent.isFinite {
+                            Text(UsageFormatter.displayPercentText(metric.percent))
                                 .font(.system(.headline, design: .rounded, weight: .semibold))
                                 .monospacedDigit()
                                 .foregroundStyle(progressColor(for: metric))
@@ -227,8 +227,8 @@ private extension UsageRowView {
                 let percent = NSDecimalNumber(decimal: used)
                     .dividing(by: NSDecimalNumber(decimal: limit))
                     .multiplying(by: 100)
-                    .intValue
-                Text("\(percent)%")
+                    .doubleValue
+                Text(UsageFormatter.displayPercentText(percent))
                     .font(.system(.headline, design: .rounded, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(normalizedMetricColor(metric.healthState))
@@ -248,8 +248,7 @@ private extension UsageRowView {
     }
 
     func decimalText(_ value: Decimal?) -> String {
-        guard let value else { return "—" }
-        return NSDecimalNumber(decimal: value).stringValue
+        UsageFormatter.numberText(value)
     }
 
     func normalizedMetricColor(_ state: UsageMetricHealthState) -> Color {
@@ -431,7 +430,7 @@ private extension UsageRowView {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 4)
-                    Text(UsageFormatter.percentText(metric) ?? "—")
+                    Text(UsageFormatter.displayPercentText(metric.percent))
                         .font(.system(.headline, design: .rounded, weight: .semibold))
                         .foregroundStyle(progressColor(for: metric))
                         .monospacedDigit()
@@ -599,7 +598,7 @@ private extension UsageRowView {
                     return "余额 \(decimalText(metric.value)) \(metric.currencyCode ?? "")"
                 }
                 if let percent = metric.displayedPercent {
-                    return "\(metric.label) \(metric.displaysRemainingPercent ? "剩余" : "已使用") \(Int(percent.rounded()))%"
+                    return "\(metric.label) \(metric.displaysRemainingPercent ? "剩余" : "已使用") \(UsageFormatter.displayPercentText(percent))"
                 }
                 return metric.label
             }.joined(separator: "，")

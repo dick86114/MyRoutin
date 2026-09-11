@@ -1,6 +1,8 @@
 package ai.routin.mytoken.update
 
 import ai.routin.mytoken.feature.settings.AppUpdateController
+import ai.routin.mytoken.feature.settings.AppReleaseHistoryItem
+import ai.routin.mytoken.feature.settings.AppReleaseHistoryUiState
 import ai.routin.mytoken.feature.settings.AppUpdateUiState
 import android.content.Context
 import android.content.Intent
@@ -12,7 +14,6 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,9 +47,13 @@ class GitHubAppUpdateController(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
     private val _state = MutableStateFlow<AppUpdateUiState>(AppUpdateUiState.Idle)
+    private val _releaseHistoryState =
+        MutableStateFlow<AppReleaseHistoryUiState>(AppReleaseHistoryUiState.Idle)
     private var downloadedUpdate: DownloadedUpdate? = null
 
     override val state: StateFlow<AppUpdateUiState> = _state.asStateFlow()
+    override val releaseHistoryState: StateFlow<AppReleaseHistoryUiState> =
+        _releaseHistoryState.asStateFlow()
 
     override fun checkForUpdates() {
         scope.launch {
@@ -71,6 +76,20 @@ class GitHubAppUpdateController(
                 _state.update { nextState }
             }.onFailure { error ->
                 _state.update { AppUpdateUiState.Error(error.userMessage()) }
+            }
+        }
+    }
+
+    override fun loadReleaseHistory() {
+        if (_releaseHistoryState.value is AppReleaseHistoryUiState.Loading) return
+        scope.launch {
+            _releaseHistoryState.value = AppReleaseHistoryUiState.Loading
+            runCatching {
+                fetchReleaseHistoryWithFallback(mirrorBase())
+            }.onSuccess { releases ->
+                _releaseHistoryState.value = AppReleaseHistoryUiState.Loaded(releases)
+            }.onFailure {
+                _releaseHistoryState.value = AppReleaseHistoryUiState.Error("更新日志加载失败，请稍后重试")
             }
         }
     }
@@ -208,6 +227,69 @@ class GitHubAppUpdateController(
         return release.copy(downloadUrl = applyMirror(release.downloadUrl, mirror))
     }
 
+    private suspend fun fetchReleaseHistory(mirror: String?): List<AppReleaseHistoryItem> {
+        val body = network(
+            "https://api.github.com/repos/$repository/releases?per_page=100",
+            mapOf(
+                "Accept" to "application/vnd.github+json",
+                "X-GitHub-Api-Version" to "2022-11-28",
+            ),
+        ).body
+        val releases = org.json.JSONArray(body)
+        val seenVersions = mutableSetOf<String>()
+        val result = mutableListOf<AppReleaseHistoryItem>()
+        for (index in 0 until releases.length()) {
+            val release = releases.getJSONObject(index)
+            val match = ANDROID_RELEASE_TAG_REGEX.matchEntire(release.optString("tag_name")) ?: continue
+            val version = match.groupValues[1]
+            if (!seenVersions.add(version)) continue
+            val releaseUrl = release.optString("html_url")
+                .takeIf { it.isNotBlank() }
+                ?.let { applyMirror(it, mirror) }
+                ?: continue
+            result += AppReleaseHistoryItem(
+                version = version,
+                releaseNotes = release.optString("body"),
+                releaseUrl = releaseUrl,
+                publishedAt = release.optString("published_at").takeIf { it.isNotBlank() },
+            )
+        }
+        return result.sortedWith { left, right ->
+            compareVersions(right.version, left.version)
+        }
+    }
+
+    private suspend fun fetchReleaseHistoryWithFallback(
+        mirror: String?,
+    ): List<AppReleaseHistoryItem> = try {
+        fetchReleaseHistory(mirror)
+    } catch (error: IOException) {
+        fetchReleaseHistoryFromAtom(mirror)
+    }
+
+    private suspend fun fetchReleaseHistoryFromAtom(
+        mirror: String?,
+    ): List<AppReleaseHistoryItem> {
+        val body = network(
+            applyMirror("https://github.com/$repository/releases.atom", mirror),
+            mapOf("Accept" to "application/atom+xml"),
+        ).body
+        val seenVersions = mutableSetOf<String>()
+        return parseAndroidAtomReleases(body)
+            .mapNotNull { release ->
+                if (!seenVersions.add(release.version)) return@mapNotNull null
+                AppReleaseHistoryItem(
+                    version = release.version,
+                    releaseNotes = release.notes,
+                    releaseUrl = applyMirror(release.releaseUrl, mirror),
+                    publishedAt = release.publishedAt,
+                )
+            }
+            .sortedWith { left, right ->
+                compareVersions(right.version, left.version)
+            }
+    }
+
     private suspend fun fetchLatestReleaseFromApi(): AvailableRelease {
         val body = network(
             "https://api.github.com/repos/$repository/releases?per_page=100",
@@ -310,46 +392,64 @@ class GitHubAppUpdateController(
     }
 
     /** 解析 Atom feed 里最新的 android-vX.Y.Z 条目，返回 tag（如 android-v0.0.4）。 */
-    private fun parseLatestAndroidTag(body: String): String? {
+    private fun parseLatestAndroidTag(body: String): String? =
+        parseAndroidAtomReleases(body).firstOrNull()?.let { "android-v${it.version}" }
+
+    private fun parseAndroidAtomReleases(body: String): List<AndroidAtomRelease> {
         val parser = Xml.newPullParser()
         parser.setFeature(org.xmlpull.v1.XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
         parser.setInput(body.reader())
         var event = parser.eventType
         var inEntry = false
         var currentText = StringBuilder()
-        var entryTag: String? = null
+        var version: String? = null
+        var releaseUrl: String? = null
+        var notes = ""
+        var publishedAt: String? = null
+        val releases = mutableListOf<AndroidAtomRelease>()
         while (event != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
             when (event) {
-                org.xmlpull.v1.XmlPullParser.START_TAG -> when (parser.name) {
-                    "entry" -> {
-                        inEntry = true
-                        currentText = StringBuilder()
-                        entryTag = null
-                    }
-                    "link" -> {
-                        if (inEntry && parser.getAttributeValue(null, "rel") == "alternate") {
-                            entryTag = parser.getAttributeValue(null, "href")
-                                ?.substringAfterLast('/')
-                                ?.takeIf { it.startsWith("android-v") }
-                                ?: entryTag
+                org.xmlpull.v1.XmlPullParser.START_TAG -> {
+                    when (parser.name) {
+                        "entry" -> {
+                            inEntry = true
+                            currentText = StringBuilder()
+                            version = null
+                            releaseUrl = null
+                            notes = ""
+                            publishedAt = null
+                        }
+                        "link" -> if (inEntry && parser.getAttributeValue(null, "rel") == "alternate") {
+                            releaseUrl = parser.getAttributeValue(null, "href")
                         }
                     }
+                    currentText = StringBuilder()
                 }
                 org.xmlpull.v1.XmlPullParser.TEXT -> if (inEntry) currentText.append(parser.text)
                 org.xmlpull.v1.XmlPullParser.END_TAG -> when (parser.name) {
-                    "id" -> if (inEntry && entryTag == null) {
-                        entryTag = currentText.toString().trim().substringAfterLast('/')
-                            .takeIf { it.startsWith("android-v") }
+                    "id" -> if (inEntry && version == null) {
+                        version = androidVersion(currentText.toString().trim().substringAfterLast('/'))
                     }
-                    "title" -> if (inEntry && entryTag == null) {
-                        entryTag = currentText.toString().trim().split(' ')
-                            .lastOrNull { it.startsWith("android-v") }
+                    "title" -> if (inEntry && version == null) {
+                        version = Regex("android-v\\d+(?:\\.\\d+)+")
+                            .find(currentText.toString().trim())
+                            ?.value
+                            ?.let(::androidVersion)
+                    }
+                    "content" -> if (inEntry) notes = currentText.toString().trim()
+                    "published", "updated" -> if (inEntry && publishedAt == null) {
+                        publishedAt = currentText.toString().trim().takeIf { it.isNotBlank() }
                     }
                     "entry" -> {
-                        if (entryTag != null &&
-                            entryTag.matches(Regex("^android-v\\d+\\.\\d+\\.\\d+$"))
-                        ) {
-                            return entryTag
+                        val currentVersion = version
+                        val currentUrl = releaseUrl
+                        if (currentVersion != null && currentUrl != null) {
+                            releases += AndroidAtomRelease(
+                                version = currentVersion,
+                                releaseUrl = currentUrl,
+                                notes = notes,
+                                publishedAt = publishedAt,
+                            )
                         }
                         inEntry = false
                     }
@@ -357,8 +457,11 @@ class GitHubAppUpdateController(
             }
             event = parser.next()
         }
-        return null
+        return releases
     }
+
+    private fun androidVersion(tag: String?): String? =
+        tag?.takeIf { ANDROID_RELEASE_TAG_REGEX.matches(it) }?.removePrefix("android-v")
 
     private fun install(update: DownloadedUpdate) {
         val uri = FileProvider.getUriForFile(
@@ -392,6 +495,13 @@ class GitHubAppUpdateController(
         val downloadUrl: String,
     )
 
+    private data class AndroidAtomRelease(
+        val version: String,
+        val releaseUrl: String,
+        val notes: String,
+        val publishedAt: String?,
+    )
+
     private data class ReleaseAsset(
         val name: String,
         val url: String,
@@ -404,6 +514,7 @@ class GitHubAppUpdateController(
             "^MyToken-(\\d+(?:\\.\\d+)+)-android(-debug)?\\.apk$",
             option = RegexOption.IGNORE_CASE,
         )
+        private val ANDROID_RELEASE_TAG_REGEX = Regex("^android-v(\\d+(?:\\.\\d+)+)$")
         private const val APK_MIME = "application/vnd.android.package-archive"
 
         internal fun compareVersions(left: String, right: String): Int {

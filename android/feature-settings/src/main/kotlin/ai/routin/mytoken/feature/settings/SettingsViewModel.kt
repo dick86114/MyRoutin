@@ -48,7 +48,11 @@ class SettingsViewModel(
 
     val updateState: StateFlow<AppUpdateUiState> = updateController.state
 
+    val releaseHistoryState: StateFlow<AppReleaseHistoryUiState> = updateController.releaseHistoryState
+
     fun checkForUpdates() = updateController.checkForUpdates()
+
+    fun loadReleaseHistory() = updateController.loadReleaseHistory()
 
     fun downloadAndInstall(version: String, downloadUrl: String) =
         updateController.downloadAndInstall(version, downloadUrl)

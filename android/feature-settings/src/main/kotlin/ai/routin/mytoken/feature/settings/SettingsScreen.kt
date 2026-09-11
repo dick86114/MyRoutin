@@ -10,16 +10,27 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.HorizontalDivider
 import ai.routin.mytoken.core.ui.SectionCard
 import ai.routin.mytoken.core.ui.GlassButton
@@ -27,6 +38,7 @@ import ai.routin.mytoken.core.ui.GlassButtonTone
 import ai.routin.mytoken.core.ui.glassFilterChipBorder
 import ai.routin.mytoken.core.ui.glassFilterChipColors
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.SpanStyle
@@ -40,6 +52,7 @@ fun SettingsScreen(
     state: SettingsUiState,
     appVersion: String,
     updateState: AppUpdateUiState = AppUpdateUiState.Idle,
+    releaseHistoryState: AppReleaseHistoryUiState = AppReleaseHistoryUiState.Idle,
     onAutoRefreshChange: (Boolean) -> Unit,
     onIntervalChange: (Int) -> Unit,
     onWifiOnlyChange: (Boolean) -> Unit,
@@ -54,11 +67,18 @@ fun SettingsScreen(
     notificationPermissionGranted: Boolean = true,
     onRequestNotificationPermission: () -> Unit = {},
     onCheckForUpdates: () -> Unit = {},
+    onLoadReleaseHistory: () -> Unit = {},
     onDownloadAndInstall: (String, String) -> Unit = { _, _ -> },
     onOpenInstallPermissionSettings: () -> Unit = {},
     onInstallDownloadedUpdate: () -> Unit = {},
     onMirrorBaseChange: (String) -> Unit = {},
 ) {
+    var showReleaseHistory by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        onLoadReleaseHistory()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -148,29 +168,179 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "更新通道",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    UpdateChannelSection(
-                        mirrorBase = state.update.mirrorBase,
-                        onMirrorBaseChange = onMirrorBaseChange,
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 6.dp),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                    )
-                    UpdateSection(
-                        state = updateState,
+                    CurrentReleaseNotesSection(
+                        state = releaseHistoryState,
                         currentVersion = appVersion,
-                        onCheckForUpdates = onCheckForUpdates,
-                        onDownloadAndInstall = onDownloadAndInstall,
-                        onOpenInstallPermissionSettings = onOpenInstallPermissionSettings,
-                        onInstallDownloadedUpdate = onInstallDownloadedUpdate,
+                        onRetry = onLoadReleaseHistory,
+                    )
+                    GlassButton(
+                        onClick = { showReleaseHistory = true },
+                        text = "查看历史版本",
+                        modifier = Modifier.testTag("release_history_button"),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "应用更新",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        UpdateChannelSection(
+                            mirrorBase = state.update.mirrorBase,
+                            onMirrorBaseChange = onMirrorBaseChange,
+                        )
+                        UpdateSection(
+                            state = updateState,
+                            currentVersion = appVersion,
+                            onCheckForUpdates = onCheckForUpdates,
+                            onDownloadAndInstall = onDownloadAndInstall,
+                            onOpenInstallPermissionSettings = onOpenInstallPermissionSettings,
+                            onInstallDownloadedUpdate = onInstallDownloadedUpdate,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showReleaseHistory) {
+        ReleaseHistoryDialog(
+            state = releaseHistoryState,
+            onDismiss = { showReleaseHistory = false },
+            onRetry = onLoadReleaseHistory,
+        )
+    }
+}
+
+@Composable
+private fun CurrentReleaseNotesSection(
+    state: AppReleaseHistoryUiState,
+    currentVersion: String,
+    onRetry: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "当前版本更新日志",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        when (state) {
+            AppReleaseHistoryUiState.Idle,
+            AppReleaseHistoryUiState.Loading -> {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Text(
+                        text = "正在加载更新日志...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
+            is AppReleaseHistoryUiState.Error -> {
+                Text(
+                    text = state.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                GlassButton(onClick = onRetry, text = "重试")
+            }
+            is AppReleaseHistoryUiState.Loaded -> {
+                val current = state.releases.firstOrNull { it.version == currentVersion }
+                if (current == null || current.releaseNotes.isBlank()) {
+                    Text(
+                        text = "此版本未提供更新日志",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    MarkdownText(markdown = current.releaseNotes)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReleaseHistoryDialog(
+    state: AppReleaseHistoryUiState,
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("历史版本更新日志") },
+        text = {
+            when (state) {
+                AppReleaseHistoryUiState.Idle,
+                AppReleaseHistoryUiState.Loading -> Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text("正在加载更新日志...")
+                }
+                is AppReleaseHistoryUiState.Error -> Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(state.message, color = MaterialTheme.colorScheme.error)
+                    GlassButton(onClick = onRetry, text = "重试")
+                }
+                is AppReleaseHistoryUiState.Loaded -> {
+                    if (state.releases.isEmpty()) {
+                        Text("暂无历史版本更新日志")
+                    } else {
+                        ReleaseHistoryList(releases = state.releases)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("完成")
+            }
+        },
+    )
+}
+
+@Composable
+private fun ReleaseHistoryList(releases: List<AppReleaseHistoryItem>) {
+    val uriHandler = LocalUriHandler.current
+    LazyColumn(
+        modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        items(releases, key = { it.version }) { release ->
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "v${release.version}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    release.publishedAt?.take(10)?.let { date ->
+                        Text(
+                            text = date,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (release.releaseNotes.isBlank()) {
+                    Text(
+                        text = "此版本未提供更新日志",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    MarkdownText(markdown = release.releaseNotes)
+                }
+                TextButton(onClick = { uriHandler.openUri(release.releaseUrl) }) {
+                    Text("在 GitHub 查看")
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         }
     }
 }

@@ -25,10 +25,30 @@ sealed interface AppUpdateUiState {
     data class Error(val message: String) : AppUpdateUiState
 }
 
+data class AppReleaseHistoryItem(
+    val version: String,
+    val releaseNotes: String,
+    val releaseUrl: String,
+    val publishedAt: String?,
+)
+
+sealed interface AppReleaseHistoryUiState {
+    data object Idle : AppReleaseHistoryUiState
+
+    data object Loading : AppReleaseHistoryUiState
+
+    data class Loaded(val releases: List<AppReleaseHistoryItem>) : AppReleaseHistoryUiState
+
+    data class Error(val message: String) : AppReleaseHistoryUiState
+}
+
 interface AppUpdateController {
     val state: StateFlow<AppUpdateUiState>
+    val releaseHistoryState: StateFlow<AppReleaseHistoryUiState>
 
     fun checkForUpdates()
+
+    fun loadReleaseHistory()
 
     fun downloadAndInstall(version: String, downloadUrl: String)
 
