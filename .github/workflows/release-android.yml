@@ -1,4 +1,5 @@
 name: 发布 Android
+run-name: 发布 Android v${{ inputs.version }} · ${{ inputs.release_notes }}
 
 on:
   workflow_dispatch:
@@ -12,7 +13,7 @@ on:
         required: true
         type: string
       release_notes:
-        description: 'Android 发布说明（Markdown）'
+        description: 'Android 发布说明（Markdown，首行用于工作流名称）'
         required: true
         type: string
 
@@ -21,10 +22,11 @@ permissions:
 
 jobs:
   build:
-    name: 构建 Android APK
+    name: 构建 Android APK v${{ inputs.version }}
     runs-on: ubuntu-latest
     env:
       RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_VERSION_CODE: ${{ inputs.version_code }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -44,6 +46,15 @@ jobs:
           [[ "${RELEASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "${{ inputs.version_code }}" =~ ^[1-9][0-9]*$ ]]
           (( ${{ inputs.version_code }} <= 2100000000 ))
+      - name: 写入发布摘要
+        env:
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          {
+            echo "## MyToken Android v${RELEASE_VERSION} (versionCode ${RELEASE_VERSION_CODE})"
+            echo
+            printf '%s\n' "${RELEASE_NOTES}"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: 校验签名配置
         if: env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEYSTORE_PASSWORD != '' && env.ANDROID_KEY_ALIAS != '' && env.ANDROID_KEY_PASSWORD != ''
         run: |

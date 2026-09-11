@@ -1,4 +1,5 @@
 name: 发布 macOS
+run-name: 发布 macOS v${{ inputs.version }} · ${{ inputs.release_notes }}
 
 on:
   workflow_dispatch:
@@ -8,7 +9,7 @@ on:
         required: true
         type: string
       release_notes:
-        description: 'macOS 发布说明（Markdown）'
+        description: 'macOS 发布说明（Markdown，首行用于工作流名称）'
         required: true
         type: string
 
@@ -17,7 +18,7 @@ permissions:
 
 jobs:
   build:
-    name: 构建 macOS DMG
+    name: 构建 macOS DMG v${{ inputs.version }}
     runs-on: macos-15
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
@@ -29,6 +30,15 @@ jobs:
       - name: 校验版本号
         run: |
           [[ "${RELEASE_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+      - name: 写入发布摘要
+        env:
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          {
+            echo "## MyToken macOS v${RELEASE_VERSION}"
+            echo
+            printf '%s\n' "${RELEASE_NOTES}"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: 校验 Xcode 26 与 macOS 26 SDK
         run: scripts/verify-xcode.sh
       - name: 安装 XcodeGen

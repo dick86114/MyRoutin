@@ -458,17 +458,23 @@ final class ProjectBootstrapTests: XCTestCase {
 
     func test发布工作流要求手动Markdown更新日志() throws {
         let workflow = try sourceText(at: ".github/workflows/release-macos.yml")
+        let androidWorkflow = try sourceText(at: ".github/workflows/release-android.yml")
         let releaseNotesInput = """
               release_notes:
-                description: 'macOS 发布说明（Markdown）'
+                description: 'macOS 发布说明（Markdown，首行用于工作流名称）'
                 required: true
                 type: string
         """
 
         XCTAssertTrue(workflow.contains(releaseNotesInput))
+        XCTAssertTrue(workflow.contains("run-name: 发布 macOS v${{ inputs.version }} · ${{ inputs.release_notes }}"))
+        XCTAssertTrue(androidWorkflow.contains("run-name: 发布 Android v${{ inputs.version }} · ${{ inputs.release_notes }}"))
         XCTAssertTrue(workflow.contains("release_notes:"))
         XCTAssertTrue(workflow.contains("body: ${{ inputs.release_notes }}"))
         XCTAssertTrue(workflow.contains("generate_release_notes: false"))
+        XCTAssertTrue(workflow.contains("GITHUB_STEP_SUMMARY"))
+        XCTAssertTrue(androidWorkflow.contains("GITHUB_STEP_SUMMARY"))
+        XCTAssertTrue(androidWorkflow.contains("body: ${{ inputs.release_notes }}"))
     }
 
     func test发布工作流显式选择并校验Xcode() throws {
@@ -701,6 +707,8 @@ final class ProjectBootstrapTests: XCTestCase {
             resource = ("test", "sh")
         case ".github/workflows/release-macos.yml":
             resource = ("release-macos", "yml")
+        case ".github/workflows/release-android.yml":
+            resource = ("release-android", "yml")
         case ".github/workflows/ci.yml":
             resource = ("ci", "yml")
         case "RoutinUsage/App/RoutinUsageApp.swift":
