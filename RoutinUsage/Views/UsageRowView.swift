@@ -31,12 +31,47 @@ struct UsageRowView: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(ProviderTheme.borderColor(for: state.configuration.providerID))
             }
+            .overlay {
+                if state.isRefreshing {
+                    RefreshingCardBorder(
+                        color: ProviderTheme.accentColor(for: state.configuration.providerID)
+                    )
+                }
+            }
             .saturation(state.configuration.isEnabled ? 1 : 0)
             .opacity(isSubscriptionExpired(now: timeline.date) ? 0.45 : 1)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityLabel(now: timeline.date))
             .accessibilityHint(accessibilityHint)
         }
+    }
+}
+
+private struct RefreshingCardBorder: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let color: Color
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+            let phase = reduceMotion
+                ? 0
+                : -timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1) * 28
+
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(
+                    color,
+                    style: StrokeStyle(
+                        lineWidth: 2,
+                        lineCap: .round,
+                        lineJoin: .round,
+                        dash: [12, 7],
+                        dashPhase: phase
+                    )
+                )
+                .shadow(color: color.opacity(0.35), radius: 2)
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -127,6 +162,7 @@ private extension UsageRowView {
                     subscriptionDescription(now: now)
                     subscriptionPeriodDetails
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Spacer(minLength: 8)
 
@@ -152,9 +188,6 @@ private extension UsageRowView {
                                 .font(.caption2)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        if hasGroupMultipliers {
-                            probeButton
-                        }
                     }
                 }
             }
@@ -169,26 +202,6 @@ private extension UsageRowView {
         .accessibilityLabel(groupMultiplierAccessibilityLabel(group: group))
     }
 
-    @ViewBuilder
-    var probeButton: some View {
-        if detectionState.isBusy {
-            ProgressView()
-                .controlSize(.small)
-                .frame(width: 16, height: 16)
-                .padding(.leading, 5)
-                .accessibilityLabel("正在获取 Codex 当前分组")
-        } else {
-            Button(action: requestDetection) {
-                Image(systemName: "location.magnifyingglass")
-                    .frame(width: 16, height: 16)
-            }
-            .buttonStyle(.plain)
-            .disabled(isAnotherDetectionActive)
-            .help("获取 Codex 当前分组")
-            .accessibilityLabel("获取 Codex 当前分组")
-            .padding(.leading, 5)
-        }
-    }
 
     @ViewBuilder
     var subscriptionPeriodDetails: some View {
@@ -283,14 +296,6 @@ private extension UsageRowView {
                     codexGroupDetectionStatus
                 }
 
-                if state.isRefreshing || state.isStale || state.error != nil {
-                    Label(
-                        UsageFormatter.statusText(state: state),
-                        systemImage: "clock.badge.exclamationmark"
-                    )
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
             }
         } else {
             statusLabel
@@ -500,6 +505,20 @@ private extension UsageRowView {
 
     @ViewBuilder
     func subscriptionDescription(now: Date) -> some View {
+        HStack(spacing: 8) {
+            subscriptionDescriptionContent(now: now)
+
+            Spacer(minLength: 8)
+
+            if state.error != nil {
+                refreshFailureIndicator
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    func subscriptionDescriptionContent(now: Date) -> some View {
         if let snapshot = state.snapshot {
             let planSuffix = snapshot.planName.isEmpty ? "" : " · \(snapshot.planName)"
 
@@ -536,6 +555,14 @@ private extension UsageRowView {
         }
     }
 
+    var refreshFailureIndicator: some View {
+        Image(systemName: "exclamationmark.triangle.fill")
+            .font(.caption)
+            .foregroundStyle(.orange)
+            .help(UsageFormatter.refreshFailureTooltip(state: state))
+            .accessibilityLabel(UsageFormatter.refreshFailureTooltip(state: state))
+    }
+
     func subscriptionDescriptionText(for snapshot: UsageSnapshot) -> String {
         UsageRowPresentation.subscriptionDescription(
             providerID: state.configuration.providerID,
@@ -568,22 +595,7 @@ private extension UsageRowView {
 
     @ViewBuilder
     var statusLabel: some View {
-        if state.isRefreshing && state.snapshot == nil {
-            Label(
-                UsageFormatter.statusText(state: state),
-                systemImage: "arrow.triangle.2.circlepath"
-            )
-        } else if state.error == .noSubscription {
-            Label(
-                UsageFormatter.statusText(state: state),
-                systemImage: "minus.circle"
-            )
-        } else if state.error != nil {
-            Label(
-                UsageFormatter.statusText(state: state),
-                systemImage: "exclamationmark.triangle"
-            )
-        } else {
+        if !state.isRefreshing, state.error == nil {
             Label(
                 UsageFormatter.statusText(state: state),
                 systemImage: "clock"

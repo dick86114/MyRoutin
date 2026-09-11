@@ -346,6 +346,21 @@ enum UsageFormatter {
         return state.snapshot == nil ? "等待首次刷新" : "用量数据可用"
     }
 
+    /// 凭证卡片失败标识的悬浮提示，说明失败原因与当前展示的数据来源。
+    static func refreshFailureTooltip(state: KeyUsageState) -> String {
+        guard let error = state.error else {
+            return "刷新失败"
+        }
+        let reason = errorText(error)
+        guard state.snapshot != nil else {
+            return "\(reason)。暂无可用缓存，将在下次刷新时重试。"
+        }
+        guard let lastSuccessAt = state.lastSuccessAt else {
+            return "\(reason)。当前显示上次成功数据。"
+        }
+        return "\(reason)。当前显示 \(lastSuccessAt.formatted(date: .abbreviated, time: .shortened)) 的上次成功数据。"
+    }
+
     /// New API 站点可能把内部 quota 换算为 CNY/USD 等展示单位；这里统一保留两位小数。
     static func currencyText(_ value: Decimal?, symbol: String) -> String {
         guard let value else { return "—" }

@@ -693,6 +693,25 @@ final class UsageFormatterTests: XCTestCase {
         XCTAssertEqual(UsageFormatter.statusText(state: state), "网络错误，将自动重试")
     }
 
+    func test刷新失败悬浮提示说明错误和上次数据() {
+        let state = makeState(
+            snapshot: makePeriodicSnapshot(fiveHourPercent: 68),
+            error: .network
+        )
+
+        let tooltip = UsageFormatter.refreshFailureTooltip(state: state)
+        XCTAssertTrue(tooltip.contains("网络错误，将自动重试"))
+        XCTAssertTrue(tooltip.contains("上次成功数据"))
+    }
+
+    func test刷新失败无缓存时悬浮提示说明暂无缓存() {
+        let state = makeState(snapshot: nil, error: .invalidResponse)
+
+        let tooltip = UsageFormatter.refreshFailureTooltip(state: state)
+        XCTAssertTrue(tooltip.contains("接口数据异常，请刷新重试"))
+        XCTAssertTrue(tooltip.contains("暂无可用缓存"))
+    }
+
     func test非有限百分比显示安全错误状态() {
         let state = makeState(snapshot: makePeriodicSnapshot(fiveHourPercent: .nan))
 

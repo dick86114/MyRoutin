@@ -239,6 +239,17 @@ final class ProjectBootstrapTests: XCTestCase {
         XCTAssertTrue(usageRowView.contains("UsageMetricPresentation.color(for: metric.percent)"))
     }
 
+    func test凭证刷新使用边框动效且失败改用悬浮标识() throws {
+        let row = try sourceText(at: "RoutinUsage/Views/UsageRowView.swift")
+
+        XCTAssertTrue(row.contains("RefreshingCardBorder"))
+        XCTAssertTrue(row.contains("TimelineView(.animation"))
+        XCTAssertTrue(row.contains("refreshFailureIndicator"))
+        XCTAssertTrue(row.contains("exclamationmark.triangle.fill"))
+        XCTAssertTrue(row.contains("UsageFormatter.refreshFailureTooltip"))
+        XCTAssertFalse(row.contains("clock.badge.exclamationmark"))
+    }
+
     func test菜单栏弹窗不再提供Key选中交互() throws {
         let popover = try sourceText(at: "RoutinUsage/Views/UsagePopoverView.swift")
         let row = try sourceText(at: "RoutinUsage/Views/UsageRowView.swift")
@@ -654,7 +665,7 @@ final class ProjectBootstrapTests: XCTestCase {
         XCTAssertTrue(popover.contains("openWindow(id: \"routin-check-in\")"))
         XCTAssertTrue(popover.contains("codexGroupDetectionStatus"))
         XCTAssertTrue(popover.contains("ProgressView()"))
-        XCTAssertTrue(row.contains("location.magnifyingglass"))
+        XCTAssertFalse(row.contains("location.magnifyingglass"))
         XCTAssertTrue(row.contains("Color.green"))
         XCTAssertTrue(row.contains("Codex 分组检测"))
         XCTAssertFalse(row.contains(".isButton"))
