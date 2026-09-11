@@ -121,7 +121,7 @@ final class UsagePresentationPolicyTests: XCTestCase {
         XCTAssertTrue(lines.last?.highlights == true)
     }
 
-    func testCommandCode累计请求采用左标签右值() throws {
+    func testCommandCode摘要指标同排显示且名称在上值在下() throws {
         let source = try String(
             contentsOf: URL(fileURLWithPath: #filePath)
                 .deletingLastPathComponent()
@@ -132,8 +132,11 @@ final class UsagePresentationPolicyTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(source.contains("Spacer(minLength: 4)"))
-        XCTAssertTrue(source.contains("numberText(metric.value)"))
+        XCTAssertTrue(source.contains("private var summaryMetricsCell: some View"))
+        XCTAssertTrue(source.contains("requestCountCell(layout.requestCount)"))
+        XCTAssertTrue(source.contains("valueCell(layout.purchasedRemaining, fallbackLabel: \"购买剩余\")"))
+        XCTAssertTrue(source.contains("valueCell(layout.freeRemaining, fallbackLabel: \"赠送剩余\")"))
+        XCTAssertTrue(source.contains("Text(metric.label.isEmpty ? \"累计请求\" : metric.label)"))
     }
 
     func testCommandCode金额四舍五入保留两位小数() {

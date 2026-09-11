@@ -1,27 +1,41 @@
 import SwiftUI
 
 struct CredentialAlertSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
     let title: String
     @Bindable var model: CredentialAlertSettingsModel
 
     var body: some View {
-        Form {
-            Section("凭证提醒") {
-                Toggle("提醒此凭证", isOn: $model.notificationsEnabled)
-                    .accessibilityLabel("提醒此凭证")
-            }
+        VStack(spacing: 0) {
+            Form {
+                Section("凭证提醒") {
+                    Toggle("提醒此凭证", isOn: $model.notificationsEnabled)
+                        .accessibilityLabel("提醒此凭证")
+                }
 
-            ForEach(model.rules) { rule in
-                MetricAlertRuleEditor(
-                    rule: Binding(
-                        get: { rule },
-                        set: { model.updateRule($0) }
-                    ),
-                    metric: model.metric(for: rule)
-                )
+                ForEach(model.rules) { rule in
+                    MetricAlertRuleEditor(
+                        rule: Binding(
+                            get: { rule },
+                            set: { model.updateRule($0) }
+                        ),
+                        metric: model.metric(for: rule)
+                    )
+                }
             }
+            .formStyle(.grouped)
+
+            Divider()
+
+            HStack {
+                Spacer()
+                Button("关闭") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+            }
+            .padding(16)
         }
-        .formStyle(.grouped)
         .frame(width: 440, height: 480)
         .navigationTitle(title)
     }

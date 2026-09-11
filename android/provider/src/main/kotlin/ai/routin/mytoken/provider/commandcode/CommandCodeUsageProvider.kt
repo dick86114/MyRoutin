@@ -32,6 +32,8 @@ import java.time.Clock
 import java.time.Instant
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -45,6 +47,9 @@ class CommandCodeUsageProvider(
 ) : UsageProvider {
 
     override val providerId: ProviderId = ProviderId.CommandCode
+
+    private val metadataCache = mutableMapOf<String, CachedMetadata>()
+    private val cacheMutex = Mutex()
 
     override suspend fun fetchUsage(
         credential: Credential,
@@ -69,39 +74,73 @@ class CommandCodeUsageProvider(
         token: String,
     ): UsageSnapshot {
         val now = clock.instant()
-        val whoami = requestObject("/alpha/whoami", token, mapOf("limits" to "1"))
-        val orgID = whoami.objOrNull("org")?.stringOrNull("id")?.takeIf { it.isNotBlank() }
-        val credits = coroutineScope {
-            val creditsRequest = async {
-                requestObject("/alpha/billing/credits", token, query = mapOf("orgId" to orgID))
-            }
-            val subscriptionRequest = async {
-                requestObject("/alpha/billing/subscriptions", token, query = mapOf("orgId" to orgID))
-            }
-            creditsRequest.await() to subscriptionRequest.await()
+        val cacheKey = "${credential.id}:${token.hashCode()}"
+        val cached = cacheMutex.withLock { metadataCache[cacheKey] ?: CachedMetadata() }
+
+        return coroutineScope {
+
+        val whoamiRequest = async {
+            requestObject("/alpha/whoami", token, mapOf("limits" to "1"))
         }
-        val creditsRoot = credits.first
+        val creditsRequest = async {
+            requestResult("/alpha/billing/credits", token, query = mapOf("orgId" to cached.orgId))
+        }
+        val subscriptionsRequest = async {
+            requestResult("/alpha/billing/subscriptions", token, query = mapOf("orgId" to cached.orgId))
+        }
+        val modelsRequest = async {
+            fetchAllowedModels(cacheKey, token, now)
+        }
+        val preloadedSummaryRequest = cached.periodStart?.let { periodStart ->
+            async {
+                requestResult(
+                    "/alpha/usage/summary",
+                    token,
+                    query = mapOf(
+                        "orgId" to cached.orgId,
+                        "since" to periodStart,
+                    ),
+                )
+            }
+        }
+
+        val whoami = whoamiRequest.await()
+        val actualOrgID = whoami.objOrNull("org")?.stringOrNull("id")?.takeIf { it.isNotBlank() }
+        val creditsPair = if (actualOrgID == cached.orgId) {
+            creditsRequest.await().getOrThrow() to subscriptionsRequest.await().getOrThrow()
+        } else {
+            creditsRequest.cancel()
+            subscriptionsRequest.cancel()
+            requestObject("/alpha/billing/credits", token, query = mapOf("orgId" to actualOrgID)) to
+                requestObject("/alpha/billing/subscriptions", token, query = mapOf("orgId" to actualOrgID))
+        }
+        val creditsRoot = creditsPair.first
         val creditsData = creditsRoot.objOrNull("credits")
             ?: throw UsageProviderException.ProviderMessage("Command Code：额度信息返回失败")
-        val subscription = credits.second.objOrNull("data")
+        val subscription = creditsPair.second.objOrNull("data")
         val periodStart = subscription?.stringOrNull("currentPeriodStart")
-        val summary = requestObject(
-            "/alpha/usage/summary",
-            token,
-            query = mapOf(
-                "orgId" to orgID,
-                "since" to periodStart,
-            ),
-        )
-        val allowedModels = runCatching {
-            requestObject("/provider/v1/models", token).arrayOrNull("data")
-                .orEmpty()
-                .mapNotNull { item ->
-                    item.asObjectOrNull()?.stringOrNull("id")?.takeIf(String::isNotBlank)
-                }
-        }.getOrElse { error ->
-            if (error is kotlinx.coroutines.CancellationException) throw error
-            emptyList()
+        val summary = if (
+            preloadedSummaryRequest != null &&
+            actualOrgID == cached.orgId &&
+            periodStart == cached.periodStart
+        ) {
+            preloadedSummaryRequest.await().getOrThrow()
+        } else {
+            preloadedSummaryRequest?.cancel()
+            requestObject(
+                "/alpha/usage/summary",
+                token,
+                query = mapOf(
+                    "orgId" to actualOrgID,
+                    "since" to periodStart,
+                ),
+            )
+        }
+        val allowedModels = modelsRequest.await()
+
+        cacheMutex.withLock {
+            val current = metadataCache[cacheKey] ?: CachedMetadata()
+            metadataCache[cacheKey] = current.copy(orgId = actualOrgID, periodStart = periodStart)
         }
 
         val monthlyRemaining = creditsData.decimalOrNull("monthlyCredits")?.max(BigDecimal.ZERO) ?: BigDecimal.ZERO
@@ -156,7 +195,7 @@ class CommandCodeUsageProvider(
             addAll(windowMetrics(creditsRoot.objOrNull("windowLimits")))
         }
 
-        return UsageSnapshot(
+        UsageSnapshot(
             credentialId = credential.id,
             fetchedAt = now,
             planName = plan.name,
@@ -168,6 +207,7 @@ class CommandCodeUsageProvider(
             allowedModels = allowedModels,
             metrics = metrics,
         )
+        }
     }
 
     private fun windowMetrics(limits: JsonObject?): List<UsageMetric> {
@@ -211,6 +251,46 @@ class CommandCodeUsageProvider(
         currencyCode = "$",
         healthState = health,
     )
+
+    private suspend fun requestResult(
+        path: String,
+        token: String,
+        query: Map<String, String?> = emptyMap(),
+    ): Result<JsonObject> = try {
+        Result.success(requestObject(path, token, query))
+    } catch (error: kotlinx.coroutines.CancellationException) {
+        throw error
+    } catch (error: Throwable) {
+        Result.failure(error)
+    }
+
+    private suspend fun fetchAllowedModels(
+        cacheKey: String,
+        token: String,
+        now: Instant,
+    ): List<String> {
+        val cached = cacheMutex.withLock { metadataCache[cacheKey] ?: CachedMetadata() }
+        val fetchedAt = cached.modelsFetchedAt
+        if (fetchedAt != null && now.epochSecond - fetchedAt.epochSecond < MODELS_CACHE_SECONDS) {
+            return cached.models
+        }
+
+        val models = runCatching {
+            requestObject("/provider/v1/models", token).arrayOrNull("data")
+                .orEmpty()
+                .mapNotNull { item ->
+                    item.asObjectOrNull()?.stringOrNull("id")?.takeIf(String::isNotBlank)
+                }
+        }.getOrElse { error ->
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            return cached.models
+        }
+        cacheMutex.withLock {
+            val current = metadataCache[cacheKey] ?: CachedMetadata()
+            metadataCache[cacheKey] = current.copy(models = models, modelsFetchedAt = now)
+        }
+        return models
+    }
 
     private suspend fun requestObject(
         path: String,
@@ -267,6 +347,17 @@ class CommandCodeUsageProvider(
         "past_due" -> "逾期"
         "canceled", "cancelled" -> "已取消"
         else -> status?.takeIf { it.isNotEmpty() }
+    }
+
+    private data class CachedMetadata(
+        val orgId: String? = null,
+        val periodStart: String? = null,
+        val models: List<String> = emptyList(),
+        val modelsFetchedAt: Instant? = null,
+    )
+
+    private companion object {
+        const val MODELS_CACHE_SECONDS = 24 * 60 * 60
     }
 
     private data class PlanInfo(

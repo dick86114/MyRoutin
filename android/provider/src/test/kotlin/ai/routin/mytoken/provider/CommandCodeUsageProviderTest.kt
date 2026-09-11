@@ -105,10 +105,22 @@ class CommandCodeUsageProviderTest {
             assertFalse(request.url.contains("orgId="))
             assertEquals("Bearer cmd-token", request.headers["Authorization"])
         }
-        assertEquals(
-            "https://api.commandcode.ai/provider/v1/models",
-            transport.requests.last().url,
+        assertTrue(
+            transport.requests.any { it.url == "https://api.commandcode.ai/provider/v1/models" },
         )
+    }
+
+    @Test
+    fun fetchUsageCachesModelsAcrossRefreshes() = runTest {
+        val transport = RoutingTransport()
+        val provider = CommandCodeUsageProvider(transport, fixedClock)
+
+        provider.fetchUsage(credential(), CredentialSecret.BearerToken("cmd-token")).getOrThrow()
+        provider.fetchUsage(credential(), CredentialSecret.BearerToken("cmd-token")).getOrThrow()
+
+        assertEquals(2, transport.requests.count { it.url.contains("/alpha/whoami") })
+        assertEquals(2, transport.requests.count { it.url.contains("/alpha/usage/summary") })
+        assertEquals(1, transport.requests.count { it.url.contains("/provider/v1/models") })
     }
 
     @Test

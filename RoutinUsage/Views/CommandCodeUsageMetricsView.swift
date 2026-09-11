@@ -121,13 +121,17 @@ struct CommandCodeUsageMetricsView: View {
 
             HStack(alignment: .top, spacing: 16) {
                 monthlyCell(layout.monthly)
-                requestCountCell(layout.requestCount)
+                summaryMetricsCell
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
-            HStack(alignment: .top, spacing: 16) {
-                valueCell(layout.purchasedRemaining, fallbackLabel: "购买剩余")
-                valueCell(layout.freeRemaining, fallbackLabel: "赠送剩余")
-            }
+    private var summaryMetricsCell: some View {
+        HStack(alignment: .top, spacing: 12) {
+            requestCountCell(layout.requestCount)
+            valueCell(layout.purchasedRemaining, fallbackLabel: "购买剩余")
+            valueCell(layout.freeRemaining, fallbackLabel: "赠送剩余")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -180,11 +184,10 @@ struct CommandCodeUsageMetricsView: View {
     @ViewBuilder
     private func requestCountCell(_ metric: NormalizedUsageMetric?) -> some View {
         if let metric {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(metric.label)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(metric.label.isEmpty ? "累计请求" : metric.label)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
-                Spacer(minLength: 4)
                 Text("\(numberText(metric.value)) 次")
                     .font(.system(.headline, design: .rounded, weight: .semibold))
                     .foregroundStyle(.primary)

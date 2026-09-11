@@ -464,12 +464,8 @@ private extension UsagePopoverView {
                 }
             }
 
-            HStack(spacing: 6) {
-                Image(systemName: store.isRefreshing ? "arrow.triangle.2.circlepath" : "clock")
-                    .accessibilityHidden(true)
-                Text(refreshDescription)
-                    .lineLimit(1)
-            }
+            Text(refreshDescription)
+                .lineLimit(1)
             .font(.caption)
             .foregroundStyle(.secondary)
             .accessibilityLabel(refreshAccessibilityLabel)

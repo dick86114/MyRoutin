@@ -81,20 +81,72 @@ final class CommandCodeUsageProviderTests: XCTestCase {
         XCTAssertEqual(snapshot.metrics[8].remaining, 15)
         XCTAssertEqual(snapshot.metrics[8].windowEnd, now.addingTimeInterval(86_400))
 
-        let whoamiURL = try XCTUnwrap(requests.request(at: 0)?.url)
-        let whoamiComponents = URLComponents(url: whoamiURL, resolvingAgainstBaseURL: false)
+        let whoamiRequest = try XCTUnwrap(requests.request(path: "/alpha/whoami"))
+        let whoamiComponents = URLComponents(
+            url: try XCTUnwrap(whoamiRequest.url),
+            resolvingAgainstBaseURL: false
+        )
         XCTAssertEqual(whoamiComponents?.queryItems?.first(where: { $0.name == "limits" })?.value, "1")
-        let summaryURL = try XCTUnwrap(requests.request(at: 3)?.url)
-        let summaryComponents = URLComponents(url: summaryURL, resolvingAgainstBaseURL: false)
+
+        let summaryRequest = try XCTUnwrap(requests.request(path: "/alpha/usage/summary"))
+        let summaryComponents = URLComponents(
+            url: try XCTUnwrap(summaryRequest.url),
+            resolvingAgainstBaseURL: false
+        )
         XCTAssertEqual(
             summaryComponents?.queryItems?.first(where: { $0.name == "since" })?.value,
             periodStart
         )
-        XCTAssertEqual(
-            requests.request(at: 3)?.value(forHTTPHeaderField: "Authorization"),
-            "Bearer cmd-api-key"
+        XCTAssertEqual(summaryRequest.value(forHTTPHeaderField: "Authorization"), "Bearer cmd-api-key")
+        XCTAssertNotNil(requests.request(path: "/provider/v1/models"))
+    }
+
+    func test缓存模型与周期后第二次刷新复用低频请求() async throws {
+        let requests = RequestRecorder()
+        let stub = URLProtocolStub.makeSession { request in
+            requests.append(request)
+            let path = request.url?.path ?? ""
+            let body: String
+            switch path {
+            case "/alpha/whoami":
+                body = #"{"success":true,"org":null,"user":{"id":"user-1","userName":"alice"}}"#
+            case "/alpha/billing/credits":
+                body = #"{"credits":{"planId":"individual-provider","monthlyCredits":15,"purchasedCredits":2,"freeCredits":0},"windowLimits":{"limited":false}}"#
+            case "/alpha/billing/subscriptions":
+                body = #"{"data":{"planId":"individual-provider","status":"active","currentPeriodStart":"2026-09-01T00:00:00Z","currentPeriodEnd":"2026-10-01T00:00:00Z"}}"#
+            case "/alpha/usage/summary":
+                body = #"{"totalCost":2,"totalCount":3}"#
+            case "/provider/v1/models":
+                body = #"{"object":"list","data":[{"id":"claude-sonnet-5"}]}"#
+            default:
+                XCTFail("意外请求：\(path)")
+                body = "{}"
+            }
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            ))
+            return (response, Data(body.utf8))
+        }
+        let provider = CommandCodeUsageProvider(session: stub.session)
+        let credential = ProviderCredential(
+            credentialID: UUID(uuidString: "00000000-0000-0000-0000-000000000099")!,
+            providerID: .commandCode,
+            kind: .bearerAPIKey,
+            secret: "cmd-api-key"
         )
-        XCTAssertEqual(requests.request(at: 4)?.url?.path, "/provider/v1/models")
+        let now = Date(timeIntervalSince1970: 1_788_000_000)
+
+        _ = try await provider.fetchUsage(credential, now: now)
+        _ = try await provider.fetchUsage(credential, now: now.addingTimeInterval(60))
+
+        XCTAssertEqual(requests.count(path: "/alpha/whoami"), 2)
+        XCTAssertEqual(requests.count(path: "/alpha/billing/credits"), 2)
+        XCTAssertEqual(requests.count(path: "/alpha/billing/subscriptions"), 2)
+        XCTAssertEqual(requests.count(path: "/alpha/usage/summary"), 2)
+        XCTAssertEqual(requests.count(path: "/provider/v1/models"), 1)
     }
 
     func test个人账号不发送空orgId查询参数() async throws {
@@ -135,8 +187,8 @@ final class CommandCodeUsageProviderTests: XCTestCase {
 
         _ = try await provider.fetchUsage(credential, now: .now)
 
-        for index in 1..<5 {
-            let url = try XCTUnwrap(requests.request(at: index)?.url)
+        for request in requests.all().filter({ $0.url?.path.hasPrefix("/alpha/") == true }) {
+            let url = try XCTUnwrap(request.url)
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
             XCTAssertNil(components?.queryItems?.first(where: { $0.name == "orgId" }))
         }
@@ -253,5 +305,17 @@ private final class RequestRecorder: @unchecked Sendable {
 
     func request(at index: Int) -> URLRequest? {
         lock.withLock { index < requests.count ? requests[index] : nil }
+    }
+
+    func request(path: String) -> URLRequest? {
+        lock.withLock { requests.first(where: { $0.url?.path == path }) }
+    }
+
+    func all() -> [URLRequest] {
+        lock.withLock { requests }
+    }
+
+    func count(path: String) -> Int {
+        lock.withLock { requests.filter { $0.url?.path == path }.count }
     }
 }

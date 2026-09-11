@@ -1,13 +1,16 @@
 import Foundation
+import CryptoKit
 
 struct CommandCodeUsageProvider: UsageProvider {
     static let baseURL = URL(string: "https://api.commandcode.ai")!
 
     let descriptor: ProviderDescriptor
     private let session: URLSession
+    private let metadataCache: CommandCodeMetadataCache
 
     init(session: URLSession = .shared) {
         self.session = session
+        self.metadataCache = CommandCodeMetadataCache()
         self.descriptor = ProviderRegistry.builtInDescriptors.first(where: { $0.id == .commandCode })!
     }
 
@@ -63,26 +66,108 @@ struct CommandCodeUsageProvider: UsageProvider {
               !credential.secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { throw UsageProviderError.invalidCredential }
 
-        let whoami: CommandCodeWhoami
-        let creditsResponse: CommandCodeCreditsResponse
-        let subscriptionResponse: CommandCodeSubscriptionResponse
-        do {
-            whoami = try await request(
+        let cacheKey = Self.cacheKey(for: credential)
+        let cached = await metadataCache.snapshot(for: cacheKey)
+
+        let whoamiTask = Task<CommandCodeWhoami, Error> {
+            try await request(
                 "/alpha/whoami",
                 query: [URLQueryItem(name: "limits", value: "1")],
                 credential: credential
             )
-            let orgID = whoami.org?.id
-            creditsResponse = try await request(
-                "/alpha/billing/credits",
-                query: [URLQueryItem(name: "orgId", value: orgID)],
-                credential: credential
+        }
+
+        let creditsTask = Task {
+            do {
+                return Result<CommandCodeCreditsResponse, Error>.success(
+                    try await request(
+                        "/alpha/billing/credits",
+                        query: [URLQueryItem(name: "orgId", value: cached.orgID)],
+                        credential: credential
+                    )
+                )
+            } catch {
+                return .failure(error)
+            }
+        }
+
+        let subscriptionsTask = Task {
+            do {
+                return Result<CommandCodeSubscriptionResponse, Error>.success(
+                    try await request(
+                        "/alpha/billing/subscriptions",
+                        query: [URLQueryItem(name: "orgId", value: cached.orgID)],
+                        credential: credential
+                    )
+                )
+            } catch {
+                return .failure(error)
+            }
+        }
+
+        let modelsTask = Task<[String], Never> {
+            await fetchModelIDs(
+                cacheKey: cacheKey,
+                credential: credential,
+                now: now
             )
-            subscriptionResponse = try await request(
-                "/alpha/billing/subscriptions",
-                query: [URLQueryItem(name: "orgId", value: orgID)],
-                credential: credential
-            )
+        }
+
+        let preloadedSummaryTask = cached.periodStart.map { periodStart in
+            Task<Result<CommandCodeUsageSummary, Error>, Never> {
+                do {
+                    return .success(
+                        try await request(
+                            "/alpha/usage/summary",
+                            query: [
+                                URLQueryItem(name: "orgId", value: cached.orgID),
+                                URLQueryItem(name: "since", value: periodStart)
+                            ],
+                            credential: credential
+                        )
+                    )
+                } catch {
+                    return .failure(error)
+                }
+            }
+        }
+
+        let whoami: CommandCodeWhoami
+        do {
+            whoami = try await whoamiTask.value
+        } catch let error as UsageProviderError {
+            creditsTask.cancel()
+            subscriptionsTask.cancel()
+            modelsTask.cancel()
+            throw error
+        } catch {
+            creditsTask.cancel()
+            subscriptionsTask.cancel()
+            modelsTask.cancel()
+            throw UsageProviderError.invalidResponse
+        }
+        let actualOrgID = whoami.org?.id
+
+        let creditsResponse: CommandCodeCreditsResponse
+        let subscriptionResponse: CommandCodeSubscriptionResponse
+        do {
+            if actualOrgID == cached.orgID {
+                creditsResponse = try await creditsTask.value.get()
+                subscriptionResponse = try await subscriptionsTask.value.get()
+            } else {
+                creditsTask.cancel()
+                subscriptionsTask.cancel()
+                creditsResponse = try await request(
+                    "/alpha/billing/credits",
+                    query: [URLQueryItem(name: "orgId", value: actualOrgID)],
+                    credential: credential
+                )
+                subscriptionResponse = try await request(
+                    "/alpha/billing/subscriptions",
+                    query: [URLQueryItem(name: "orgId", value: actualOrgID)],
+                    credential: credential
+                )
+            }
         } catch let error as UsageProviderError {
             throw error
         } catch {
@@ -96,37 +181,35 @@ struct CommandCodeUsageProvider: UsageProvider {
         let currentPeriodStart = subscription?.currentPeriodStart
         let summary: CommandCodeUsageSummary
         do {
-            summary = try await request(
-                "/alpha/usage/summary",
-                query: [
-                    URLQueryItem(name: "orgId", value: whoami.org?.id),
-                    URLQueryItem(name: "since", value: currentPeriodStart)
-                ],
-                credential: credential
-            )
+            if let summaryTask = preloadedSummaryTask,
+               actualOrgID == cached.orgID,
+               currentPeriodStart == cached.periodStart {
+                summary = try await summaryTask.value.get()
+            } else {
+                preloadedSummaryTask?.cancel()
+                summary = try await request(
+                    "/alpha/usage/summary",
+                    query: [
+                        URLQueryItem(name: "orgId", value: actualOrgID),
+                        URLQueryItem(name: "since", value: currentPeriodStart)
+                    ],
+                    credential: credential
+                )
+            }
         } catch let error as UsageProviderError {
             throw error
         } catch {
             throw UsageProviderError.invalidResponse
         }
 
+        await metadataCache.update(
+            for: cacheKey,
+            orgID: actualOrgID,
+            periodStart: currentPeriodStart
+        )
+
         let monthlyRemaining = max(0, credits.monthlyCredits ?? 0)
-        let allowedModels: [String]
-        do {
-            let models: CommandCodeModelsResponse = try await request(
-                "/provider/v1/models",
-                query: [],
-                credential: credential
-            )
-            allowedModels = models.data.compactMap {
-                let id = $0.id.trimmingCharacters(in: .whitespacesAndNewlines)
-                return id.isEmpty ? nil : id
-            }
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            allowedModels = []
-        }
+        let allowedModels = await modelsTask.value
         let purchasedRemaining = max(0, credits.purchasedCredits ?? 0)
         let freeRemaining = max(0, credits.freeCredits ?? 0)
         let totalRemaining = monthlyRemaining + purchasedRemaining + freeRemaining
@@ -187,6 +270,50 @@ struct CommandCodeUsageProvider: UsageProvider {
             metrics: metrics
         )
     }
+
+    private func fetchModelIDs(
+        cacheKey: String,
+        credential: ProviderCredential,
+        now: Date
+    ) async -> [String] {
+        let cached = await metadataCache.snapshot(for: cacheKey)
+        if let fetchedAt = cached.modelsFetchedAt,
+           now.timeIntervalSince(fetchedAt) < Self.modelsCacheLifetime {
+            return cached.models
+        }
+
+        do {
+            let response: CommandCodeModelsResponse = try await request(
+                "/provider/v1/models",
+                query: [],
+                credential: credential,
+                timeoutInterval: 5
+            )
+            let models = response.data.compactMap {
+                let id = $0.id.trimmingCharacters(in: .whitespacesAndNewlines)
+                return id.isEmpty ? nil : id
+            }
+            await metadataCache.updateModels(
+                for: cacheKey,
+                models: models,
+                fetchedAt: now
+            )
+            return models
+        } catch {
+            return cached.models
+        }
+    }
+
+    private static func cacheKey(for credential: ProviderCredential) -> String {
+        let digest = SHA256.hash(data: Data(credential.secret.utf8))
+        let secretDigest = digest.map { String(format: "%02x", $0) }.joined()
+        if let credentialID = credential.credentialID {
+            return "\(credentialID.uuidString):\(secretDigest)"
+        }
+        return secretDigest
+    }
+
+    private static let modelsCacheLifetime: TimeInterval = 24 * 60 * 60
 
     private func windowMetrics(
         from limits: CommandCodeWindowLimits?
@@ -280,7 +407,8 @@ struct CommandCodeUsageProvider: UsageProvider {
     private func request<T: Decodable & Sendable>(
         _ path: String,
         query: [URLQueryItem],
-        credential: ProviderCredential
+        credential: ProviderCredential,
+        timeoutInterval: TimeInterval = 15
     ) async throws -> T {
         var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)
         components?.path = path
@@ -289,7 +417,7 @@ struct CommandCodeUsageProvider: UsageProvider {
 
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "GET"
-        urlRequest.timeoutInterval = 15
+        urlRequest.timeoutInterval = timeoutInterval
         urlRequest.setValue("Bearer \(credential.secret)", forHTTPHeaderField: "Authorization")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
 
@@ -349,6 +477,35 @@ struct CommandCodeUsageProvider: UsageProvider {
     private static func date(fromMilliseconds value: Double?) -> Date? {
         guard let value else { return nil }
         return Date(timeIntervalSince1970: value / 1_000)
+    }
+}
+
+private actor CommandCodeMetadataCache {
+    struct Snapshot: Sendable {
+        var orgID: String? = nil
+        var periodStart: String? = nil
+        var models: [String] = []
+        var modelsFetchedAt: Date? = nil
+    }
+
+    private var values: [String: Snapshot] = [:]
+
+    func snapshot(for key: String) -> Snapshot {
+        values[key] ?? Snapshot()
+    }
+
+    func update(for key: String, orgID: String?, periodStart: String?) {
+        var value = values[key] ?? Snapshot()
+        value.orgID = orgID
+        value.periodStart = periodStart
+        values[key] = value
+    }
+
+    func updateModels(for key: String, models: [String], fetchedAt: Date) {
+        var value = values[key] ?? Snapshot()
+        value.models = models
+        value.modelsFetchedAt = fetchedAt
+        values[key] = value
     }
 }
 

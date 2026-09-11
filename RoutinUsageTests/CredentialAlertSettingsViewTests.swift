@@ -63,4 +63,21 @@ final class CredentialAlertSettingsViewTests: XCTestCase {
         XCTAssertFalse(model.preferences.alertRules.first?.isEnabled ?? true)
         XCTAssertFalse(saved?.alertRules.first?.isEnabled ?? true)
     }
+
+    func test凭证提醒设置窗口提供关闭按钮() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("RoutinUsage")
+                .appendingPathComponent("Views")
+                .appendingPathComponent("Settings")
+                .appendingPathComponent("CredentialAlertSettingsView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("@Environment(\\.dismiss)"))
+        XCTAssertTrue(source.contains("Button(\"关闭\")"))
+        XCTAssertTrue(source.contains(".keyboardShortcut(.cancelAction)"))
+    }
 }
