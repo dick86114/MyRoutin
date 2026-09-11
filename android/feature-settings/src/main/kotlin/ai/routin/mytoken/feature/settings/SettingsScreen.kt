@@ -38,6 +38,7 @@ import ai.routin.mytoken.core.ui.GlassButtonTone
 import ai.routin.mytoken.core.ui.glassFilterChipBorder
 import ai.routin.mytoken.core.ui.glassFilterChipColors
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -74,6 +75,10 @@ fun SettingsScreen(
     onMirrorBaseChange: (String) -> Unit = {},
 ) {
     var showReleaseHistory by remember { mutableStateOf(false) }
+    val uriHandler = LocalUriHandler.current
+    val currentRelease = (releaseHistoryState as? AppReleaseHistoryUiState.Loaded)
+        ?.releases
+        ?.firstOrNull { it.version == appVersion }
 
     LaunchedEffect(Unit) {
         onLoadReleaseHistory()
@@ -149,24 +154,39 @@ fun SettingsScreen(
             }
             item(key = "about") {
                 SectionCard(title = "关于") {
-                    Text(
-                        text = buildAnnotatedString {
-                            withStyle(
-                                SpanStyle(
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface,
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = buildAnnotatedString {
+                                withStyle(
+                                    SpanStyle(
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                ) {
+                                    append("MyToken")
+                                }
+                                withStyle(
+                                    SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                ) {
+                                    append(" $appVersion")
+                                }
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        TextButton(
+                            onClick = {
+                                uriHandler.openUri(
+                                    currentRelease?.releaseUrl
+                                        ?: "https://github.com/dick86114/MyToken/releases",
                                 )
-                            ) {
-                                append("MyToken")
-                            }
-                            withStyle(
-                                SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            ) {
-                                append(" $appVersion")
-                            }
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                            },
+                        ) {
+                            Text("GitHub")
+                        }
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     CurrentReleaseNotesSection(
                         state = releaseHistoryState,

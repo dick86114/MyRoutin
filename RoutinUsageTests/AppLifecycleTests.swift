@@ -1177,6 +1177,8 @@ private actor LifecycleUpdateService: UpdateChecking {
     ) async throws -> URL {
         throw UpdateServiceError.unavailable
     }
+
+    func fetchReleaseHistory() async throws -> [AppReleaseHistoryItem] { [] }
 }
 
 private actor LifecycleLogWriter: AppLogWriting {
@@ -1227,6 +1229,8 @@ private actor LifecycleControllableUpdateService: UpdateChecking {
     ) async throws -> URL {
         throw UpdateServiceError.unavailable
     }
+
+    func fetchReleaseHistory() async throws -> [AppReleaseHistoryItem] { [] }
 
     func waitUntilCheckCount(reaches expectedCount: Int) async {
         while checkCount < expectedCount {

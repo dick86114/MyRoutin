@@ -245,6 +245,85 @@ final class GitHubUpdateServiceTests: XCTestCase {
         XCTAssertFalse(releases.contains { $0.notes == "Android" })
     }
 
+    func test协议调用使用真实历史实现() async throws {
+        let body = """
+        [{"tag_name":"macos-v5.2.1","html_url":"https://github.com/dick86114/MyToken/releases/tag/macos-v5.2.1","assets":[],"body":"当前版本"}]
+        """
+        let stub = URLProtocolStub.makeSession { request in
+            let response = try XCTUnwrap(
+                HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)
+            )
+            return (response, Data(body.utf8))
+        }
+        let service: any UpdateChecking = GitHubUpdateService(
+            session: stub.session,
+            currentVersion: "5.2.1"
+        )
+
+        let releases = try await service.fetchReleaseHistory()
+
+        XCTAssertEqual(releases.map(\.version), ["5.2.1"])
+        XCTAssertEqual(releases.first?.notes, "当前版本")
+    }
+
+    func testAPI限流时HTML分页补齐完整历史() async throws {
+        let firstPage = """
+        <html>
+          <section id="release-v5.2.1">
+            <a href="/dick86114/MyToken/releases/tag/v5.2.1">MyToken v5.2.1</a>
+            <div data-test-selector="body-content" class="markdown-body"><p>当前版本</p></div>
+            <relative-time datetime="2026-09-11T04:37:54Z"></relative-time>
+          </section>
+          <section id="release-macos-v5.2.1">
+            <a href="/dick86114/MyToken/releases/tag/macos-v5.2.1">MyToken macOS v5.2.1</a>
+            <div data-test-selector="body-content" class="markdown-body"><p>当前版本 macOS</p></div>
+            <relative-time datetime="2026-09-11T04:37:48Z"></relative-time>
+          </section>
+          <a rel="next" href="/dick86114/MyToken/releases?page=2">Next</a>
+        </html>
+        """
+        let secondPage = """
+        <html>
+          <section id="release-v5.1.18">
+            <a href="/dick86114/MyToken/releases/tag/v5.1.18">MyToken v5.1.18</a>
+            <div data-test-selector="body-content" class="markdown-body"><p>更早版本</p></div>
+            <relative-time datetime="2026-09-10T09:49:45Z"></relative-time>
+          </section>
+          <section id="release-macos-v5.1.18">
+            <a href="/dick86114/MyToken/releases/tag/macos-v5.1.18">MyToken macOS v5.1.18</a>
+            <div data-test-selector="body-content" class="markdown-body"><p>更早版本 macOS</p></div>
+            <relative-time datetime="2026-09-10T09:49:40Z"></relative-time>
+          </section>
+          <section id="release-v5.1.17">
+            <a href="/dick86114/MyToken/releases/tag/v5.1.17">MyToken v5.1.17</a>
+            <div data-test-selector="body-content" class="markdown-body"><p>再早版本</p></div>
+            <relative-time datetime="2026-09-10T01:57:54Z"></relative-time>
+          </section>
+        </html>
+        """
+        let stub = URLProtocolStub.makeSession { request in
+            let url = try XCTUnwrap(request.url)
+            if url == GitHubUpdateService.releasesURL {
+                let response = try XCTUnwrap(
+                    HTTPURLResponse(url: url, statusCode: 403, httpVersion: nil, headerFields: nil)
+                )
+                return (response, Data())
+            }
+            let body = url.query?.contains("page=2") == true ? secondPage : firstPage
+            let response = try XCTUnwrap(
+                HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+            )
+            return (response, Data(body.utf8))
+        }
+        let service = GitHubUpdateService(session: stub.session, currentVersion: "5.2.1")
+
+        let releases = try await service.fetchReleaseHistory()
+
+        XCTAssertEqual(releases.map(\.version), ["5.2.1", "5.1.18", "5.1.17"])
+        XCTAssertEqual(releases.first?.notes, "<p>当前版本</p>")
+        XCTAssertEqual(releases.last?.notes, "<p>再早版本</p>")
+    }
+
     func test历史版本在API限流时回退到AtomFeed() async throws {
         let atom = """
         <?xml version="1.0" encoding="UTF-8"?>

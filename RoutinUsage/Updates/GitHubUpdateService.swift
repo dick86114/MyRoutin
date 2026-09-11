@@ -62,18 +62,17 @@ enum UpdateServiceError: Error, Equatable, Sendable {
 
 protocol UpdateChecking: Sendable {
     func checkForUpdate() async throws -> AppUpdate?
+    func fetchReleaseHistory() async throws -> [AppReleaseHistoryItem]
     func download(
         _ update: AppUpdate,
         progress: @escaping @Sendable (Double?) async -> Void
     ) async throws -> URL
 }
 
-extension UpdateChecking {
-    func fetchReleaseHistory() async throws -> [AppReleaseHistoryItem] { [] }
-}
 
 struct NoUpdateService: UpdateChecking {
     func checkForUpdate() async throws -> AppUpdate? { nil }
+    func fetchReleaseHistory() async throws -> [AppReleaseHistoryItem] { [] }
     func download(
         _ update: AppUpdate,
         progress: @escaping @Sendable (Double?) async -> Void
@@ -85,6 +84,7 @@ struct NoUpdateService: UpdateChecking {
 struct GitHubUpdateService: UpdateChecking, Sendable {
     static let repository = "dick86114/MyToken"
     static let releasesURL = URL(string: "https://api.github.com/repos/\(repository)/releases?per_page=100")!
+    static let releasesPageURL = URL(string: "https://github.com/\(repository)/releases")!
     static let releasesAtomURL = URL(string: "https://github.com/\(repository)/releases.atom")!
 
     let session: URLSession
@@ -121,6 +121,26 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
     private func rewrittenString(_ value: String, mirror: String?) -> String {
         guard let url = URL(string: value) else { return value }
         return rewritten(url, mirror: mirror).absoluteString
+    }
+
+    private static func releasesURL(page: Int) -> URL {
+        guard page > 1,
+              var components = URLComponents(url: releasesURL, resolvingAgainstBaseURL: false) else {
+            return releasesURL
+        }
+        var queryItems = components.queryItems ?? []
+        queryItems.append(URLQueryItem(name: "page", value: "\(page)"))
+        components.queryItems = queryItems
+        return components.url ?? releasesURL
+    }
+
+    private static func releasesPageURL(page: Int) -> URL {
+        guard page > 1,
+              var components = URLComponents(url: releasesPageURL, resolvingAgainstBaseURL: false) else {
+            return releasesPageURL
+        }
+        components.queryItems = [URLQueryItem(name: "page", value: "\(page)")]
+        return components.url ?? releasesPageURL
     }
 
     func checkForUpdate() async throws -> AppUpdate? {
@@ -174,14 +194,35 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
 
     func fetchReleaseHistory() async throws -> [AppReleaseHistoryItem] {
         let mirror = mirrorBaseProvider()
+        await logWriter.log(
+            level: .info,
+            event: "release_history_started",
+            details: "version=\(currentVersion) mirror=\(mirror ?? "direct")"
+        )
         let releases: [ReleaseDTO]
         do {
-            releases = try await fetchReleases(mirror: mirror)
+            releases = try await fetchAllReleases(mirror: mirror)
         } catch {
+            await logWriter.log(level: .warning, event: "release_history_html_fallback", details: nil)
+            do {
+                let history = try await fetchReleaseHistoryFromHTML(mirror: mirror)
+                if !history.isEmpty {
+                    return history
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                await logWriter.log(
+                    level: .warning,
+                    event: "release_history_html_failed",
+                    details: String(describing: error)
+                )
+            }
+            await logWriter.log(level: .warning, event: "release_history_atom_fallback", details: nil)
             return try await fetchReleaseHistoryFromAtom(mirror: mirror)
         }
         var seen = Set<String>()
-        return releases
+        let history = releases
             .filter { Self.isMacOSRelease(tagName: $0.tagName) }
             .compactMap { release -> AppReleaseHistoryItem? in
                 let version = Self.normalize(release.tagName)
@@ -199,11 +240,29 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
             .sorted {
                 Self.compare($0.version, $1.version) == .orderedDescending
             }
+        await logWriter.log(
+            level: .info,
+            event: "release_history_loaded",
+            details: "source=api count=\(history.count) first=\(history.first?.version ?? "none")"
+        )
+        return history
     }
 
-    private func fetchReleases(mirror: String?) async throws -> [ReleaseDTO] {
+    private func fetchAllReleases(mirror: String?) async throws -> [ReleaseDTO] {
+        var allReleases: [ReleaseDTO] = []
+        var page = 1
+        while page <= 50 {
+            let releases = try await fetchReleases(mirror: mirror, page: page)
+            allReleases.append(contentsOf: releases)
+            guard releases.count == 100 else { break }
+            page += 1
+        }
+        return allReleases
+    }
+
+    private func fetchReleases(mirror: String?, page: Int = 1) async throws -> [ReleaseDTO] {
         var request = URLRequest(
-            url: Self.releasesURL,
+            url: Self.releasesURL(page: page),
             cachePolicy: .reloadIgnoringLocalCacheData,
             timeoutInterval: 30
         )
@@ -306,12 +365,138 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
         )
     }
 
-    /// Atom feed 不包含资产列表，只能按命名约定探测下载地址：
-    /// 优先新命名的版本化文件（GitHub macOS CI runner 为 arm64），再回退旧的固定文件名。
+    /// GitHub Releases HTML 仍有分页；Atom 只给最近 10 条，不能作为完整历史来源。
+    private func fetchReleaseHistoryFromHTML(mirror: String?) async throws -> [AppReleaseHistoryItem] {
+        var page = 1
+        var parsedReleases: [HTMLRelease] = []
+        while page <= 50 {
+            let url = rewritten(Self.releasesPageURL(page: page), mirror: mirror)
+            var request = URLRequest(
+                url: url,
+                cachePolicy: .reloadIgnoringLocalCacheData,
+                timeoutInterval: 30
+            )
+            request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
+            request.setValue("MyToken/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+
+            let data: Data
+            let response: URLResponse
+            do {
+                (data, response) = try await session.data(for: request)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                throw UpdateServiceError.unavailable
+            }
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+                  let html = String(data: data, encoding: .utf8) else {
+                throw UpdateServiceError.unavailable
+            }
+
+            let releases = Self.parseReleaseHistoryHTML(html)
+            if page > 1, releases.isEmpty { break }
+            parsedReleases.append(contentsOf: releases)
+            guard html.contains("rel=\"next\"") else { break }
+            page += 1
+        }
+        guard !parsedReleases.isEmpty else { throw UpdateServiceError.invalidResponse }
+
+        var seen = Set<String>()
+        let history = parsedReleases
+            .filter { Self.isMacOSRelease(tagName: $0.tagName) }
+            .compactMap { release -> AppReleaseHistoryItem? in
+                let version = Self.normalize(release.tagName)
+                guard !version.isEmpty, seen.insert(version).inserted,
+                      let releaseURL = URL(string: rewrittenString(
+                        "https://github.com/\(Self.repository)/releases/tag/\(release.tagName)",
+                        mirror: mirror
+                      )) else {
+                    return nil
+                }
+                return AppReleaseHistoryItem(
+                    version: version,
+                    releaseURL: releaseURL,
+                    notes: release.notesHTML,
+                    publishedAt: Self.parseISO8601(release.publishedAt)
+                )
+            }
+            .sorted {
+                Self.compare($0.version, $1.version) == .orderedDescending
+            }
+        await logWriter.log(
+            level: .info,
+            event: "release_history_loaded",
+            details: "source=html count=\(history.count) first=\(history.first?.version ?? "none")"
+        )
+        return history
+    }
+
+    private static func parseReleaseHistoryHTML(_ html: String) -> [HTMLRelease] {
+        let pattern = "<section id=\"release-([^\"]+)\""
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let source = html as NSString
+        let matches = regex.matches(in: html, range: NSRange(location: 0, length: source.length))
+        return matches.enumerated().compactMap { index, match in
+            guard match.numberOfRanges > 1 else { return nil }
+            let tagName = source.substring(with: match.range(at: 1))
+            let blockStart = match.range.location
+            let blockEnd = index + 1 < matches.count ? matches[index + 1].range.location : source.length
+            let block = source.substring(with: NSRange(location: blockStart, length: blockEnd - blockStart))
+            let publishedAt = firstMatch(pattern: "datetime=\"([^\"]+)\"", in: block)
+            let notesHTML = extractDivInnerHTML(
+                containing: "data-test-selector=\"body-content\"",
+                in: block
+            ) ?? ""
+            return HTMLRelease(tagName: tagName, notesHTML: notesHTML, publishedAt: publishedAt)
+        }
+    }
+
+    private static func firstMatch(pattern: String, in value: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let source = value as NSString
+        guard let match = regex.firstMatch(
+            in: value,
+            range: NSRange(location: 0, length: source.length)
+        ), match.numberOfRanges > 1 else { return nil }
+        return source.substring(with: match.range(at: 1))
+    }
+
+    private static func extractDivInnerHTML(containing marker: String, in value: String) -> String? {
+        guard let markerRange = value.range(of: marker),
+              let openingEnd = value[markerRange.upperBound...].firstIndex(of: ">") else {
+            return nil
+        }
+        let contentStart = value.index(after: openingEnd)
+        guard let regex = try? NSRegularExpression(
+            pattern: "</?div\\b[^>]*>",
+            options: [.caseInsensitive]
+        ) else { return nil }
+        let searchRange = NSRange(contentStart..<value.endIndex, in: value)
+        var depth = 0
+        for match in regex.matches(in: value, range: searchRange) {
+            guard let range = Range(match.range, in: value) else { continue }
+            let token = String(value[range])
+            if token.hasPrefix("</") {
+                if depth == 0 {
+                    return String(value[contentStart..<range.lowerBound])
+                }
+                depth -= 1
+            } else if !token.hasSuffix("/>") {
+                depth += 1
+            }
+        }
+        return nil
+    }
+
     private func fetchReleaseHistoryFromAtom(mirror: String?) async throws -> [AppReleaseHistoryItem] {
         let releases = try await fetchAtomReleases(mirror: mirror)
+        await logWriter.log(
+            level: .info,
+            event: "release_history_atom_parsed",
+            details: "count=\(releases.count) first=\(releases.first?.version ?? "none")"
+        )
         var seen = Set<String>()
-        return releases
+        let history = releases
             .compactMap { release -> AppReleaseHistoryItem? in
                 guard Self.isMacOSRelease(tagName: release.version) else { return nil }
                 let version = Self.normalize(release.version)
@@ -329,6 +514,12 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
             .sorted {
                 Self.compare($0.version, $1.version) == .orderedDescending
             }
+        await logWriter.log(
+            level: .info,
+            event: "release_history_loaded",
+            details: "source=atom count=\(history.count) first=\(history.first?.version ?? "none")"
+        )
+        return history
     }
 
     private func fetchAtomReleases(mirror: String?) async throws -> [AtomRelease] {
@@ -540,6 +731,12 @@ struct GitHubUpdateService: UpdateChecking, Sendable {
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.date(from: value)
     }
+}
+
+private struct HTMLRelease {
+    let tagName: String
+    let notesHTML: String
+    let publishedAt: String?
 }
 
 private struct AtomRelease {

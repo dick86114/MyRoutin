@@ -11,6 +11,8 @@ final class HelpUpdateViewTests: XCTestCase {
         XCTAssertTrue(source.contains("检查更新"))
         XCTAssertTrue(source.contains("检测更新"))
         XCTAssertTrue(source.contains("查看历史版本"))
+        XCTAssertTrue(source.contains("Label(\"GitHub\""))
+        XCTAssertFalse(source.contains("查看该版本发布页"))
         XCTAssertTrue(source.contains("ReleaseHistorySheet"))
         XCTAssertTrue(source.contains("应用更新"))
         XCTAssertFalse(source.contains("updateChannelSection"))

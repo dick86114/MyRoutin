@@ -135,6 +135,7 @@ class SettingsScreenTest {
         }
         composeRule.onNodeWithText("关于").assertIsDisplayed()
         composeRule.onNodeWithText("MyToken 0.1.0", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("GitHub").assertIsDisplayed()
         composeRule.onNodeWithText("当前版本更新日志").assertIsDisplayed()
         composeRule.onNodeWithText("当前版本修复内容").assertIsDisplayed()
 

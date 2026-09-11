@@ -31,12 +31,21 @@ struct HelpUpdateView: View {
 
     private var currentVersionSection: some View {
         settingSection {
-            LabeledContent("当前版本") {
+            HStack(spacing: 12) {
+                Text("当前版本")
+
                 Text(RoutinUsageApp.currentVersion)
                     .monospacedDigit()
+
+                Spacer(minLength: 12)
+
+                Link(destination: currentReleaseURL) {
+                    Label("GitHub", systemImage: "arrow.up.right.square")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .accessibilityLabel("在 GitHub 查看当前版本")
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("当前版本 \(RoutinUsageApp.currentVersion)")
 
             Divider()
 
@@ -81,16 +90,20 @@ struct HelpUpdateView: View {
         case let .loaded(releases):
             if let current = releases.first(where: { $0.version == RoutinUsageApp.currentVersion }) {
                 UpdateNotesView(notes: current.notes)
-
-                Link("查看该版本发布页", destination: current.releaseURL)
-                    .font(.caption)
-                    .accessibilityLabel("查看当前版本发布页")
             } else {
                 Text("此版本未提供更新日志")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var currentReleaseURL: URL {
+        guard case let .loaded(releases) = environment.releaseHistoryState,
+              let current = releases.first(where: { $0.version == RoutinUsageApp.currentVersion }) else {
+            return RoutinUsageApp.releasesURL
+        }
+        return current.releaseURL
     }
 
     private var updateSection: some View {

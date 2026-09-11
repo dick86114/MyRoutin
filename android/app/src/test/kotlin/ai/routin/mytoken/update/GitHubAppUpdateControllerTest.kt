@@ -95,6 +95,46 @@ class GitHubAppUpdateControllerTest {
     }
 
     @Test
+    fun API限流时HTML分页补齐完整历史() = runBlocking {
+        val firstPage = """
+        <html>
+          <section id="release-android-v0.1.0">
+            <a href="/dick86114/MyToken/releases/tag/android-v0.1.0">MyToken Android v0.1.0</a>
+            <div data-test-selector="body-content" class="markdown-body"><p>当前版本</p></div>
+            <relative-time datetime="2026-09-11T04:37:54Z"></relative-time>
+          </section>
+          <a rel="next" href="/dick86114/MyToken/releases?page=2">Next</a>
+        </html>
+        """.trimIndent()
+        val secondPage = """
+        <html>
+          <section id="release-android-v0.0.9">
+            <a href="/dick86114/MyToken/releases/tag/android-v0.0.9">MyToken Android v0.0.9</a>
+            <div data-test-selector="body-content" class="markdown-body"><p>旧版本</p></div>
+            <relative-time datetime="2026-09-08T12:00:00Z"></relative-time>
+          </section>
+        </html>
+        """.trimIndent()
+        val controller = GitHubAppUpdateController(
+            context = ApplicationProvider.getApplicationContext<Context>(),
+            currentVersionName = "0.1.0",
+            network = { url, _ ->
+                if (url.startsWith("https://api.github.com")) throw IOException("rate limited")
+                UpdateResponse(if (url.contains("page=2")) secondPage else firstPage)
+            },
+        )
+
+        controller.loadReleaseHistory()
+        val state = withTimeout(5_000) {
+            controller.releaseHistoryState.first { it is AppReleaseHistoryUiState.Loaded }
+        } as AppReleaseHistoryUiState.Loaded
+
+        assertEquals(listOf("0.1.0", "0.0.9"), state.releases.map { it.version })
+        assertEquals("当前版本", state.releases.first().releaseNotes)
+        assertEquals("旧版本", state.releases.last().releaseNotes)
+    }
+
+    @Test
     fun 历史版本在API限流时回退到AtomFeed() = runBlocking {
         val historyAtom = """
         <?xml version="1.0" encoding="UTF-8"?>

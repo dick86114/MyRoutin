@@ -6,6 +6,7 @@ import ai.routin.mytoken.feature.settings.AppReleaseHistoryUiState
 import ai.routin.mytoken.feature.settings.AppUpdateUiState
 import android.content.Context
 import android.content.Intent
+import android.text.Html
 import android.util.Xml
 import android.net.Uri
 import androidx.core.content.FileProvider
@@ -228,33 +229,60 @@ class GitHubAppUpdateController(
     }
 
     private suspend fun fetchReleaseHistory(mirror: String?): List<AppReleaseHistoryItem> {
-        val body = network(
-            "https://api.github.com/repos/$repository/releases?per_page=100",
-            mapOf(
-                "Accept" to "application/vnd.github+json",
-                "X-GitHub-Api-Version" to "2022-11-28",
-            ),
-        ).body
-        val releases = org.json.JSONArray(body)
-        val seenVersions = mutableSetOf<String>()
         val result = mutableListOf<AppReleaseHistoryItem>()
-        for (index in 0 until releases.length()) {
-            val release = releases.getJSONObject(index)
-            val match = ANDROID_RELEASE_TAG_REGEX.matchEntire(release.optString("tag_name")) ?: continue
-            val version = match.groupValues[1]
-            if (!seenVersions.add(version)) continue
-            val releaseUrl = release.optString("html_url")
-                .takeIf { it.isNotBlank() }
-                ?.let { applyMirror(it, mirror) }
-                ?: continue
-            result += AppReleaseHistoryItem(
-                version = version,
-                releaseNotes = release.optString("body"),
-                releaseUrl = releaseUrl,
-                publishedAt = release.optString("published_at").takeIf { it.isNotBlank() },
-            )
+        val seenVersions = mutableSetOf<String>()
+        var page = 1
+        while (page <= 50) {
+            val body = network(
+                "https://api.github.com/repos/$repository/releases?per_page=100&page=$page",
+                mapOf(
+                    "Accept" to "application/vnd.github+json",
+                    "X-GitHub-Api-Version" to "2022-11-28",
+                ),
+            ).body
+            val releases = org.json.JSONArray(body)
+            for (index in 0 until releases.length()) {
+                val release = releases.getJSONObject(index)
+                val match = ANDROID_RELEASE_TAG_REGEX.matchEntire(release.optString("tag_name")) ?: continue
+                val version = match.groupValues[1]
+                if (!seenVersions.add(version)) continue
+                val releaseUrl = release.optString("html_url")
+                    .takeIf { it.isNotBlank() }
+                    ?.let { applyMirror(it, mirror) }
+                    ?: continue
+                result += AppReleaseHistoryItem(
+                    version = version,
+                    releaseNotes = release.optString("body"),
+                    releaseUrl = releaseUrl,
+                    publishedAt = release.optString("published_at").takeIf { it.isNotBlank() },
+                )
+            }
+            if (releases.length() < 100) break
+            page += 1
         }
         return result.sortedWith { left, right ->
+            compareVersions(right.version, left.version)
+        }
+    }
+
+    private suspend fun fetchReleaseHistoryFromHtml(
+        mirror: String?,
+    ): List<AppReleaseHistoryItem> {
+        val result = mutableListOf<AppReleaseHistoryItem>()
+        var page = 1
+        while (page <= 50) {
+            val body = network(
+                applyMirror("https://github.com/$repository/releases?page=$page", mirror),
+                mapOf("Accept" to "text/html,application/xhtml+xml"),
+            ).body
+            val releases = parseHtmlReleaseHistory(body)
+            if (page > 1 && releases.isEmpty()) break
+            result += releases
+            if (!body.contains("rel=\"next\"")) break
+            page += 1
+        }
+        if (result.isEmpty()) throw IOException("更新历史为空")
+        return result.distinctBy { it.version }.sortedWith { left, right ->
             compareVersions(right.version, left.version)
         }
     }
@@ -264,7 +292,11 @@ class GitHubAppUpdateController(
     ): List<AppReleaseHistoryItem> = try {
         fetchReleaseHistory(mirror)
     } catch (error: IOException) {
-        fetchReleaseHistoryFromAtom(mirror)
+        try {
+            fetchReleaseHistoryFromHtml(mirror)
+        } catch (_: Exception) {
+            fetchReleaseHistoryFromAtom(mirror)
+        }
     }
 
     private suspend fun fetchReleaseHistoryFromAtom(
@@ -389,6 +421,57 @@ class GitHubAppUpdateController(
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun parseHtmlReleaseHistory(body: String): List<AppReleaseHistoryItem> {
+        val sectionRegex = Regex("<section id=\"release-([^\"]+)\"")
+        val matches = sectionRegex.findAll(body).toList()
+        return matches.mapIndexedNotNull { index, match ->
+            val tagName = match.groupValues[1]
+            val version = tagName.takeIf { ANDROID_RELEASE_TAG_REGEX.matches(it) }
+                ?.removePrefix("android-v")
+                ?: return@mapIndexedNotNull null
+            val blockStart = match.range.first
+            val blockEnd = matches.getOrNull(index + 1)?.range?.first ?: body.length
+            val block = body.substring(blockStart, blockEnd)
+            val publishedAt = Regex("datetime=\"([^\"]+)\"")
+                .find(block)
+                ?.groupValues
+                ?.getOrNull(1)
+            val notesHtml = extractDivInnerHtml(
+                block = block,
+                marker = "data-test-selector=\"body-content\"",
+            ).orEmpty()
+            val notes = Html.fromHtml(notesHtml, Html.FROM_HTML_MODE_LEGACY)
+                .toString()
+                .trim()
+            AppReleaseHistoryItem(
+                version = version,
+                releaseNotes = notes,
+                releaseUrl = "https://github.com/$repository/releases/tag/$tagName",
+                publishedAt = publishedAt,
+            )
+        }
+    }
+
+    private fun extractDivInnerHtml(block: String, marker: String): String? {
+        val markerIndex = block.indexOf(marker)
+        if (markerIndex < 0) return null
+        val openingEnd = block.indexOf('>', startIndex = markerIndex)
+        if (openingEnd < 0) return null
+        val contentStart = openingEnd + 1
+        val tokenRegex = Regex("</?div\\b[^>]*>", RegexOption.IGNORE_CASE)
+        var depth = 0
+        for (match in tokenRegex.findAll(block, contentStart)) {
+            val token = match.value
+            if (token.startsWith("</")) {
+                if (depth == 0) return block.substring(contentStart, match.range.first)
+                depth -= 1
+            } else if (!token.endsWith("/>")) {
+                depth += 1
+            }
+        }
+        return null
     }
 
     /** 解析 Atom feed 里最新的 android-vX.Y.Z 条目，返回 tag（如 android-v0.0.4）。 */
